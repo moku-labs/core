@@ -1,7 +1,7 @@
 # Moku — Definitive Specification
 
-**Version:** 1.0.0-rc1
-**Status:** Release Candidate
+**Version:** 0.1.0
+**Status:** Draft
 **Audience:** Framework implementors, plugin authors, LLM code agents, human developers
 **Authority:** This is the FINAL specification. All implementation follows this document.
 
