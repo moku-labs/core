@@ -67,6 +67,7 @@
     "eslint-plugin-sonarjs": "4.0.0",
     "eslint-plugin-unicorn": "63.0.0",
     "globals": "17.3.0",
+    "jiti": "2.6.1",
     "lefthook": "2.1.1",
     "publint": "0.3.17",
     "tsdown": "0.20.3",
