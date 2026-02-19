@@ -60,7 +60,9 @@ export default [
       "jsdoc/require-returns": "off",
       "jsdoc/require-example": "off",
       "unicorn/no-useless-undefined": "off",
-      "sonarjs/no-duplicate-string": "off"
+      "sonarjs/no-duplicate-string": "off",
+      // Tests import spec-defined names (e.g. createTestCtx) that use abbreviations
+      "unicorn/prevent-abbreviations": "off"
     }
   },
 
