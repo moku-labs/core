@@ -6,9 +6,9 @@
 
 ---
 
-## Phase 1: Core Foundation
+## Milestone 1: Core Foundation
 
-**Goal:** Implement the complete kernel -- all 9 lifecycle phases, plugin registry, config resolution, event dispatch, and the full type system.
+**Goal:** Implement the complete kernel -- all 9 lifecycle stages, plugin registry, config resolution, event dispatch, and the full type system.
 
 ### Deliverables
 
@@ -24,13 +24,13 @@
 
 3. **createApp function**
    - Accepts `AppConfig` and `pluginConfigs` (typed via `BuildPluginConfigs`)
-   - Implements all 9 lifecycle phases:
-     - Phase 0: Flatten + Validate (sync)
-     - Phase 1: Resolve Config (sync)
-     - Phase 2: Create (async, sequential)
-     - Phase 3: Build APIs (async, sequential)
-     - Phase 4: Init (async, sequential)
-     - Phase 5-8: Start, Running, Stop, Destroy
+   - Implements all 9 lifecycle stage:
+     - stage 0: Flatten + Validate (sync)
+     - stage 1: Resolve Config (sync)
+     - stage 2: Create (async, sequential)
+     - stage 3: Build APIs (async, sequential)
+     - stage 4: Init (async, sequential)
+     - stage 5-8: Start, Running, Stop, Destroy
    - Returns `Promise<App>` (async variant) or `App` (sync variant) -- to be decided
    - Freezes app and configs after construction
 
@@ -88,7 +88,7 @@
 
 ### Success Criteria
 
-- All 9 lifecycle phases execute correctly
+- All 9 lifecycle stage execute correctly
 - Plugin ordering is deterministic (forward init, reverse teardown)
 - Config resolution works for all cases (void, required, optional with defaults)
 - Type inference works end-to-end: `createCore` -> `createConfig` -> `createApp` -> `app.pluginName.method()`
@@ -99,15 +99,15 @@
 
 ---
 
-## Phase 2: Decision Points Resolution
+## Milestone 2: Decision Points Resolution
 
-**Goal:** Resolve the open variant decisions before or during Phase 1 implementation.
+**Goal:** Resolve the open variant decisions before or during Milestone 1 implementation.
 
 ### Decisions Required
 
 1. **Async vs Sync createApp**
    - Variant A: Sync createApp, async deferred to onStart
-   - Variant B: Async createApp, Promise<App>, Phases 2-4 async
+   - Variant B: Async createApp, Promise<App>, Milestone 2-4 async
    - Recommendation: Variant B (enables real I/O during init)
 
 2. **SignalRegistry (3rd generic)**
@@ -132,7 +132,7 @@
 
 ---
 
-## Phase 3: createEventBus
+## Milestone 3: createEventBus
 
 **Goal:** Implement the standalone pub/sub utility.
 
@@ -146,7 +146,7 @@
 
 ---
 
-## Phase 4: Testing Utilities
+## Milestone 4: Testing Utilities
 
 **Goal:** Ship `moku_core/testing` sub-path export with createTestCtx.
 
@@ -173,7 +173,7 @@
 
 ---
 
-## Phase 5: Error Catalog and DX
+## Milestone 5: Error Catalog and DX
 
 **Goal:** Comprehensive, actionable error messages and developer experience.
 
@@ -202,7 +202,7 @@
 
 ---
 
-## Phase 6: Advanced Types
+## Milestone 6: Advanced Types
 
 **Goal:** Implement the remaining type-level features.
 
@@ -222,7 +222,7 @@
 
 ---
 
-## Phase 7: Production Hardening
+## Milestone 7: Production Hardening
 
 **Goal:** Ensure moku_core is production-grade.
 
@@ -246,7 +246,7 @@
    - Circular dependency detection (throw, don't hang)
    - Very long plugin names
    - Unicode plugin names
-   - Plugins that throw during every lifecycle phase
+   - Plugins that throw during every lifecycle stage
    - Double start/stop/destroy
 
 4. **TypeScript version compatibility**
@@ -255,7 +255,7 @@
 
 ---
 
-## Phase 8: Reactive State Utility (Optional)
+## Milestone 8: Reactive State Utility (Optional)
 
 **Goal:** Ship `moku_core/signals` as opt-in utility.
 
@@ -284,27 +284,27 @@
 
 ---
 
-## Phase Summary
+## Milestone Summary
 
-| Phase | Description | Dependencies | Size |
+| Milestone | Description | Dependencies | Size |
 |---|---|---|---|
 | 1 | Core Foundation | None | XL |
-| 2 | Decision Points | Before/during Phase 1 | S |
+| 2 | Decision Points | Before/during Milestone 1 | S |
 | 3 | createEventBus | None (parallel with 1) | S |
-| 4 | Testing Utilities | Phase 1 | M |
-| 5 | Error Catalog & DX | Phase 1 | M |
-| 6 | Advanced Types | Phase 1 | L |
-| 7 | Production Hardening | Phases 1-5 | M |
-| 8 | Reactive State (optional) | Phase 1 | M |
+| 4 | Testing Utilities | Milestone 1 | M |
+| 5 | Error Catalog & DX | Milestone 1 | M |
+| 6 | Advanced Types | Milestone 1 | L |
+| 7 | Production Hardening | Milestone 1-5 | M |
+| 8 | Reactive State (optional) | Milestone 1 | M |
 
 ### Dependency Graph
 
 ```
-Phase 2 (Decisions) --+--> Phase 1 (Core) --+--> Phase 4 (Testing)
-                       |                      +--> Phase 5 (DX)
-Phase 3 (EventBus) ---+                      +--> Phase 6 (Types)
-                                              +--> Phase 7 (Hardening)
-                                              +--> Phase 8 (Signals)
+Milestone 2 (Decisions) --+--> Milestone 1 (Core) --+--> Milestone 4 (Testing)
+                       |                      +--> Milestone 5 (DX)
+Milestone 3 (EventBus) ---+                      +--> Milestone 6 (Types)
+                                              +--> Milestone 7 (Hardening)
+                                              +--> Milestone 8 (Signals)
 ```
 
 ### Non-Goals (Explicitly Out of Scope)
