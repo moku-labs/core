@@ -22,13 +22,21 @@
     "event-bus",
     "type-safe"
   ],
+  "scripts": {
+    "build": "tsdown"
+  },
   "files": [
     "dist",
     "LICENSE",
     "README.md"
   ],
   "devDependencies": {
+    "@arethetypeswrong/cli": "0.18.2",
+    "@arethetypeswrong/core": "0.18.2",
     "@types/bun": "1.3.9",
+    "lefthook": "2.1.1",
+    "publint": "0.3.17",
+    "tsdown": "0.20.3",
     "typescript": "5.9.3"
   }
 }
