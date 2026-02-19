@@ -2,6 +2,7 @@ import biomeConfig from "eslint-config-biome";
 import jsdocPlugin from "eslint-plugin-jsdoc";
 import sonarjs from "eslint-plugin-sonarjs";
 import eslintPluginUnicorn from "eslint-plugin-unicorn";
+import tseslint from "typescript-eslint";
 
 export default [
   // 1. Global ignores
@@ -9,16 +10,19 @@ export default [
     ignores: ["dist/**", "coverage/**", "bun.lock", ".claude/**", ".planning/**", "node_modules/**"]
   },
 
-  // 2. Unicorn recommended
+  // 2. TypeScript parser for all TS files
+  tseslint.configs.base,
+
+  // 3. Unicorn recommended
   eslintPluginUnicorn.configs.recommended,
 
-  // 3. SonarJS recommended
+  // 4. SonarJS recommended
   sonarjs.configs.recommended,
 
-  // 4. JSDoc TypeScript preset (disables require-param-type, require-returns-type)
+  // 5. JSDoc TypeScript preset (disables require-param-type, require-returns-type)
   jsdocPlugin.configs["flat/recommended-typescript-error"],
 
-  // 5. Source files: strict JSDoc requirements
+  // 6. Source files: strict JSDoc requirements
   {
     files: ["src/**/*.ts"],
     rules: {
@@ -46,7 +50,7 @@ export default [
     }
   },
 
-  // 6. Test files: relax rules (no JSDoc, allow test patterns)
+  // 7. Test files: relax rules (no JSDoc, allow test patterns)
   {
     files: ["tests/**/*.ts"],
     rules: {
@@ -60,7 +64,7 @@ export default [
     }
   },
 
-  // 7. Config files: relax rules (no JSDoc, allow default exports)
+  // 8. Config files: relax rules (no JSDoc, allow default exports)
   {
     files: ["*.config.ts"],
     rules: {
@@ -70,6 +74,6 @@ export default [
     }
   },
 
-  // 8. MUST be last: eslint-config-biome disables rules Biome handles
+  // 9. MUST be last: eslint-config-biome disables rules Biome handles
   biomeConfig
 ];
