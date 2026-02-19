@@ -31,42 +31,52 @@ describe("createCore", () => {
 
   it("createConfig throws not implemented", () => {
     const core = createCore("test", { config: {} });
-    expect(() => core.createConfig()).toThrowError("[moku_core]");
+    expect(() => core.createConfig()).toThrowError("[test]");
   });
 
   it("createApp throws not implemented", () => {
     const core = createCore("test", { config: {} });
-    expect(() => core.createApp()).toThrowError("[moku_core]");
+    expect(() => core.createApp()).toThrowError("[test]");
   });
 
-  it("createPlugin throws not implemented", () => {
+  it("createPlugin returns an object when called with valid arguments", () => {
     const core = createCore("test", { config: {} });
-    expect(() => core.createPlugin()).toThrowError("[moku_core]");
+    const result = core.createPlugin("myPlugin", {});
+    expect(result).toBeDefined();
+    expect(typeof result).toBe("object");
+    expect(result.kind).toBe("plugin");
   });
 
-  it("createComponent throws not implemented", () => {
+  it("createComponent returns an object when called with valid arguments", () => {
     const core = createCore("test", { config: {} });
-    expect(() => core.createComponent()).toThrowError("[moku_core]");
+    const result = core.createComponent("myComponent", {});
+    expect(result).toBeDefined();
+    expect(typeof result).toBe("object");
+    expect(result.kind).toBe("component");
   });
 
-  it("createModule throws not implemented", () => {
+  it("createModule returns an object when called with valid arguments", () => {
     const core = createCore("test", { config: {} });
-    expect(() => core.createModule()).toThrowError("[moku_core]");
+    const result = core.createModule("myModule", {});
+    expect(result).toBeDefined();
+    expect(typeof result).toBe("object");
+    expect(result.kind).toBe("module");
   });
 
   it("createEventBus throws not implemented", () => {
     const core = createCore("test", { config: {} });
-    expect(() => core.createEventBus()).toThrowError("[moku_core]");
+    expect(() => core.createEventBus()).toThrowError("[test]");
   });
 
-  it("createPluginFactory throws not implemented", () => {
+  it("createPluginFactory returns a function when called with valid arguments", () => {
     const core = createCore("test", { config: {} });
-    expect(() => core.createPluginFactory()).toThrowError("[moku_core]");
+    const factory = core.createPluginFactory({});
+    expect(typeof factory).toBe("function");
   });
 
   // Error format test (permanent)
 
-  it("stub errors include function name and skeleton message", () => {
+  it("stub errors include framework name, function name, and skeleton message", () => {
     const core = createCore("test", { config: {} });
 
     try {
@@ -74,7 +84,7 @@ describe("createCore", () => {
       expect.unreachable("should have thrown");
     } catch (error) {
       const message = (error as Error).message;
-      expect(message).toContain("[moku_core]");
+      expect(message).toContain("[test]");
       expect(message).toContain("createConfig");
       expect(message).toContain("is not yet implemented");
       expect(message).toContain("stub from the skeleton phase");
