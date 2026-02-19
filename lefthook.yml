@@ -2,3 +2,10 @@ pre-commit:
   jobs:
     - name: build-and-validate
       run: bun run build && bun run validate
+    - name: biome-format
+      glob: "*.{ts,js,mjs,cjs,json,jsonc}"
+      run: bunx biome check --write --no-errors-on-unmatched --files-ignore-unknown=true --colors=off {staged_files}
+      stage_fixed: true
+    - name: eslint-check
+      glob: "*.{ts,js,mjs,cjs}"
+      run: bunx eslint --no-fix {staged_files}

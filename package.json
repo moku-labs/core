@@ -49,7 +49,10 @@
   "types": "./dist/index.d.mts",
   "scripts": {
     "build": "tsdown",
-    "validate": "publint && attw --pack . --profile node16"
+    "validate": "publint && attw --pack . --profile node16",
+    "lint": "biome check . && eslint .",
+    "lint:fix": "biome check --write . && eslint --fix .",
+    "format": "biome format --write ."
   },
   "files": [
     "dist",
