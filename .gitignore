@@ -1,2 +1,43 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+out/
+*.tgz
+
+# Type build info
+*.tsbuildinfo
+
+# Coverage
+coverage/
+*.lcov
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+
+# Caches
+.eslintcache
+.cache
+
+# OS files
 .DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Bun binary lockfile (superseded by text bun.lock)
+bun.lockb
+
+# Project internal
 .claude
+.planning
