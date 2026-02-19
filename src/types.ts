@@ -432,7 +432,8 @@ type PluginApiByName<P, N extends string> =
  *   - defaultConfig provided -> OPTIONAL (Partial<C>)
  *   - no defaultConfig -> REQUIRED (full C)
  */
-type BuildPluginConfigs<P extends PluginInstance> = Prettify<
+// biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability -- default PluginInstance has C=void which rejects concrete config types
+type BuildPluginConfigs<P extends PluginInstance<string, any, any, any>> = Prettify<
   OmitNever<{
     [K in P as IsEmptyConfig<PluginConfigType<K>> extends true
       ? never
@@ -454,7 +455,8 @@ type BuildPluginConfigs<P extends PluginInstance> = Prettify<
  * Maps each plugin in the union to a property keyed by plugin name,
  * with the plugin's API augmented with a readonly config property.
  */
-type BuildPluginApis<P extends PluginInstance> = {
+// biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability -- default PluginInstance has C=void which rejects concrete config types
+type BuildPluginApis<P extends PluginInstance<string, any, any, any>> = {
   [K in P as PluginName<K>]: Prettify<
     PluginApiType<K> & {
       readonly config: PluginConfigType<K> extends void
@@ -537,7 +539,8 @@ type App<
   Bus extends Record<string, any>,
   // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability in TypeScript
   Signals extends Record<string, any>,
-  P extends PluginInstance
+  // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability -- default PluginInstance has C=void which rejects concrete config types
+  P extends PluginInstance<string, any, any, any>
 > = Prettify<
   {
     /** Global config, frozen. */
