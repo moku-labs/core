@@ -1,3 +1,13 @@
+// Public type exports for framework authors
+export type {
+  ComponentInstance,
+  ComponentSpec,
+  ModuleInstance,
+  ModuleSpec,
+  PluginInstance,
+  PluginSpec
+} from "./types.js";
+
 /**
  * Lifecycle context object passed to plugin lifecycle callbacks.
  * @example
