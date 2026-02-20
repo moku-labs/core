@@ -11,29 +11,32 @@
 // Wiring into createApp happens in Phase 11.
 // =============================================================================
 
-import type { ComponentInstance, ModuleInstance, PluginInstance } from "./types.js";
+/**
+ * Structural type for a plugin or component item.
+ * Uses structural typing rather than nominal PluginInstance/ComponentInstance
+ * to accept both the full generic types and the temporary RuntimeCoreAPI
+ * result types during pre-Phase-11 development.
+ */
+type PluginOrComponentItem = {
+  readonly kind: "plugin" | "component";
+  readonly name: string;
+  // biome-ignore lint/suspicious/noExplicitAny: spec is structurally accessed at runtime; full generic typing in Phase 11
+  readonly spec: any;
+};
 
-/** PluginInstance with widened generics for accepting any plugin. */
-// biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability -- instances use any for framework generics
-type PluginInstanceAny = PluginInstance<string, any, any, any>;
-/** ComponentInstance with widened generics for accepting any component. */
-// biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability -- instances use any for framework generics
-type ComponentInstanceAny = ComponentInstance<string, any, any, any>;
-/** ModuleInstance with widened generics for accepting any module. */
-// biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability -- instances use any for framework generics
-type ModuleInstanceAny = ModuleInstance<string, any>;
+/** Structural type for a module item. */
+type ModuleItem = {
+  readonly kind: "module";
+  readonly name: string;
+  // biome-ignore lint/suspicious/noExplicitAny: spec is structurally accessed at runtime; full generic typing in Phase 11
+  readonly spec: any;
+};
 
 /**
- * Union type for items that can appear in a plugin list:
- * plugins, components, or modules.
+ * Discriminated union for items that can appear in a plugin list.
+ * The `kind` field discriminates between plugin/component and module.
  */
-type PluginLike = PluginInstanceAny | ComponentInstanceAny | ModuleInstanceAny;
-
-/**
- * Union type for flattened items: plugins and components only.
- * Modules are consumed during flattening and do not survive.
- */
-type FlattenedItem = PluginInstanceAny | ComponentInstanceAny;
+type PluginLike = PluginOrComponentItem | ModuleItem;
 
 /**
  * Flattens a mixed list of plugins, components, and modules into a flat
@@ -47,8 +50,8 @@ type FlattenedItem = PluginInstanceAny | ComponentInstanceAny;
  * // moduleA's children are inlined, pluginW's sub-plugins appear before it
  * ```
  */
-export function flattenPlugins(items: ReadonlyArray<PluginLike>): Array<FlattenedItem> {
-  const result: Array<FlattenedItem> = [];
+export function flattenPlugins(items: ReadonlyArray<PluginLike>): Array<PluginOrComponentItem> {
+  const result: Array<PluginOrComponentItem> = [];
 
   for (const item of items) {
     if (item.kind === "module") {
@@ -56,8 +59,7 @@ export function flattenPlugins(items: ReadonlyArray<PluginLike>): Array<Flattene
       // At flatten time there is no global config yet (resolved later in Phase 1).
       // Pass the module's plugins array as the argument per user decision.
       // The spec's context-based signature will be wired in Phase 11.
-      // biome-ignore lint/suspicious/noExplicitAny: onRegister argument is loosely typed at flatten time; full context wired in Phase 11
-      (item.spec.onRegister as ((plugins: any) => void) | undefined)?.(item.spec.plugins ?? []);
+      item.spec.onRegister?.(item.spec.plugins ?? []);
 
       // Recursively flatten module children: plugins, then components, then sub-modules
       result.push(
@@ -66,12 +68,10 @@ export function flattenPlugins(items: ReadonlyArray<PluginLike>): Array<Flattene
         ...flattenPlugins(item.spec.modules ?? [])
       );
     } else {
-      // Plugin or Component
+      // Plugin or Component -- TypeScript narrows to PluginOrComponentItem here
       // If the item has sub-plugins, flatten them first (children before parent)
-      // biome-ignore lint/suspicious/noExplicitAny: spec.plugins accessed loosely at runtime; full typing in Phase 11
-      const spec = item.spec as any;
-      if (spec.plugins) {
-        result.push(...flattenPlugins(spec.plugins));
+      if (item.spec.plugins) {
+        result.push(...flattenPlugins(item.spec.plugins));
       }
       result.push(item);
     }
@@ -93,7 +93,10 @@ export function flattenPlugins(items: ReadonlyArray<PluginLike>): Array<Flattene
  * // throws if any validation rule is violated
  * ```
  */
-export function validatePlugins(frameworkName: string, items: ReadonlyArray<FlattenedItem>): void {
+export function validatePlugins(
+  frameworkName: string,
+  items: ReadonlyArray<PluginOrComponentItem>
+): void {
   // --- Duplicate name check (FLAT-03) ---
   // Build a map of name -> first position for lookup, and check for duplicates.
   const namePositions = new Map<string, number>();
@@ -116,8 +119,7 @@ export function validatePlugins(frameworkName: string, items: ReadonlyArray<Flat
   // if A depends on B and B depends on A, whichever appears first will see the
   // other after it, triggering the wrong-order error.
   for (const [index, item] of items.entries()) {
-    // biome-ignore lint/suspicious/noExplicitAny: spec.depends accessed loosely at runtime; full typing in Phase 11
-    const depends: readonly string[] | undefined = (item.spec as any).depends;
+    const depends: readonly string[] | undefined = item.spec.depends;
     if (!depends) continue;
 
     for (const dependency of depends) {
