@@ -107,7 +107,41 @@ function registerHooks(
 }
 
 /**
+ * Builds a Set of dependency names from a plugin's spec.depends array.
+ * Returns undefined if the plugin has no depends declaration (unrestricted access).
+ * @param item - The runtime plugin item.
+ * @returns A ReadonlySet of dependency names, or undefined for unrestricted.
+ * @example
+ * ```ts
+ * const deps = buildDependsSet(item); // Set("router", "auth") or undefined
+ * ```
+ */
+function buildDependsSet(item: RuntimePluginItem): ReadonlySet<string> | undefined {
+  if (!item.spec.depends) return;
+  return new Set(
+    (item.spec.depends as ReadonlyArray<{ name: string }>).map((d: { name: string }) => d.name)
+  );
+}
+
+/**
+ * Extracts the plugin name from a name-or-instance argument.
+ * Accepts either a string name or an object with a .name property (plugin/component instance).
+ * @param nameOrInstance - A string plugin name or a plugin/component instance.
+ * @returns The plugin name string.
+ * @example
+ * ```ts
+ * resolvePluginName("router"); // "router"
+ * resolvePluginName(routerPlugin); // "router"
+ * ```
+ */
+function resolvePluginName(nameOrInstance: unknown): string {
+  if (typeof nameOrInstance === "string") return nameOrInstance;
+  return (nameOrInstance as { name: string }).name;
+}
+
+/**
  * Builds a full PluginContext for lifecycle methods that need full communication access.
+ * Enforces depends scoping on getPlugin/require when dependsNames is provided.
  * @param globalConfig - The frozen global config.
  * @param config - The plugin's resolved config.
  * @param state - The plugin's mutable state.
@@ -116,10 +150,13 @@ function registerHooks(
  * @param getPlugin - The getPlugin function.
  * @param requirePlugin - The requirePlugin function bound to this plugin.
  * @param has - The has function.
+ * @param dependsNames - Set of declared dependency names, or null for unrestricted access.
+ * @param callerName - Name of the calling plugin (for error messages).
+ * @param frameworkName - Framework name (for error messages).
  * @returns A full plugin context object.
  * @example
  * ```ts
- * const ctx = buildPluginContext(globalConfig, config, state, emit, signal, getPlugin, require, has);
+ * const ctx = buildPluginContext(globalConfig, config, state, emit, signal, getPlugin, require, has, dependsNames, "my-plugin", "myFramework");
  * ```
  */
 function buildPluginContext(
@@ -130,7 +167,10 @@ function buildPluginContext(
   signal: (hookName: string, payload?: unknown) => Promise<void>,
   getPlugin: (name: string) => unknown,
   requirePlugin: (name: string) => unknown,
-  has: (name: string) => boolean
+  has: (name: string) => boolean,
+  dependsNames: ReadonlySet<string> | undefined,
+  callerName: string,
+  frameworkName: string
 ): Record<string, unknown> {
   return {
     global: globalConfig,
@@ -138,14 +178,47 @@ function buildPluginContext(
     state,
     emit,
     signal,
-    getPlugin,
-    require: requirePlugin,
+    /**
+     * Get plugin API by instance or name, scoped to declared depends.
+     * @param nameOrInstance - Plugin name string or plugin instance.
+     * @returns The plugin API, or undefined if not in depends or not found.
+     * @example
+     * ```ts
+     * ctx.getPlugin("router"); // typed API | undefined
+     * ```
+     */
+    getPlugin: (nameOrInstance: unknown) => {
+      const pluginName = resolvePluginName(nameOrInstance);
+      if (dependsNames && !dependsNames.has(pluginName)) {
+        return;
+      }
+      return getPlugin(pluginName);
+    },
+    /**
+     * Get plugin API or throw, scoped to declared depends.
+     * @param nameOrInstance - Plugin name string or plugin instance.
+     * @returns The plugin API.
+     * @example
+     * ```ts
+     * ctx.require("router"); // typed API or throws
+     * ```
+     */
+    require: (nameOrInstance: unknown) => {
+      const pluginName = resolvePluginName(nameOrInstance);
+      if (dependsNames && !dependsNames.has(pluginName)) {
+        throw new Error(
+          `[${frameworkName}] Plugin "${pluginName}" not in depends for "${callerName}".\n  Add the plugin to your depends array.`
+        );
+      }
+      return requirePlugin(pluginName);
+    },
     has
   };
 }
 
 /**
  * Builds an init context for onInit lifecycle methods (no state).
+ * Enforces depends scoping on getPlugin/require when dependsNames is provided.
  * @param globalConfig - The frozen global config.
  * @param config - The plugin's resolved config.
  * @param emit - The emit function.
@@ -153,10 +226,13 @@ function buildPluginContext(
  * @param getPlugin - The getPlugin function.
  * @param requirePlugin - The requirePlugin function bound to this plugin.
  * @param has - The has function.
+ * @param dependsNames - Set of declared dependency names, or null for unrestricted access.
+ * @param callerName - Name of the calling plugin (for error messages).
+ * @param frameworkName - Framework name (for error messages).
  * @returns An init context object (no state field).
  * @example
  * ```ts
- * const ctx = buildInitContext(globalConfig, config, emit, signal, getPlugin, require, has);
+ * const ctx = buildInitContext(globalConfig, config, emit, signal, getPlugin, require, has, dependsNames, "my-plugin", "myFramework");
  * ```
  */
 function buildInitContext(
@@ -166,15 +242,50 @@ function buildInitContext(
   signal: (hookName: string, payload?: unknown) => Promise<void>,
   getPlugin: (name: string) => unknown,
   requirePlugin: (name: string) => unknown,
-  has: (name: string) => boolean
+  has: (name: string) => boolean,
+  dependsNames: ReadonlySet<string> | undefined,
+  callerName: string,
+  frameworkName: string
 ): Record<string, unknown> {
   return {
     global: globalConfig,
     config,
     emit,
     signal,
-    getPlugin,
-    require: requirePlugin,
+    /**
+     * Get plugin API by instance or name, scoped to declared depends.
+     * @param nameOrInstance - Plugin name string or plugin instance.
+     * @returns The plugin API, or undefined if not in depends or not found.
+     * @example
+     * ```ts
+     * ctx.getPlugin("router"); // typed API | undefined
+     * ```
+     */
+    getPlugin: (nameOrInstance: unknown) => {
+      const pluginName = resolvePluginName(nameOrInstance);
+      if (dependsNames && !dependsNames.has(pluginName)) {
+        return;
+      }
+      return getPlugin(pluginName);
+    },
+    /**
+     * Get plugin API or throw, scoped to declared depends.
+     * @param nameOrInstance - Plugin name string or plugin instance.
+     * @returns The plugin API.
+     * @example
+     * ```ts
+     * ctx.require("router"); // typed API or throws
+     * ```
+     */
+    require: (nameOrInstance: unknown) => {
+      const pluginName = resolvePluginName(nameOrInstance);
+      if (dependsNames && !dependsNames.has(pluginName)) {
+        throw new Error(
+          `[${frameworkName}] Plugin "${pluginName}" not in depends for "${callerName}".\n  Add the plugin to your depends array.`
+        );
+      }
+      return requirePlugin(pluginName);
+    },
     has
   };
 }
@@ -233,9 +344,10 @@ async function executeCreatePhase(
  * @param requirePlugin - The requirePlugin factory.
  * @param has - The has function.
  * @param defaults - Framework defaults with onError callback.
+ * @param frameworkName - The framework name for error messages.
  * @example
  * ```ts
- * await executeBuildPhase(items, globalConfig, pluginConfigs, states, apis, emit, signal, getPlugin, requirePlugin, has, defaults);
+ * await executeBuildPhase(items, globalConfig, pluginConfigs, states, apis, emit, signal, getPlugin, requirePlugin, has, defaults, "myFramework");
  * ```
  */
 async function executeBuildPhase(
@@ -249,11 +361,13 @@ async function executeBuildPhase(
   getPlugin: (name: string) => unknown,
   requirePlugin: (name: string, requester: string) => unknown,
   has: (name: string) => boolean,
-  defaults: RuntimeDefaults
+  defaults: RuntimeDefaults,
+  frameworkName: string
 ): Promise<void> {
   for (const item of items) {
     const config = pluginConfigs.get(item.name) ?? Object.freeze({});
     const state = states.get(item.name);
+    const dependsNames = buildDependsSet(item);
     try {
       // biome-ignore lint/suspicious/noExplicitAny: API shape is dynamic at runtime
       let api: Record<string, any> = {};
@@ -266,7 +380,10 @@ async function executeBuildPhase(
           signal,
           getPlugin,
           (n: string) => requirePlugin(n, item.name),
-          has
+          has,
+          dependsNames,
+          item.name,
+          frameworkName
         );
         api = await item.spec.api(context);
       }
@@ -290,9 +407,10 @@ async function executeBuildPhase(
  * @param requirePlugin - The requirePlugin factory.
  * @param has - The has function.
  * @param defaults - Framework defaults with onError callback.
+ * @param frameworkName - The framework name for error messages.
  * @example
  * ```ts
- * await executeInitPhase(items, globalConfig, pluginConfigs, emit, signal, getPlugin, requirePlugin, has, defaults);
+ * await executeInitPhase(items, globalConfig, pluginConfigs, emit, signal, getPlugin, requirePlugin, has, defaults, "myFramework");
  * ```
  */
 async function executeInitPhase(
@@ -304,11 +422,13 @@ async function executeInitPhase(
   getPlugin: (name: string) => unknown,
   requirePlugin: (name: string, requester: string) => unknown,
   has: (name: string) => boolean,
-  defaults: RuntimeDefaults
+  defaults: RuntimeDefaults,
+  frameworkName: string
 ): Promise<void> {
   for (const item of items) {
     if (item.spec.onInit) {
       const config = pluginConfigs.get(item.name) ?? Object.freeze({});
+      const dependsNames = buildDependsSet(item);
       try {
         const context = buildInitContext(
           globalConfig,
@@ -317,7 +437,10 @@ async function executeInitPhase(
           signal,
           getPlugin,
           (n: string) => requirePlugin(n, item.name),
-          has
+          has,
+          dependsNames,
+          item.name,
+          frameworkName
         );
         await item.spec.onInit(context);
       } catch (error: unknown) {
@@ -340,9 +463,10 @@ async function executeInitPhase(
  * @param requirePlugin - The requirePlugin factory.
  * @param has - The has function.
  * @param defaults - Framework defaults with onError callback.
+ * @param frameworkName - The framework name for error messages.
  * @example
  * ```ts
- * await executeStartPhase(items, globalConfig, pluginConfigs, states, emit, signal, getPlugin, requirePlugin, has, defaults);
+ * await executeStartPhase(items, globalConfig, pluginConfigs, states, emit, signal, getPlugin, requirePlugin, has, defaults, "myFramework");
  * ```
  */
 async function executeStartPhase(
@@ -355,12 +479,14 @@ async function executeStartPhase(
   getPlugin: (name: string) => unknown,
   requirePlugin: (name: string, requester: string) => unknown,
   has: (name: string) => boolean,
-  defaults: RuntimeDefaults
+  defaults: RuntimeDefaults,
+  frameworkName: string
 ): Promise<void> {
   for (const item of items) {
     if (item.spec.onStart) {
       const config = pluginConfigs.get(item.name) ?? Object.freeze({});
       const state = states.get(item.name);
+      const dependsNames = buildDependsSet(item);
       try {
         const context = buildPluginContext(
           globalConfig,
@@ -370,7 +496,10 @@ async function executeStartPhase(
           signal,
           getPlugin,
           (n: string) => requirePlugin(n, item.name),
-          has
+          has,
+          dependsNames,
+          item.name,
+          frameworkName
         );
         await item.spec.onStart(context);
       } catch (error: unknown) {
@@ -604,7 +733,8 @@ export async function createAppImpl(
     getPlugin,
     requirePlugin,
     has,
-    defaults
+    defaults,
+    frameworkName
   );
 
   // --- Name collision detection ---
@@ -638,7 +768,8 @@ export async function createAppImpl(
     getPlugin,
     requirePlugin,
     has,
-    defaults
+    defaults,
+    frameworkName
   );
 
   // --- Build app.configs accessor ---
@@ -705,7 +836,8 @@ export async function createAppImpl(
         getPlugin,
         requirePlugin,
         has,
-        defaults
+        defaults,
+        frameworkName
       );
     },
 
