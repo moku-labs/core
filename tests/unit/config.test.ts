@@ -11,8 +11,8 @@ describe("createConfig", () => {
    * @param plugins - Framework default plugins.
    * @returns Core API.
    */
-  // biome-ignore lint/suspicious/noExplicitAny: test helper accepts any config shape
-  function makeCore(config: Record<string, any> = defaultGlobal, plugins: unknown[] = []) {
+  // biome-ignore lint/suspicious/noExplicitAny: test helper accepts any config shape and any plugins
+  function makeCore(config: Record<string, any> = defaultGlobal, plugins: any[] = []) {
     return createCore("testFramework", { config, plugins });
   }
 

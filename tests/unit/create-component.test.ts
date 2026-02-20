@@ -23,30 +23,30 @@ describe("createComponent", () => {
 
   it("spec has onStart mapped from onMount", () => {
     const comp = createComponent("sidebar", { onMount: mountHandler });
-    expect(comp.spec.onStart).toBe(mountHandler);
+    expect((comp.spec as Record<string, unknown>).onStart).toBe(mountHandler);
   });
 
   it("spec has onStop mapped from onUnmount", () => {
     const comp = createComponent("sidebar", { onUnmount: unmountHandler });
-    expect(comp.spec.onStop).toBe(unmountHandler);
+    expect((comp.spec as Record<string, unknown>).onStop).toBe(unmountHandler);
   });
 
   it("works with onMount only (no onUnmount)", () => {
     const comp = createComponent("sidebar", { onMount: mountHandler });
-    expect(comp.spec.onStart).toBe(mountHandler);
-    expect(comp.spec.onStop).toBeUndefined();
+    expect((comp.spec as Record<string, unknown>).onStart).toBe(mountHandler);
+    expect((comp.spec as Record<string, unknown>).onStop).toBeUndefined();
   });
 
   it("works with onUnmount only (no onMount)", () => {
     const comp = createComponent("sidebar", { onUnmount: unmountHandler });
-    expect(comp.spec.onStart).toBeUndefined();
-    expect(comp.spec.onStop).toBe(unmountHandler);
+    expect((comp.spec as Record<string, unknown>).onStart).toBeUndefined();
+    expect((comp.spec as Record<string, unknown>).onStop).toBe(unmountHandler);
   });
 
   it("works with neither onMount nor onUnmount", () => {
     const comp = createComponent("sidebar", {});
-    expect(comp.spec.onStart).toBeUndefined();
-    expect(comp.spec.onStop).toBeUndefined();
+    expect((comp.spec as Record<string, unknown>).onStart).toBeUndefined();
+    expect((comp.spec as Record<string, unknown>).onStop).toBeUndefined();
   });
 
   it("_hasDefaults is true when spec has defaultConfig", () => {

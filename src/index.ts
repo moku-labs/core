@@ -1,16 +1,20 @@
-// Public type exports for framework authors
+// Public type exports for framework authors + internal type imports
+import type { CoreAPI, CoreDefaults } from "./types.js";
+
 export type {
   AppConfig,
   ComponentInstance,
   ComponentSpec,
+  CoreAPI,
+  CoreDefaults,
   ModuleInstance,
   ModuleSpec,
   PluginInstance,
   PluginSpec
 } from "./types.js";
 
-import type { RuntimeAppConfig } from "./config.js";
 import { createConfigImpl } from "./config.js";
+import { createAppImpl } from "./kernel.js";
 
 /**
  * Throws a not-implemented error for a stub function.
@@ -19,8 +23,8 @@ import { createConfigImpl } from "./config.js";
  * @throws {Error} Kernel error format indicating function is not implemented.
  * @example
  * ```ts
- * notImplemented("myFramework", "createConfig");
- * // throws: [myFramework] createConfig is not yet implemented.
+ * notImplemented("myFramework", "createEventBus");
+ * // throws: [myFramework] createEventBus is not yet implemented.
  * ```
  */
 const notImplemented = (name: string, functionName: string): never => {
@@ -29,69 +33,31 @@ const notImplemented = (name: string, functionName: string): never => {
   );
 };
 
-/** Instance shape returned by createPlugin and createPluginFactory. Temporary loose type -- replaced in Phase 11. */
-type PluginInstanceResult = {
-  kind: "plugin";
-  name: string;
-  // biome-ignore lint/suspicious/noExplicitAny: Loose runtime type; full generic signature wired in Phase 11
-  spec: any;
-  _types: Record<string, never>;
-  _hasDefaults: boolean;
-};
-
-/** Instance shape returned by createComponent. Temporary loose type -- replaced in Phase 11. */
-type ComponentInstanceResult = {
-  kind: "component";
-  name: string;
-  // biome-ignore lint/suspicious/noExplicitAny: Loose runtime type; full generic signature wired in Phase 11
-  spec: any;
-  _types: Record<string, never>;
-  _hasDefaults: boolean;
-};
-
-/** Instance shape returned by createModule. Temporary loose type -- replaced in Phase 11. */
-type ModuleInstanceResult = {
-  kind: "module";
-  name: string;
-  // biome-ignore lint/suspicious/noExplicitAny: Loose runtime type; full generic signature wired in Phase 11
-  spec: any;
-};
-
-/** The runtime CoreAPI shape returned by createCore. Temporary loose type -- replaced in Phase 11. */
-type RuntimeCoreAPI = {
-  createConfig: (options?: {
-    config?: Record<string, unknown>;
-    plugins?: readonly unknown[];
-    pluginConfigs?: Record<string, unknown>;
-  }) => RuntimeAppConfig;
-  createApp: (...arguments_: unknown[]) => never;
-  // biome-ignore lint/suspicious/noExplicitAny: Loose runtime type; full generic signature wired in Phase 11
-  createPlugin: (pluginName: any, spec: any) => PluginInstanceResult;
-  // biome-ignore lint/suspicious/noExplicitAny: Loose runtime type; full generic signature wired in Phase 11
-  createComponent: (componentName: any, spec: any) => ComponentInstanceResult;
-  // biome-ignore lint/suspicious/noExplicitAny: Loose runtime type; full generic signature wired in Phase 11
-  createModule: (moduleName: any, spec: any) => ModuleInstanceResult;
-  createEventBus: (...arguments_: unknown[]) => never;
-  // biome-ignore lint/suspicious/noExplicitAny: Loose runtime type; full generic signature wired in Phase 11
-  createPluginFactory: (spec: any) => (factoryName: any) => PluginInstanceResult;
-};
-
 /**
  * Creates a micro-kernel core instance with the given name and defaults.
- * Returns an object with all 7 CoreAPI functions. The 5 functions
- * (createConfig, createPlugin, createComponent, createModule, createPluginFactory)
- * are implemented. createApp and createEventBus remain stubs.
+ * Returns an object with all 7 CoreAPI functions typed against the framework's
+ * BaseConfig, BusContract, and SignalRegistry generics.
  * @param name - The framework name used in error messages.
- * @param _defaults - Default configuration and optional lifecycle callbacks.
+ * @param defaults - Default configuration, built-in plugins, and optional lifecycle callbacks.
  * @returns The core API object with all 7 framework functions.
  * @example
  * ```ts
  * const core = createCore("myFramework", { config: { debug: false } });
  * const config = core.createConfig({ config: { debug: true } });
+ * const app = await core.createApp(config);
  * ```
  */
-// biome-ignore lint/suspicious/noExplicitAny: createCore uses loose types at runtime; full generic signature wired in Phase 11
-export function createCore(name: string, _defaults: Record<string, any>): RuntimeCoreAPI {
+export function createCore<
+  // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability in TypeScript
+  BaseConfig extends Record<string, any> = Record<string, unknown>,
+  // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability in TypeScript
+  BusContract extends Record<string, any> = Record<string, unknown>,
+  // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability in TypeScript
+  SignalRegistry extends Record<string, any> = Record<string, unknown>
+>(
+  name: string,
+  defaults: CoreDefaults<BaseConfig>
+): CoreAPI<BaseConfig, BusContract, SignalRegistry> {
   // ---------------------------------------------------------------------------
   // Shared validation helpers (internal to createCore)
   // ---------------------------------------------------------------------------
@@ -321,6 +287,12 @@ export function createCore(name: string, _defaults: Record<string, any>): Runtim
   // Return CoreAPI
   // ---------------------------------------------------------------------------
 
+  // Cast defaults for internal functions that use structural runtime types.
+  // The generic CoreDefaults<BaseConfig> is fully compatible at runtime,
+  // but createConfigImpl and createAppImpl use looser structural types.
+  // biome-ignore lint/suspicious/noExplicitAny: Runtime bridge between generic CoreDefaults and internal structural types
+  const runtimeDefaults = defaults as any;
+
   return {
     /**
      * Creates a configuration object by resolving global and per-plugin configs.
@@ -336,19 +308,21 @@ export function createCore(name: string, _defaults: Record<string, any>): Runtim
      * ```
      */
     createConfig: (options?: {
-      config?: Record<string, unknown>;
+      config?: Partial<BaseConfig>;
       plugins?: readonly unknown[];
       pluginConfigs?: Record<string, unknown>;
-    }): RuntimeAppConfig => createConfigImpl(name, _defaults, options),
+    }) => createConfigImpl(name, runtimeDefaults, options),
     /**
-     * Creates an application instance. Stub -- not yet implemented.
-     * @returns Never - throws not implemented.
+     * Creates an application instance by executing all lifecycle phases.
+     * @param appConfig - Pre-resolved AppConfig from createConfig.
+     * @returns A frozen App object with all plugin APIs mounted.
      * @example
      * ```ts
-     * await core.createApp({});
+     * const app = await core.createApp(config);
      * ```
      */
-    createApp: (): never => notImplemented(name, "createApp"),
+    // biome-ignore lint/suspicious/noExplicitAny: AppConfig uses any for plugin union at call site; full typing via CoreAPI
+    createApp: (appConfig: any) => createAppImpl(name, runtimeDefaults, appConfig),
     createPlugin,
     createComponent,
     createModule,
@@ -360,7 +334,7 @@ export function createCore(name: string, _defaults: Record<string, any>): Runtim
      * core.createEventBus();
      * ```
      */
-    createEventBus: (): never => notImplemented(name, "createEventBus"),
+    createEventBus: () => notImplemented(name, "createEventBus"),
     createPluginFactory
-  };
+  } as unknown as CoreAPI<BaseConfig, BusContract, SignalRegistry>;
 }

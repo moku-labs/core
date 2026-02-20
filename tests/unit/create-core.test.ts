@@ -36,9 +36,15 @@ describe("createCore", () => {
     expect(result._brand).toBe("AppConfig");
   });
 
-  it("createApp throws not implemented", () => {
+  it("createApp returns a frozen app when called with valid config", async () => {
     const core = createCore("test", { config: {} });
-    expect(() => core.createApp()).toThrowError("[test]");
+    const config = core.createConfig();
+    const app = await core.createApp(config);
+    expect(app).toBeDefined();
+    expect(typeof app.start).toBe("function");
+    expect(typeof app.stop).toBe("function");
+    expect(typeof app.destroy).toBe("function");
+    expect(Object.isFrozen(app)).toBe(true);
   });
 
   it("createPlugin returns an object when called with valid arguments", () => {
@@ -81,14 +87,14 @@ describe("createCore", () => {
   it("stub errors include framework name, function name, and skeleton message", () => {
     const core = createCore("test", { config: {} });
 
-    // Test with createApp (still a stub)
+    // Test with createEventBus (still a stub)
     try {
-      core.createApp();
+      core.createEventBus();
       expect.unreachable("should have thrown");
     } catch (error) {
       const message = (error as Error).message;
       expect(message).toContain("[test]");
-      expect(message).toContain("createApp");
+      expect(message).toContain("createEventBus");
       expect(message).toContain("is not yet implemented");
       expect(message).toContain("stub from the skeleton phase");
     }

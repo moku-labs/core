@@ -212,7 +212,8 @@ interface PluginSpec<
   hooks?: Record<string, (...arguments_: unknown[]) => void | Promise<void>>;
 
   /** Sub-plugins. Flattened depth-first, children before parent. */
-  plugins?: Array<PluginInstance<string, unknown, Record<string, unknown>, unknown>>;
+  // biome-ignore lint/suspicious/noExplicitAny: Widened for assignability -- concrete instances use void/never defaults that conflict with unknown in contravariant positions
+  plugins?: Array<PluginInstance<string, any, any, any>>;
 }
 
 /**
@@ -271,13 +272,16 @@ interface ComponentSpec<
  */
 interface ModuleSpec<N extends string, C = void> {
   /** Plugins contained in this module. */
-  plugins?: Array<PluginInstance<string, unknown, Record<string, unknown>, unknown>>;
+  // biome-ignore lint/suspicious/noExplicitAny: Widened for assignability -- concrete instances use void/never defaults that conflict with unknown in contravariant positions
+  plugins?: Array<PluginInstance<string, any, any, any>>;
 
   /** Components contained in this module. */
-  components?: Array<ComponentInstance<string, unknown, Record<string, unknown>, unknown>>;
+  // biome-ignore lint/suspicious/noExplicitAny: Widened for assignability -- concrete instances use void/never defaults that conflict with unknown in contravariant positions
+  components?: Array<ComponentInstance<string, any, any, any>>;
 
   /** Nested modules. Recursive flattening. */
-  modules?: Array<ModuleInstance<string, unknown>>;
+  // biome-ignore lint/suspicious/noExplicitAny: Widened for assignability -- concrete instances use void defaults that conflict with unknown in contravariant positions
+  modules?: Array<ModuleInstance<string, any>>;
 
   /** Called during Phase 0 flattening. The only place a module "runs". */
   onRegister?: (context: {
@@ -478,13 +482,16 @@ type CoreDefaults<BaseConfig extends Record<string, any>> = {
   config: BaseConfig;
 
   /** Plugins that ship with the framework. Always loaded. Consumer cannot remove them. */
-  plugins?: PluginInstance[];
+  // biome-ignore lint/suspicious/noExplicitAny: Widened for assignability -- concrete plugins have specific config/api/state types
+  plugins?: Array<PluginInstance<string, any, any, any>>;
 
   /** Components that ship with the framework. */
-  components?: ComponentInstance[];
+  // biome-ignore lint/suspicious/noExplicitAny: Widened for assignability -- concrete components have specific config/api/state types
+  components?: Array<ComponentInstance<string, any, any, any>>;
 
   /** Modules that ship with the framework. */
-  modules?: ModuleInstance[];
+  // biome-ignore lint/suspicious/noExplicitAny: Widened for assignability -- concrete modules have specific config types
+  modules?: Array<ModuleInstance<string, any>>;
 
   /** Called once when createApp is invoked, before any plugin lifecycle. Sync only. */
   onBoot?: (context: { config: Readonly<BaseConfig> }) => void;
@@ -603,6 +610,19 @@ type App<
 // -----------------------------------------------------------------------------
 
 /**
+ * Union type for items that can be passed to createConfig's plugins option.
+ * Accepts plugins, components, and modules -- all are valid inputs
+ * because createConfig calls flattenPlugins which handles all kinds.
+ */
+type PluginLike =
+  // biome-ignore lint/suspicious/noExplicitAny: Widened for assignability -- concrete instances use specific type parameters
+  | PluginInstance<string, any, any, any>
+  // biome-ignore lint/suspicious/noExplicitAny: Widened for assignability -- concrete instances use specific type parameters
+  | ComponentInstance<string, any, any, any>
+  // biome-ignore lint/suspicious/noExplicitAny: Widened for assignability -- concrete instances use specific type parameters
+  | ModuleInstance<string, any>;
+
+/**
  * Type alias for the createConfig function returned by createCore.
  * Accepts an options object with config overrides, extra plugins, and per-plugin configs.
  * Returns an opaque AppConfig carrying resolved configs and the full plugin union type.
@@ -613,13 +633,14 @@ type CreateConfigFunction<BaseConfig extends Record<string, any>> = <
   const ExtraPlugins extends readonly PluginInstance<string, any, any, any>[] = []
 >(options?: {
   config?: Partial<BaseConfig>;
-  plugins?: ExtraPlugins;
+  plugins?: ExtraPlugins | readonly PluginLike[];
   pluginConfigs?: Record<string, unknown>;
 }) => AppConfig<BaseConfig, PluginInstance, ExtraPlugins>;
 
 /**
  * Type alias for the createApp function returned by createCore.
- * Wires everything together and returns a frozen app.
+ * Accepts a single AppConfig (which already contains pre-resolved plugin configs
+ * from createConfig) and returns a frozen App.
  */
 type CreateAppFunction<
   // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability in TypeScript
@@ -630,8 +651,7 @@ type CreateAppFunction<
   SignalRegistry extends Record<string, any>
 > = <P extends PluginInstance>(
   // biome-ignore lint/suspicious/noExplicitAny: AppConfig accepts any plugin union at call site
-  config: AppConfig<BaseConfig, any, any>,
-  pluginConfigs: BuildPluginConfigs<P>
+  config: AppConfig<BaseConfig, any, any>
 ) => Promise<App<BaseConfig, BusContract, SignalRegistry, P>>;
 
 /**
