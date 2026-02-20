@@ -1341,7 +1341,7 @@ describe("edge cases", () => {
     });
     const pluginB = core.createPlugin("consumer", {
       defaultConfig: {},
-      depends: ["provider"],
+      depends: [pluginA],
       onInit: (ctx: { getPlugin: (name: string) => unknown }) => {
         otherApi = ctx.getPlugin("provider");
       }
@@ -1363,7 +1363,7 @@ describe("edge cases", () => {
     });
     const pluginB = core.createPlugin("consumer", {
       defaultConfig: {},
-      depends: ["provider"],
+      depends: [pluginA],
       api: (ctx: { require: (name: string) => unknown }) => {
         otherApi = ctx.require("provider");
         return {};

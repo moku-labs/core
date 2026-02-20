@@ -25,7 +25,7 @@ describe("validatePlugins", () => {
 
     it("does not throw when depends is satisfied in correct order", () => {
       const logger = createPlugin("logger", {});
-      const router = createPlugin("router", { depends: ["logger"] });
+      const router = createPlugin("router", { depends: [logger] });
       expect(() => validatePlugins("test-fw", [logger, router])).not.toThrow();
     });
 
@@ -89,21 +89,25 @@ describe("validatePlugins", () => {
 
   describe("missing dependency (FLAT-04)", () => {
     it("throws when plugin depends on non-existent plugin", () => {
-      const router = createPlugin("router", { depends: ["auth"] });
+      const authRef = createPlugin("auth", {});
+      const router = createPlugin("router", { depends: [authRef] });
+      // authRef is NOT in the plugin list -- only router is
       expect(() => validatePlugins("test-fw", [router])).toThrow(
         /depends on "auth", but "auth" is not registered/
       );
     });
 
     it("error message includes dependent name and missing dependency name", () => {
-      const dashboard = createPlugin("dashboard", { depends: ["auth"] });
+      const authRef = createPlugin("auth", {});
+      const dashboard = createPlugin("dashboard", { depends: [authRef] });
       expect(() => validatePlugins("test-fw", [dashboard])).toThrow(
         /Plugin "dashboard" depends on "auth"/
       );
     });
 
     it("error message suggests adding the plugin", () => {
-      const dashboard = createPlugin("dashboard", { depends: ["auth"] });
+      const authRef = createPlugin("auth", {});
+      const dashboard = createPlugin("dashboard", { depends: [authRef] });
       try {
         validatePlugins("test-fw", [dashboard]);
         expect.unreachable("should have thrown");
@@ -114,7 +118,8 @@ describe("validatePlugins", () => {
     });
 
     it("error message matches expected format", () => {
-      const dashboard = createPlugin("dashboard", { depends: ["auth"] });
+      const authRef = createPlugin("auth", {});
+      const dashboard = createPlugin("dashboard", { depends: [authRef] });
       try {
         validatePlugins("test-fw", [dashboard]);
         expect.unreachable("should have thrown");
@@ -129,24 +134,24 @@ describe("validatePlugins", () => {
 
   describe("wrong dependency order (FLAT-05)", () => {
     it("throws when plugin depends on plugin that appears after it", () => {
-      const dashboard = createPlugin("dashboard", { depends: ["auth"] });
       const auth = createPlugin("auth", {});
+      const dashboard = createPlugin("dashboard", { depends: [auth] });
       expect(() => validatePlugins("test-fw", [dashboard, auth])).toThrow(
         /depends on "auth", but "auth" appears after "dashboard"/
       );
     });
 
     it("error message includes both plugin names", () => {
-      const dashboard = createPlugin("dashboard", { depends: ["auth"] });
       const auth = createPlugin("auth", {});
+      const dashboard = createPlugin("dashboard", { depends: [auth] });
       expect(() => validatePlugins("test-fw", [dashboard, auth])).toThrow(
         /Plugin "dashboard" depends on "auth"/
       );
     });
 
     it("error message suggests moving", () => {
-      const dashboard = createPlugin("dashboard", { depends: ["auth"] });
       const auth = createPlugin("auth", {});
+      const dashboard = createPlugin("dashboard", { depends: [auth] });
       try {
         validatePlugins("test-fw", [dashboard, auth]);
         expect.unreachable("should have thrown");
@@ -157,8 +162,8 @@ describe("validatePlugins", () => {
     });
 
     it("error message matches expected format", () => {
-      const dashboard = createPlugin("dashboard", { depends: ["auth"] });
       const auth = createPlugin("auth", {});
+      const dashboard = createPlugin("dashboard", { depends: [auth] });
       try {
         validatePlugins("test-fw", [dashboard, auth]);
         expect.unreachable("should have thrown");
@@ -173,18 +178,25 @@ describe("validatePlugins", () => {
 
   describe("circular dependency detection", () => {
     it("detects A depends on B, B depends on A", () => {
+      // Create instances first, then use them in depends
       // A at position 0 depends on B at position 1 -> A sees B after it -> throws
-      const a = createPlugin("a", { depends: ["b"] });
-      const b = createPlugin("b", { depends: ["a"] });
-      expect(() => validatePlugins("test-fw", [a, b])).toThrow(
+      const b = createPlugin("b", {});
+      const a = createPlugin("a", { depends: [b] });
+      // Recreate b with depends on a (circular)
+      const bWithDep = createPlugin("b", { depends: [a] });
+      expect(() => validatePlugins("test-fw", [a, bWithDep])).toThrow(
         /Plugin "a" depends on "b", but "b" appears after "a"/
       );
     });
 
     it("detects A depends on B, B depends on C, C depends on A", () => {
-      const a = createPlugin("a", { depends: ["c"] });
-      const b = createPlugin("b", { depends: ["a"] });
-      const c = createPlugin("c", { depends: ["b"] });
+      // Create reference instances for circular deps
+      const cRef = createPlugin("c", {});
+      const aRef = createPlugin("a", {});
+      const bRef = createPlugin("b", {});
+      const a = createPlugin("a", { depends: [cRef] });
+      const b = createPlugin("b", { depends: [aRef] });
+      const c = createPlugin("c", { depends: [bRef] });
       // a at 0 depends on c at 2 -> a sees c after it -> throws
       expect(() => validatePlugins("test-fw", [a, b, c])).toThrow(
         /Plugin "a" depends on "c", but "c" appears after "a"/
@@ -196,14 +208,15 @@ describe("validatePlugins", () => {
     it("validates multiple dependencies correctly", () => {
       const logger = createPlugin("logger", {});
       const db = createPlugin("db", {});
-      const service = createPlugin("service", { depends: ["logger", "db"] });
+      const service = createPlugin("service", { depends: [logger, db] });
       expect(() => validatePlugins("test-fw", [logger, db, service])).not.toThrow();
     });
 
     it("throws on first failing dependency in a list", () => {
       const logger = createPlugin("logger", {});
+      const nonexistentRef = createPlugin("nonexistent", {});
       const service = createPlugin("service", {
-        depends: ["logger", "nonexistent"]
+        depends: [logger, nonexistentRef]
       });
       expect(() => validatePlugins("test-fw", [logger, service])).toThrow(
         /depends on "nonexistent", but "nonexistent" is not registered/
@@ -212,7 +225,7 @@ describe("validatePlugins", () => {
 
     it("validates components with depends", () => {
       const auth = createPlugin("auth", {});
-      const sidebar = createComponent("sidebar", { depends: ["auth"] });
+      const sidebar = createComponent("sidebar", { depends: [auth] });
       expect(() => validatePlugins("test-fw", [auth, sidebar])).not.toThrow();
     });
 

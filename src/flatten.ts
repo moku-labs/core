@@ -39,6 +39,24 @@ type ModuleItem = {
 type PluginLike = PluginOrComponentItem | ModuleItem;
 
 /**
+ * Extracts dependency names from an instance-based depends array.
+ * Each element is a PluginInstance or ComponentInstance with a .name property.
+ * @param depends - The depends array from a plugin spec.
+ * @returns An array of dependency name strings.
+ * @example
+ * ```ts
+ * const names = extractDependsNames([routerPlugin, authPlugin]);
+ * // ["router", "auth"]
+ * ```
+ */
+export function extractDependsNames(
+  depends: ReadonlyArray<{ readonly name: string }> | undefined
+): string[] {
+  if (!depends) return [];
+  return depends.map(dep => dep.name);
+}
+
+/**
  * Flattens a mixed list of plugins, components, and modules into a flat
  * ordered list of plugins and components. Implements the Phase 0 flatten
  * algorithm from specification/13-KERNEL-PSEUDOCODE.md Section 3.
@@ -119,10 +137,12 @@ export function validatePlugins(
   // if A depends on B and B depends on A, whichever appears first will see the
   // other after it, triggering the wrong-order error.
   for (const [index, item] of items.entries()) {
-    const depends: readonly string[] | undefined = item.spec.depends;
-    if (!depends) continue;
+    const dependsInstances: ReadonlyArray<{ readonly name: string }> | undefined =
+      item.spec.depends;
+    if (!dependsInstances) continue;
+    const dependNames = extractDependsNames(dependsInstances);
 
-    for (const dependency of depends) {
+    for (const dependency of dependNames) {
       const dependencyIndex = namePositions.get(dependency);
 
       if (dependencyIndex === undefined) {

@@ -7,7 +7,7 @@ const unmountHandler = () => {};
 
 describe("createComponent", () => {
   const core = createCore("test-framework", { config: {} });
-  const { createComponent } = core;
+  const { createComponent, createPlugin } = core;
 
   // PLUG-03: Component mapping and shape
 
@@ -88,8 +88,9 @@ describe("createComponent", () => {
   });
 
   it("accepts spec with depends array", () => {
+    const layoutRef = createPlugin("layout", {});
     const comp = createComponent("sidebar", {
-      depends: ["layout"]
+      depends: [layoutRef]
     });
     expect(comp.kind).toBe("component");
   });

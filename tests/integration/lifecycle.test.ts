@@ -63,9 +63,9 @@ function createLoggerPlugin(core: { createPlugin: (...args: any[]) => any }) {
  * depends: ["logger"]
  */
 // biome-ignore lint/suspicious/noExplicitAny: Core parameter uses any to avoid CoreAPI generic invariance
-function createCounterPlugin(core: { createPlugin: (...args: any[]) => any }) {
+function createCounterPlugin(core: { createPlugin: (...args: any[]) => any }, loggerPlugin: any) {
   return core.createPlugin("counter", {
-    depends: ["logger"],
+    depends: [loggerPlugin],
     createState: (ctx: { config: { initial: number } }) => ({
       count: ctx.config.initial
     }),
@@ -104,7 +104,7 @@ describe("full lifecycle integration", () => {
       config: { env: "test" }
     });
     const loggerPlugin = createLoggerPlugin(core);
-    const counterPlugin = createCounterPlugin(core);
+    const counterPlugin = createCounterPlugin(core, loggerPlugin);
 
     // Layer 2: Framework provides core to consumer
     // Consumer adds counter plugin and its required config
@@ -193,7 +193,7 @@ describe("full lifecycle integration", () => {
   it("config resolution: logger gets defaults, counter gets provided config", async () => {
     const core = createCore("mini", { config: { env: "test" } });
     const loggerPlugin = createLoggerPlugin(core);
-    const counterPlugin = createCounterPlugin(core);
+    const counterPlugin = createCounterPlugin(core, loggerPlugin);
 
     const config = core.createConfig({
       plugins: [loggerPlugin, counterPlugin],

@@ -125,8 +125,9 @@ describe("createPlugin", () => {
   });
 
   it("accepts spec with depends array", () => {
+    const loggerRef = createPlugin("logger", {});
     const plugin = createPlugin("router", {
-      depends: ["logger"]
+      depends: [loggerRef]
     });
     expect(plugin.kind).toBe("plugin");
   });

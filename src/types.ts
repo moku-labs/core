@@ -98,12 +98,18 @@ type MinimalContext<G, C> = TeardownContext<G> & {
  *
  * All plugins are created and APIs are mounted. Dependencies can be checked
  * with require/has. State is not yet available (created separately).
+ * @template G - Global config type
+ * @template Bus - Bus contract type
+ * @template Signals - Signal registry type
+ * @template C - Plugin config type
+ * @template Deps - Depends tuple carrying declared plugin dependencies
  */
 type InitContext<
   G,
   Bus extends Record<string, unknown>,
   Signals extends Record<string, unknown>,
-  C
+  C,
+  Deps extends readonly PluginLikeInstance[] = readonly PluginLikeInstance[]
 > = MinimalContext<G, C> & {
   /** Fire typed bus event. Constrained to BusContract keys. */
   emit: <K extends string & keyof Bus>(hook: K, payload: Bus[K]) => Promise<void>;
@@ -118,11 +124,29 @@ type InitContext<
     (name: string, payload?: unknown): Promise<void>;
   };
 
-  /** Get plugin API by name. Returns undefined if not found. */
-  getPlugin: <T = unknown>(name: string) => T | undefined;
+  /**
+   * Get plugin API by instance or name. Three overload tiers:
+   * 1. Pass instance from depends -> fully typed API | undefined
+   * 2. Pass name string from depends tuple -> typed API | undefined
+   * 3. Pass any string -> unknown (untyped escape hatch)
+   */
+  getPlugin: {
+    <P extends Deps[number]>(plugin: P): PluginApiType<P> | undefined;
+    <N extends PluginName<Deps[number]>>(name: N): ExtractDepsMap<Deps>[N] | undefined;
+    (name: string): unknown;
+  };
 
-  /** Get plugin API or throw with clear error. */
-  require: <T = unknown>(name: string) => T;
+  /**
+   * Get plugin API or throw. Three overload tiers:
+   * 1. Pass instance from depends -> fully typed API
+   * 2. Pass name string from depends tuple -> typed API
+   * 3. Pass any string -> unknown (untyped escape hatch)
+   */
+  require: {
+    <P extends Deps[number]>(plugin: P): PluginApiType<P>;
+    <N extends PluginName<Deps[number]>>(name: N): ExtractDepsMap<Deps>[N];
+    (name: string): unknown;
+  };
 
   /** Check if a plugin is registered. */
   has: (name: string) => boolean;
@@ -134,14 +158,21 @@ type InitContext<
  *
  * Everything is live. The plugin's internal mutable state is available.
  * This is the richest context tier.
+ * @template G - Global config type
+ * @template Bus - Bus contract type
+ * @template Signals - Signal registry type
+ * @template C - Plugin config type
+ * @template S - Plugin state type
+ * @template Deps - Depends tuple carrying declared plugin dependencies
  */
 type PluginContext<
   G,
   Bus extends Record<string, unknown>,
   Signals extends Record<string, unknown>,
   C,
-  S
-> = InitContext<G, Bus, Signals, C> & {
+  S,
+  Deps extends readonly PluginLikeInstance[] = readonly PluginLikeInstance[]
+> = InitContext<G, Bus, Signals, C, Deps> & {
   /** This plugin's internal mutable state. Mutable by design. */
   state: S;
 };
@@ -163,6 +194,7 @@ type PluginContext<
  * @template G - Global config type (BaseConfig from framework)
  * @template Bus - Bus contract type (event name -> payload mapping)
  * @template Signals - Signal registry type (signal name -> payload mapping)
+ * @template Deps - Depends tuple carrying declared plugin dependencies
  */
 interface PluginSpec<
   N extends string,
@@ -175,13 +207,14 @@ interface PluginSpec<
   // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability in TypeScript
   Bus extends Record<string, any> = Record<string, unknown>,
   // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability in TypeScript
-  Signals extends Record<string, any> = Record<string, unknown>
+  Signals extends Record<string, any> = Record<string, unknown>,
+  Deps extends readonly PluginLikeInstance[] = readonly PluginLikeInstance[]
 > {
   /** Complete default config. Presence makes config OPTIONAL for consumer. Full C, not Partial<C>. */
   defaultConfig?: C;
 
-  /** Declarative dependencies. Validated at Phase 0. NOT a topological sort -- just validation. */
-  depends?: readonly string[];
+  /** Declarative dependencies. Instance-based -- accepts plugin/component instances. */
+  depends?: Deps;
 
   /** Create internal mutable state. Async-compatible. Runs before any other lifecycle. Minimal context. */
   createState?: (context: MinimalContext<G, C>) => S | Promise<S>;
@@ -190,13 +223,13 @@ interface PluginSpec<
   onCreate?: (context: MinimalContext<G, C>) => void | Promise<void>;
 
   /** Build the public API mounted on app.<pluginName>. Full context. Async-compatible. */
-  api?: (context: PluginContext<G, Bus, Signals, C, S>) => A | Promise<A>;
+  api?: (context: PluginContext<G, Bus, Signals, C, S, Deps>) => A | Promise<A>;
 
   /** All plugins created and APIs mounted. Check dependencies here. Async-compatible. */
-  onInit?: (context: InitContext<G, Bus, Signals, C>) => void | Promise<void>;
+  onInit?: (context: InitContext<G, Bus, Signals, C, Deps>) => void | Promise<void>;
 
   /** App is starting. Async allowed. Full context. */
-  onStart?: (context: PluginContext<G, Bus, Signals, C, S>) => void | Promise<void>;
+  onStart?: (context: PluginContext<G, Bus, Signals, C, S, Deps>) => void | Promise<void>;
 
   /** Teardown. Reverse order. Minimal context. */
   onStop?: (context: TeardownContext<G>) => void | Promise<void>;
@@ -227,6 +260,7 @@ interface PluginSpec<
  * @template G - Global config type (BaseConfig from framework)
  * @template Bus - Bus contract type (event name -> payload mapping)
  * @template Signals - Signal registry type (signal name -> payload mapping)
+ * @template Deps - Depends tuple carrying declared plugin dependencies
  */
 interface ComponentSpec<
   N extends string,
@@ -239,19 +273,20 @@ interface ComponentSpec<
   // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability in TypeScript
   Bus extends Record<string, any> = Record<string, unknown>,
   // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability in TypeScript
-  Signals extends Record<string, any> = Record<string, unknown>
+  Signals extends Record<string, any> = Record<string, unknown>,
+  Deps extends readonly PluginLikeInstance[] = readonly PluginLikeInstance[]
 > {
   /** Complete default config. Presence makes config OPTIONAL for consumer. */
   defaultConfig?: C;
 
-  /** Declarative dependencies. Validated at Phase 0. */
-  depends?: readonly string[];
+  /** Declarative dependencies. Instance-based -- accepts plugin/component instances. */
+  depends?: Deps;
 
   /** Create internal mutable state. Async-compatible. */
   createState?: (context: MinimalContext<G, C>) => S | Promise<S>;
 
   /** Component mounted. Maps to onStart at runtime. Full context. */
-  onMount?: (context: PluginContext<G, Bus, Signals, C, S>) => void | Promise<void>;
+  onMount?: (context: PluginContext<G, Bus, Signals, C, S, Deps>) => void | Promise<void>;
 
   /** Component unmounted. Maps to onStop at runtime. Minimal context. */
   onUnmount?: (context: TeardownContext<G>) => void | Promise<void>;
@@ -260,7 +295,7 @@ interface ComponentSpec<
   hooks?: Record<string, (...arguments_: unknown[]) => void | Promise<void>>;
 
   /** Build the public API. Full context. Async-compatible. */
-  api?: (context: PluginContext<G, Bus, Signals, C, S>) => A | Promise<A>;
+  api?: (context: PluginContext<G, Bus, Signals, C, S, Deps>) => A | Promise<A>;
 }
 
 /**
@@ -328,7 +363,7 @@ interface PluginInstance<
 
   /** The plugin specification containing lifecycle methods and config. */
   // biome-ignore lint/suspicious/noExplicitAny: Spec uses any for framework generics since instances are decoupled from specific framework generics
-  readonly spec: PluginSpec<N, C, A, S, any, any, any>;
+  readonly spec: PluginSpec<N, C, A, S, any, any, any, any>;
 }
 
 /**
@@ -360,7 +395,7 @@ interface ComponentInstance<
 
   /** The component specification containing lifecycle methods and config. */
   // biome-ignore lint/suspicious/noExplicitAny: Spec uses any for framework generics since instances are decoupled from specific framework generics
-  readonly spec: ComponentSpec<N, C, A, S, any, any, any>;
+  readonly spec: ComponentSpec<N, C, A, S, any, any, any, any>;
 }
 
 /** Union of PluginInstance | ComponentInstance for constraints that accept both. */
@@ -393,6 +428,18 @@ interface ModuleInstance<N extends string = string, C = void> {
 // These extract type information from plugin instances for use by aggregate
 // types and the App type. All are internal to the package.
 // =============================================================================
+
+/** Type for the depends field on PluginSpec/ComponentSpec. Instance-only, no strings. */
+type DependsTuple = readonly PluginLikeInstance[];
+
+/**
+ * Extracts a name -> API mapping from a depends tuple.
+ * Given [PluginInstance<"router", C, RouterApi, S>, PluginInstance<"auth", C, AuthApi, S>],
+ * produces { router: RouterApi; auth: AuthApi }.
+ */
+type ExtractDepsMap<Deps extends readonly PluginLikeInstance[]> = {
+  [K in Deps[number] as PluginName<K>]: PluginApiType<K>;
+};
 
 /** Extract the name literal type from a plugin or component instance (structural). */
 type PluginName<P> = P extends { readonly name: infer N extends string } ? N : never;
@@ -680,10 +727,11 @@ type CreatePluginFunction<
   C = void,
   // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability in TypeScript
   A extends Record<string, any> = Record<string, never>,
-  S = void
+  S = void,
+  Deps extends readonly PluginLikeInstance[] = readonly PluginLikeInstance[]
 >(
   name: N,
-  spec: PluginSpec<N, C, A, S, BaseConfig, BusContract, SignalRegistry>
+  spec: PluginSpec<N, C, A, S, BaseConfig, BusContract, SignalRegistry, Deps>
 ) => PluginInstance<N, C, A, S>;
 
 /**
@@ -701,10 +749,11 @@ type CreateComponentFunction<
   C = void,
   // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability in TypeScript
   A extends Record<string, any> = Record<string, never>,
-  S = void
+  S = void,
+  Deps extends readonly PluginLikeInstance[] = readonly PluginLikeInstance[]
 >(
   name: N,
-  spec: ComponentSpec<N, C, A, S, BaseConfig, BusContract, SignalRegistry>
+  spec: ComponentSpec<N, C, A, S, BaseConfig, BusContract, SignalRegistry, Deps>
 ) => ComponentInstance<N, C, A, S>;
 
 /**
@@ -770,9 +819,10 @@ type CreatePluginFactoryFunction<
   C = void,
   // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability in TypeScript
   A extends Record<string, any> = Record<string, never>,
-  S = void
+  S = void,
+  Deps extends readonly PluginLikeInstance[] = readonly PluginLikeInstance[]
 >(
-  spec: Omit<PluginSpec<string, C, A, S, BaseConfig, BusContract, SignalRegistry>, "plugins">
+  spec: Omit<PluginSpec<string, C, A, S, BaseConfig, BusContract, SignalRegistry, Deps>, "plugins">
 ) => <N extends string>(name: N) => PluginInstance<N, C, A, S>;
 
 /**
@@ -823,6 +873,8 @@ export type {
   MinimalContext,
   InitContext,
   PluginContext,
+  DependsTuple,
+  ExtractDepsMap,
   PluginName,
   PluginConfigType,
   PluginApiType,

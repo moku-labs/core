@@ -94,12 +94,16 @@ type BuildState = { artifacts: string[]; eventLog: string[] };
  * NOTE: Because build has NO defaultConfig, TypeScript cannot infer C from the
  * spec object alone (it defaults to void). We provide explicit generic
  * parameters to createPlugin to carry the config type through.
+ * @param core - The core API instance.
+ * @param routerPlugin - The router plugin instance for depends declaration.
  */
 function createBuildPlugin(
-  core: ReturnType<typeof createCore<BaseConfig, BusContract, SignalRegistry>>
+  core: ReturnType<typeof createCore<BaseConfig, BusContract, SignalRegistry>>,
+  // biome-ignore lint/suspicious/noExplicitAny: Plugin instance type is erased at function boundary
+  routerPlugin: any
 ) {
   return core.createPlugin<"build", BuildConfig, BuildApi, BuildState>("build", {
-    depends: ["router"],
+    depends: [routerPlugin],
     createState: () => ({
       artifacts: [] as string[],
       eventLog: [] as string[]
@@ -206,7 +210,7 @@ describe("end-to-end three-layer type flow", () => {
     const routerPlugin = createRouterPlugin(core);
     // TS infers: PluginInstance<"router", { basePath: string; trailingSlash: boolean }, { resolve: (path: string) => string; routes: () => string[] }, { registeredRoutes: string[] }>
 
-    const buildPlugin = createBuildPlugin(core);
+    const buildPlugin = createBuildPlugin(core, routerPlugin);
     // TS infers: PluginInstance<"build", { outDir: string; feeds: boolean; sitemap: boolean }, { run: () => Promise<string[]> }, { artifacts: string[]; eventLog: string[] }>
 
     const spaComponent = createSpaComponent(core);
@@ -387,7 +391,7 @@ describe("end-to-end three-layer type flow", () => {
     });
 
     const routerPlugin = createRouterPlugin(core);
-    const buildPlugin = createBuildPlugin(core);
+    const buildPlugin = createBuildPlugin(core, routerPlugin);
     const spaComponent = createSpaComponent(core);
     const i18nPlugin = createI18nPlugin(core);
 
@@ -450,7 +454,7 @@ describe("end-to-end three-layer type flow", () => {
     });
 
     const subscriberPlugin = core.createPlugin("subscriber", {
-      depends: ["publisher"],
+      depends: [publisherPlugin],
       defaultConfig: { verbose: false },
       createState: () => ({ received: [] as string[] }),
       api: ctx => ({

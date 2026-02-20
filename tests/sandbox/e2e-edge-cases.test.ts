@@ -370,7 +370,7 @@ describe("event round-trip", () => {
     });
 
     const listener = core.createPlugin("listener", {
-      depends: ["tracker"],
+      depends: [tracker],
       hooks: {
         "test:event": (payload: unknown) => {
           // Hook receives payload at runtime (unknown per hooks type)
@@ -438,7 +438,7 @@ describe("plugin dependency validation", () => {
     });
 
     const dependent = core.createPlugin("dependent", {
-      depends: ["base"],
+      depends: [base],
       defaultConfig: { verbose: false },
       api: () => ({ depMethod: () => "dependent" }),
       onInit: (ctx: { require: (name: string) => { baseMethod: () => string } }) => {
