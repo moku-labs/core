@@ -494,6 +494,13 @@ type CoreDefaults<BaseConfig extends Record<string, any>> = {
 
   /** Called after all plugins have stopped. */
   onShutdown?: (context: { config: Readonly<BaseConfig> }) => void | Promise<void>;
+
+  /** Called when a lifecycle method throws. Notification-only -- error always propagates after onError returns. */
+  onError?: (context: {
+    error: unknown;
+    phase: string;
+    pluginName?: string;
+  }) => void | Promise<void>;
 };
 
 /**
@@ -586,7 +593,7 @@ type App<
     /** Stop the app. Reverse order. Idempotent. */
     stop: () => Promise<void>;
 
-    /** Destroy. Calls stop() if needed. Idempotent. */
+    /** Destroy. Calls stop() if needed. Terminal -- second call throws. */
     destroy: () => Promise<void>;
   } & BuildPluginApis<P>
 >;
