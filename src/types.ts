@@ -499,6 +499,8 @@ type CoreDefaults<BaseConfig extends Record<string, any>> = {
 /**
  * Opaque config object produced by createConfig.
  * Carries the full plugin union type for createApp to type pluginConfigs against.
+ * Contains pre-resolved global and per-plugin configs (frozen), the flattened
+ * plugin list, and a phantom `_allPlugins` union for downstream type inference.
  * @template G - Global config type (BaseConfig)
  * @template DefaultP - Default plugin union from framework
  * @template ExtraPlugins - Extra plugins added by consumer
@@ -510,8 +512,13 @@ type AppConfig<
   ExtraPlugins extends readonly PluginInstance[]
 > = {
   readonly _brand: "AppConfig";
-  readonly global: Partial<G>;
+  /** Fully resolved global config (framework defaults + consumer overrides). Frozen. */
+  readonly global: Readonly<G>;
   readonly extras: ExtraPlugins;
+  /** Pre-resolved per-plugin configs. Keys are plugin names, values are frozen config objects. */
+  readonly _pluginConfigs: ReadonlyMap<string, Readonly<Record<string, unknown>>>;
+  /** Flattened, validated plugin list in execution order. */
+  readonly _plugins: ReadonlyArray<PluginInstance>;
   /** Phantom: union of all plugins (defaults + extras). Used by createApp for typing. */
   readonly _allPlugins: DefaultP | ExtraPlugins[number];
 };
@@ -588,15 +595,17 @@ type App<
 
 /**
  * Type alias for the createConfig function returned by createCore.
- * Binds global overrides and extra plugins into an opaque AppConfig.
+ * Accepts an options object with config overrides, extra plugins, and per-plugin configs.
+ * Returns an opaque AppConfig carrying resolved configs and the full plugin union type.
  */
 // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability in TypeScript
 type CreateConfigFunction<BaseConfig extends Record<string, any>> = <
   const ExtraPlugins extends readonly PluginInstance[] = []
->(
-  globalConfig: Partial<BaseConfig>,
-  extraPlugins?: ExtraPlugins
-) => AppConfig<BaseConfig, PluginInstance, ExtraPlugins>;
+>(options?: {
+  config?: Partial<BaseConfig>;
+  plugins?: ExtraPlugins;
+  pluginConfigs?: Record<string, unknown>;
+}) => AppConfig<BaseConfig, PluginInstance, ExtraPlugins>;
 
 /**
  * Type alias for the createApp function returned by createCore.

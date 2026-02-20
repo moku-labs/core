@@ -29,9 +29,11 @@ describe("createCore", () => {
 
   // Stub-phase throw tests (replaced during kernel implementation)
 
-  it("createConfig throws not implemented", () => {
+  it("createConfig returns an AppConfig when called", () => {
     const core = createCore("test", { config: {} });
-    expect(() => core.createConfig()).toThrowError("[test]");
+    const result = core.createConfig();
+    expect(result).toBeDefined();
+    expect(result._brand).toBe("AppConfig");
   });
 
   it("createApp throws not implemented", () => {
@@ -79,13 +81,14 @@ describe("createCore", () => {
   it("stub errors include framework name, function name, and skeleton message", () => {
     const core = createCore("test", { config: {} });
 
+    // Test with createApp (still a stub)
     try {
-      core.createConfig();
+      core.createApp();
       expect.unreachable("should have thrown");
     } catch (error) {
       const message = (error as Error).message;
       expect(message).toContain("[test]");
-      expect(message).toContain("createConfig");
+      expect(message).toContain("createApp");
       expect(message).toContain("is not yet implemented");
       expect(message).toContain("stub from the skeleton phase");
     }

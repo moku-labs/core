@@ -1,5 +1,6 @@
 // Public type exports for framework authors
 export type {
+  AppConfig,
   ComponentInstance,
   ComponentSpec,
   ModuleInstance,
@@ -7,6 +8,9 @@ export type {
   PluginInstance,
   PluginSpec
 } from "./types.js";
+
+import type { RuntimeAppConfig } from "./config.js";
+import { createConfigImpl } from "./config.js";
 
 /**
  * Throws a not-implemented error for a stub function.
@@ -55,7 +59,11 @@ type ModuleInstanceResult = {
 
 /** The runtime CoreAPI shape returned by createCore. Temporary loose type -- replaced in Phase 11. */
 type RuntimeCoreAPI = {
-  createConfig: (...arguments_: unknown[]) => never;
+  createConfig: (options?: {
+    config?: Record<string, unknown>;
+    plugins?: readonly unknown[];
+    pluginConfigs?: Record<string, unknown>;
+  }) => RuntimeAppConfig;
   createApp: (...arguments_: unknown[]) => never;
   // biome-ignore lint/suspicious/noExplicitAny: Loose runtime type; full generic signature wired in Phase 11
   createPlugin: (pluginName: any, spec: any) => PluginInstanceResult;
@@ -70,15 +78,16 @@ type RuntimeCoreAPI = {
 
 /**
  * Creates a micro-kernel core instance with the given name and defaults.
- * Returns an object with all 7 CoreAPI functions. The 4 creation functions
- * (createPlugin, createComponent, createModule, createPluginFactory) are
- * implemented. createConfig, createApp, and createEventBus remain stubs.
+ * Returns an object with all 7 CoreAPI functions. The 5 functions
+ * (createConfig, createPlugin, createComponent, createModule, createPluginFactory)
+ * are implemented. createApp and createEventBus remain stubs.
  * @param name - The framework name used in error messages.
  * @param _defaults - Default configuration and optional lifecycle callbacks.
  * @returns The core API object with all 7 framework functions.
  * @example
  * ```ts
  * const core = createCore("myFramework", { config: { debug: false } });
+ * const config = core.createConfig({ config: { debug: true } });
  * ```
  */
 // biome-ignore lint/suspicious/noExplicitAny: createCore uses loose types at runtime; full generic signature wired in Phase 11
@@ -314,14 +323,23 @@ export function createCore(name: string, _defaults: Record<string, any>): Runtim
 
   return {
     /**
-     * Creates a configuration object. Stub -- not yet implemented.
-     * @returns Never - throws not implemented.
+     * Creates a configuration object by resolving global and per-plugin configs.
+     * Flattens and validates plugins, shallow-merges configs, and freezes results.
+     * @param options - Optional config overrides, extra plugins, and per-plugin configs.
+     * @param options.config - Partial global config overrides from the consumer.
+     * @param options.plugins - Extra plugins to append after framework defaults.
+     * @param options.pluginConfigs - Per-plugin config overrides keyed by plugin name.
+     * @returns An opaque AppConfig with resolved configs and the flattened plugin list.
      * @example
      * ```ts
-     * core.createConfig({});
+     * const config = core.createConfig({ config: { debug: true } });
      * ```
      */
-    createConfig: (): never => notImplemented(name, "createConfig"),
+    createConfig: (options?: {
+      config?: Record<string, unknown>;
+      plugins?: readonly unknown[];
+      pluginConfigs?: Record<string, unknown>;
+    }): RuntimeAppConfig => createConfigImpl(name, _defaults, options),
     /**
      * Creates an application instance. Stub -- not yet implemented.
      * @returns Never - throws not implemented.
