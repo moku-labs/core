@@ -19,8 +19,8 @@ interface PluginSpec<
   /** Complete default config. Presence makes config OPTIONAL for consumer. Full C, not Partial<C>. */
   defaultConfig?: C;
 
-  /** Declarative dependencies. Validated at Phase 0. NOT a topological sort -- just validation. */
-  depends?: readonly string[];
+  /** Declarative dependencies. Instance-based -- accepts plugin/component instances. Validated at Phase 0. NOT a topological sort -- just validation. */
+  depends?: readonly PluginLikeInstance[];
 
   /** Create internal mutable state. Runs before any other lifecycle. Minimal context. */
   createState?: (ctx: { global: Readonly<any>; config: Readonly<C> }) => S;
@@ -117,32 +117,47 @@ Sync plugins work unchanged. `void | Promise<void>` covers sync returns.
 ## 2. The `depends` Field
 
 ```typescript
-const RouterPlugin = createPlugin<'router', RouterConfig, RouterApi, RouterState>('router', {
-  depends: ['logger', 'renderer'] as const,
+// Instance-based depends: pass actual plugin instances, not strings
+const loggerPlugin = createPlugin('logger', { ... });
+const rendererPlugin = createPlugin('renderer', { ... });
+
+const routerPlugin = createPlugin<'router', RouterConfig, RouterApi, RouterState>('router', {
+  depends: [loggerPlugin, rendererPlugin],
+  // TypeScript infers the tuple type, enabling typed ctx.require
   // ...
 });
 ```
 
+The `depends` field accepts `readonly PluginLikeInstance[]` -- an array of plugin or component instances. Since you import a plugin to depend on it, you already have the instance reference with its phantom types. TypeScript infers the tuple type from the array, enabling fully typed `ctx.require` and `ctx.getPlugin`.
+
 ### What `depends` Does at Phase 0
 
-1. For each plugin with `depends`, check that every named dependency exists in the flattened list.
+1. For each plugin with `depends`, extract names from instances and check that every named dependency exists in the flattened list.
 2. Check that every dependency appears BEFORE the dependent plugin in the list.
 3. If either check fails, throw with a clear error:
 
 ```
 Error: [moku-site] Plugin "router" depends on "auth", but "auth" is not registered.
-  Add the auth plugin to your plugin list before "router".
+  Add "auth" to your plugin list before "router".
 
 Error: [moku-site] Plugin "router" depends on "logger", but "logger" appears after "router".
   Move "logger" before "router" in your plugin list.
 ```
 
+### What `depends` Does at Runtime (ctx.require/ctx.getPlugin scoping)
+
+When a plugin declares `depends`, the kernel enforces dependency scoping on `ctx.require` and `ctx.getPlugin`:
+- `ctx.require(plugin)` or `ctx.require('name')` throws if the target is not in the caller's `depends` array
+- `ctx.getPlugin(plugin)` or `ctx.getPlugin('name')` returns `undefined` if the target is not in the caller's `depends` array
+- `ctx.has('name')` is NOT restricted by depends -- it always checks global registration
+
+Plugins without a `depends` declaration have unrestricted access (backward compatible).
+
 ### What `depends` Does NOT Do
 
 - Does not auto-reorder plugins (no topological sort)
 - Does not create new concepts (no "dependency graph", no "resolution algorithm")
-- Does not change runtime behavior (plugins init in array order, always)
-- Does not affect `getPlugin`/`require` typing inside plugin lifecycle (still loose -- see [09-TYPE-SYSTEM](./09-TYPE-SYSTEM.md) for app-level strict typing)
+- Does not change plugin execution order (plugins init in array order, always)
 
 **Visibility for LLMs and tooling:** With `depends`, an LLM can read a plugin's spec without executing any code and know what plugins must precede it. This is pure metadata extractable statically.
 
@@ -182,7 +197,7 @@ export const ContactFormPlugin = createPlugin<
 >(
   'contactForm',
   {
-    depends: ['renderer'],
+    depends: [rendererPlugin],
     onCreate: ({ config }) => validateConfig(config),
     api: createContactFormApi,
     hooks: {

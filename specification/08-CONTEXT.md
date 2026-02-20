@@ -169,37 +169,89 @@ During teardown, plugins may be partially or fully stopped. Accessing other plug
 
 ## 6. BaseCtx Methods
 
-### `getPlugin(name)`
+### `getPlugin(pluginOrName)` -- Three Overload Tiers
 
 Returns the plugin's public API object or `undefined` if not found. Never throws.
 
+When the plugin declares `depends`, `getPlugin` is scoped to the declared dependencies. Accessing a plugin not in `depends` returns `undefined`.
+
+**Tier 1: Instance overload** -- Pass a plugin instance from the `depends` tuple. Returns fully typed `API | undefined`.
+
 ```typescript
-const logger = ctx.getPlugin<LoggerApi>('logger');
-if (logger) {
-  logger.info('Router initialized');
+// In a plugin with depends: [routerPlugin]
+const router = ctx.getPlugin(routerPlugin);
+//    ^? RouterApi | undefined -- fully typed from instance phantom types
+if (router) {
+  router.resolve('/about'); // full autocomplete
 }
 ```
 
-### `require(name)`
+**Tier 2: Typed string overload** -- Pass a name string that matches a plugin in `depends`. Returns typed `API | undefined`.
+
+```typescript
+// In a plugin with depends: [routerPlugin]
+const router = ctx.getPlugin('router');
+//    ^? RouterApi | undefined -- typed via name extracted from depends tuple
+```
+
+**Tier 3: Untyped string overload** -- Pass any string. Returns `unknown`. Escape hatch for dynamic cases.
+
+```typescript
+const plugin = ctx.getPlugin('some-dynamic-name');
+//    ^? unknown
+```
+
+### `require(pluginOrName)` -- Three Overload Tiers
 
 Returns the plugin's public API object or throws with a clear error message.
 
-```typescript
-const renderer = ctx.require<RendererApi>('renderer');
-renderer.render(path, html);
+When the plugin declares `depends`, `require` is scoped to the declared dependencies. Accessing a plugin not in `depends` throws.
 
-// If 'renderer' doesn't exist:
-// Error: [moku-site] Plugin "router" requires "renderer", but "renderer" is not registered.
-//   Add the renderer plugin to your plugin list, before "router".
+**Tier 1: Instance overload** -- Pass a plugin instance from the `depends` tuple. Returns fully typed `API`.
+
+```typescript
+// In a plugin with depends: [routerPlugin, authPlugin]
+const router = ctx.require(routerPlugin);
+//    ^? RouterApi -- fully typed, no cast needed
+router.resolve('/about'); // full autocomplete
+```
+
+**Tier 2: Typed string overload** -- Pass a name string that matches a plugin in `depends`. Returns typed `API`.
+
+```typescript
+const router = ctx.require('router');
+//    ^? RouterApi -- typed via name extracted from depends tuple
+```
+
+**Tier 3: Untyped string overload** -- Pass any string. Returns `unknown`. Escape hatch for dynamic cases.
+
+```typescript
+const plugin = ctx.require('some-dynamic-name');
+//    ^? unknown
+```
+
+**Error messages:**
+
+```
+// Plugin not in depends:
+Error: [moku-site] Plugin "auth" not in depends for "dashboard".
+  Add the plugin to your depends array.
+
+// Plugin not registered at all:
+Error: [moku-site] Plugin "dashboard" requires "auth", but "auth" is not registered.
+  Add "auth" to your plugin list.
 ```
 
 ### `has(name)`
 
 Returns `boolean`. Never throws. Use for optional dependencies.
 
+**Not restricted by depends** -- `has` always checks global registration, even when the plugin declares `depends`. This enables safe conditional logic before `require`.
+
 ```typescript
 if (ctx.has('analytics')) {
-  const analytics = ctx.require<AnalyticsApi>('analytics');
+  // Only require if registered (analytics is optional)
+  const analytics = ctx.require('analytics');
   analytics.track('page:view', { path });
 }
 ```

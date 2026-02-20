@@ -124,8 +124,12 @@ function createBuildPlugin(
       }
     },
     onStart: ctx => {
-      // Cross-plugin communication: access router API
-      const routerApi = ctx.require("router") as { resolve: (path: string) => string };
+      // Cross-plugin communication: access router API via instance-based depends
+      // NOTE: routerPlugin param is typed as `any` at the function boundary, so
+      // full type inference is not available here. In real usage with a properly
+      // typed plugin reference, ctx.require(routerPlugin) would return the fully
+      // typed RouterApi without any cast.
+      const routerApi = ctx.require(routerPlugin) as { resolve: (path: string) => string };
       const resolved = routerApi.resolve("/build-output");
       ctx.state.artifacts.push(`resolved:${resolved}`);
     }
@@ -466,8 +470,8 @@ describe("end-to-end three-layer type flow", () => {
         }
       },
       onInit: ctx => {
-        // Verify cross-plugin access
-        const pub = ctx.require("publisher") as { publish: () => string };
+        // Verify cross-plugin access via instance-based depends
+        const pub = ctx.require(publisherPlugin) as { publish: () => string };
         hookLog.push(`publisher says: ${pub.publish()}`);
       }
     });
