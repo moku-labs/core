@@ -67,6 +67,7 @@ type RuntimePluginItem = {
  */
 type RuntimeApp = {
   readonly config: Readonly<Record<string, unknown>>;
+  readonly configs: Readonly<Record<string, unknown>>;
   emit: (hookName: string, payload: unknown) => Promise<void>;
   signal: (hookName: string, payload?: unknown) => Promise<void>;
   getPlugin: (name: string) => unknown;
@@ -220,7 +221,7 @@ async function executeCreatePhase(
 
 /**
  * Executes Phase 3 (Build APIs) for all plugins sequentially.
- * For each plugin: call spec.api with full context, attach config, store in apis Map.
+ * For each plugin: call spec.api with full context, store in apis Map.
  * @param items - The flattened plugin list.
  * @param globalConfig - The frozen global config.
  * @param pluginConfigs - Resolved per-plugin configs.
@@ -269,7 +270,6 @@ async function executeBuildPhase(
         );
         api = await item.spec.api(context);
       }
-      api.config = config;
       apis.set(item.name, api);
     } catch (error: unknown) {
       await defaults.onError?.({ error, phase: "build", pluginName: item.name });
@@ -532,8 +532,12 @@ export async function createAppImpl(
     return dispatch(hookName, payload);
   };
 
+  // --- Plugin name set for has() registration check ---
+  const pluginNameSet = new Set(items.map(item => item.name));
+
   /**
    * Get a plugin API by name. Returns undefined if not found.
+   * Throws on destroyed app.
    * @param pluginName - The plugin name to look up.
    * @returns The plugin API or undefined.
    * @example
@@ -541,10 +545,14 @@ export async function createAppImpl(
    * const api = getPlugin("router");
    * ```
    */
-  const getPlugin = (pluginName: string): unknown => apis.get(pluginName);
+  const getPlugin = (pluginName: string): unknown => {
+    assertNotDestroyed("getPlugin");
+    return apis.get(pluginName);
+  };
 
   /**
    * Get a plugin API or throw with clear error.
+   * Internal version used by plugin contexts during lifecycle (no destroy guard).
    * @param pluginName - The plugin name to look up.
    * @param requester - The name of the requesting plugin (for error messages).
    * @returns The plugin's public API object.
@@ -564,7 +572,8 @@ export async function createAppImpl(
   };
 
   /**
-   * Check if a plugin is registered.
+   * Check if a plugin is registered (by name, not by API availability).
+   * Throws on destroyed app.
    * @param pluginName - The plugin name to check.
    * @returns True if the plugin is registered.
    * @example
@@ -572,7 +581,10 @@ export async function createAppImpl(
    * if (has("logger")) { ... }
    * ```
    */
-  const has = (pluginName: string): boolean => apis.has(pluginName);
+  const has = (pluginName: string): boolean => {
+    assertNotDestroyed("has");
+    return pluginNameSet.has(pluginName);
+  };
 
   // --- Framework onBoot (sync, before Phase 2) ---
   defaults.onBoot?.({ config: globalConfig });
@@ -595,6 +607,27 @@ export async function createAppImpl(
     defaults
   );
 
+  // --- Name collision detection ---
+  const reservedNames = new Set([
+    "start",
+    "stop",
+    "destroy",
+    "getPlugin",
+    "require",
+    "has",
+    "config",
+    "configs",
+    "emit",
+    "signal"
+  ]);
+  for (const item of items) {
+    if (reservedNames.has(item.name)) {
+      throw new Error(
+        `[${frameworkName}] Plugin name "${item.name}" conflicts with built-in app method "${item.name}".\n  Choose a different plugin name.`
+      );
+    }
+  }
+
   // --- Phase 4: Init (async, sequential) ---
   await executeInitPhase(
     items,
@@ -608,6 +641,13 @@ export async function createAppImpl(
     defaults
   );
 
+  // --- Build app.configs accessor ---
+  const configsAccessor: Record<string, unknown> = {};
+  for (const item of items) {
+    configsAccessor[item.name] = pluginConfigs.get(item.name) ?? Object.freeze({});
+  }
+  Object.freeze(configsAccessor);
+
   // --- Build app object ---
   /** The frozen app configuration. */
   const frozenAppConfig = Object.freeze({ ...globalConfig });
@@ -615,11 +655,12 @@ export async function createAppImpl(
   /** The app object with all lifecycle methods and plugin APIs. */
   const app: RuntimeApp = {
     config: frozenAppConfig,
+    configs: configsAccessor,
     emit,
     signal,
     getPlugin,
     /**
-     * Require a plugin API from the app level or throw.
+     * Require a plugin API from the app level or throw. Throws on destroyed app.
      * @param pluginName - The plugin name to look up.
      * @returns The plugin's public API object.
      * @example
@@ -627,11 +668,14 @@ export async function createAppImpl(
      * const api = app.require("router");
      * ```
      */
-    require: (pluginName: string) => requirePlugin(pluginName, "app"),
+    require: (pluginName: string) => {
+      assertNotDestroyed("require");
+      return requirePlugin(pluginName, "app");
+    },
     has,
 
     /**
-     * Start the app. Idempotent -- second call is a no-op.
+     * Start the app. Emits warning signal on redundant call.
      * @example
      * ```ts
      * await app.start();
@@ -639,7 +683,12 @@ export async function createAppImpl(
      */
     start: async () => {
       assertNotDestroyed("start");
-      if (started) return;
+      if (started) {
+        await signal("app:warn:redundant-start", {
+          message: "start() called on already-started app"
+        });
+        return;
+      }
       // started flag set before execution per decision:
       // prevents double-start of already-started plugins even on failure
       started = true;
@@ -701,9 +750,14 @@ export async function createAppImpl(
     }
   };
 
-  // --- Mount plugin APIs on app ---
-  for (const [pluginName, api] of apis) {
-    (app as Record<string, unknown>)[pluginName] = api;
+  // --- Mount only non-void API plugins on app ---
+  for (const item of items) {
+    if (item.spec.api) {
+      const api = apis.get(item.name);
+      if (api) {
+        (app as Record<string, unknown>)[item.name] = api;
+      }
+    }
   }
 
   // --- Freeze and return ---

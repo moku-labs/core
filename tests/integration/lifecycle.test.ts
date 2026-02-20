@@ -127,19 +127,18 @@ describe("full lifecycle integration", () => {
     const loggerApi = appRecord.logger as {
       log: (msg: string) => void;
       getLog: () => string[];
-      config: Record<string, unknown>;
     };
     const counterApi = appRecord.counter as {
       increment: () => number;
       getCount: () => number;
-      config: Record<string, unknown>;
     };
+    const configs = appRecord.configs as Record<string, Record<string, unknown>>;
 
-    // --- Verify config resolution ---
+    // --- Verify config resolution via app.configs ---
     // Logger has defaultConfig { prefix: "[LOG]" }, no override -> uses default
-    expect(loggerApi.config.prefix).toBe("[LOG]");
+    expect(configs["logger"]!.prefix).toBe("[LOG]");
     // Counter was provided config { initial: 5 }
-    expect(counterApi.config.initial).toBe(5);
+    expect(configs["counter"]!.initial).toBe(5);
 
     // --- Verify onInit ran (logger logged "initialized") ---
     const preStartLog = loggerApi.getLog();
@@ -207,17 +206,14 @@ describe("full lifecycle integration", () => {
     const app = await core.createApp(config);
     const appRecord = app as unknown as Record<string, unknown>;
     const loggerApi = appRecord.logger as {
-      config: Record<string, unknown>;
       getLog: () => string[];
     };
-    const counterApi = appRecord.counter as {
-      config: Record<string, unknown>;
-    };
+    const configs = appRecord.configs as Record<string, Record<string, unknown>>;
 
-    // Logger gets overridden prefix
-    expect(loggerApi.config.prefix).toBe("[CUSTOM]");
-    // Counter gets provided initial
-    expect(counterApi.config.initial).toBe(10);
+    // Logger gets overridden prefix via app.configs
+    expect(configs["logger"]!.prefix).toBe("[CUSTOM]");
+    // Counter gets provided initial via app.configs
+    expect(configs["counter"]!.initial).toBe(10);
 
     // Verify the custom prefix is used in logs
     const log = loggerApi.getLog();

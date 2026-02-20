@@ -1098,7 +1098,7 @@ describe("app object shape", () => {
     expect((api.greet as () => string)()).toBe("hello");
   });
 
-  it("plugin API has config attached", async () => {
+  it("plugin config is accessible via app.configs (not api.config)", async () => {
     const core = testCore();
     const plugin = core.createPlugin("configured", {
       defaultConfig: { setting: "default" },
@@ -1111,9 +1111,14 @@ describe("app object shape", () => {
     });
     const app = await core.createApp(config);
 
-    const api = (app as Record<string, unknown>).configured as Record<string, unknown>;
-    expect(api.config).toBeDefined();
-    expect((api.config as Record<string, unknown>).setting).toBe("override");
+    const appRecord = app as unknown as Record<string, unknown>;
+    const configs = appRecord.configs as Record<string, Record<string, unknown>>;
+    expect(configs["configured"]).toBeDefined();
+    expect(configs["configured"]!.setting).toBe("override");
+
+    // Config is NOT on the API object
+    const api = appRecord.configured as Record<string, unknown>;
+    expect(api.config).toBeUndefined();
   });
 
   it("has() returns true for registered plugin", async () => {
