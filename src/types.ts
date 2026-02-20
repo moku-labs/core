@@ -508,8 +508,10 @@ type CoreDefaults<BaseConfig extends Record<string, any>> = {
 type AppConfig<
   // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability in TypeScript
   G extends Record<string, any>,
-  DefaultP extends PluginInstance,
-  ExtraPlugins extends readonly PluginInstance[]
+  // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability -- default PluginInstance has C=void which rejects concrete config types
+  DefaultP extends PluginInstance<string, any, any, any>,
+  // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability -- default PluginInstance has C=void which rejects concrete config types
+  ExtraPlugins extends readonly PluginInstance<string, any, any, any>[]
 > = {
   readonly _brand: "AppConfig";
   /** Fully resolved global config (framework defaults + consumer overrides). Frozen. */
@@ -600,7 +602,8 @@ type App<
  */
 // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability in TypeScript
 type CreateConfigFunction<BaseConfig extends Record<string, any>> = <
-  const ExtraPlugins extends readonly PluginInstance[] = []
+  // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability -- default PluginInstance has C=void which rejects concrete config types
+  const ExtraPlugins extends readonly PluginInstance<string, any, any, any>[] = []
 >(options?: {
   config?: Partial<BaseConfig>;
   plugins?: ExtraPlugins;
