@@ -1,12 +1,14 @@
 // Public type exports for framework authors + internal type imports
 import type { CoreAPI, CoreDefaults } from "./types.js";
 
+export { createEventBusImpl as createEventBus } from "./event-bus.js";
 export type {
   AppConfig,
   ComponentInstance,
   ComponentSpec,
   CoreAPI,
   CoreDefaults,
+  EventBus,
   ModuleInstance,
   ModuleSpec,
   PluginInstance,
@@ -14,24 +16,8 @@ export type {
 } from "./types.js";
 
 import { createConfigImpl } from "./config.js";
+import { createEventBusImpl } from "./event-bus.js";
 import { createAppImpl } from "./kernel.js";
-
-/**
- * Throws a not-implemented error for a stub function.
- * @param name - The framework name used in the error prefix.
- * @param functionName - The name of the stub function that is not yet implemented.
- * @throws {Error} Kernel error format indicating function is not implemented.
- * @example
- * ```ts
- * notImplemented("myFramework", "createEventBus");
- * // throws: [myFramework] createEventBus is not yet implemented.
- * ```
- */
-const notImplemented = (name: string, functionName: string): never => {
-  throw new Error(
-    `[${name}] ${functionName} is not yet implemented.\n  This is a stub from the skeleton phase.`
-  );
-};
 
 /**
  * Creates a micro-kernel core instance with the given name and defaults.
@@ -327,14 +313,19 @@ export function createCore<
     createComponent,
     createModule,
     /**
-     * Creates an event bus instance. Stub -- not yet implemented.
-     * @returns Never - throws not implemented.
+     * Creates a standalone typed event bus instance.
+     * @param busConfig - Optional config with maxListeners and onError.
+     * @param busConfig.maxListeners - Maximum listeners per event before console.warn.
+     * @param busConfig.onError - Called before re-throwing when a handler throws.
+     * @returns A frozen EventBus with emit, on, off, once, and clear methods.
      * @example
      * ```ts
-     * core.createEventBus();
+     * const bus = core.createEventBus<{ "user:login": { id: string } }>();
+     * bus.on("user:login", (payload) => console.log(payload.id));
      * ```
      */
-    createEventBus: () => notImplemented(name, "createEventBus"),
+    createEventBus: (busConfig?: { maxListeners?: number; onError?: (error: unknown) => void }) =>
+      createEventBusImpl(busConfig),
     createPluginFactory
   } as unknown as CoreAPI<BaseConfig, BusContract, SignalRegistry>;
 }

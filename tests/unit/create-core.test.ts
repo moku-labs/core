@@ -71,9 +71,16 @@ describe("createCore", () => {
     expect(result.kind).toBe("module");
   });
 
-  it("createEventBus throws not implemented", () => {
+  it("createEventBus returns a frozen event bus with expected methods", () => {
     const core = createCore("test", { config: {} });
-    expect(() => core.createEventBus()).toThrowError("[test]");
+    const bus = core.createEventBus();
+    expect(bus).toBeDefined();
+    expect(typeof bus.emit).toBe("function");
+    expect(typeof bus.on).toBe("function");
+    expect(typeof bus.off).toBe("function");
+    expect(typeof bus.once).toBe("function");
+    expect(typeof bus.clear).toBe("function");
+    expect(Object.isFrozen(bus)).toBe(true);
   });
 
   it("createPluginFactory returns a function when called with valid arguments", () => {
@@ -84,19 +91,17 @@ describe("createCore", () => {
 
   // Error format test (permanent)
 
-  it("stub errors include framework name, function name, and skeleton message", () => {
+  it("kernel errors include framework name in error messages", () => {
     const core = createCore("test", { config: {} });
 
-    // Test with createEventBus (still a stub)
+    // Verify error format using plugin name validation (empty name)
     try {
-      core.createEventBus();
+      core.createPlugin("", {});
       expect.unreachable("should have thrown");
     } catch (error) {
       const message = (error as Error).message;
       expect(message).toContain("[test]");
-      expect(message).toContain("createEventBus");
-      expect(message).toContain("is not yet implemented");
-      expect(message).toContain("stub from the skeleton phase");
+      expect(message).toContain("Plugin name must not be empty");
     }
   });
 });
