@@ -714,18 +714,44 @@ type CreateModuleFunction = <N extends string, C = void>(
 ) => ModuleInstance<N, C>;
 
 /**
- * Type alias for the createEventBus function returned by createCore.
+ * A typed event bus instance with emit, on, off, once, and clear methods.
+ * Returned by createEventBus. Consumers can use this type for annotations.
+ * @template Events - Map of event names to payload types
  */
 // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability in TypeScript
-type CreateEventBusFunction = <Events extends Record<string, any> = Record<string, unknown>>() => {
+type EventBus<Events extends Record<string, any> = Record<string, unknown>> = {
+  /** Fire a typed event. Dispatches to all registered handlers sequentially. */
   emit: <K extends keyof Events>(event: K, payload: Events[K]) => Promise<void>;
+  /** Subscribe to an event. Returns an unsubscribe function. */
   on: <K extends keyof Events>(
     event: K,
     handler: (payload: Events[K]) => void | Promise<void>
   ) => () => void;
-  off: <K extends keyof Events>(event: K, handler: (...arguments_: unknown[]) => void) => void;
-  clear: () => void;
+  /** Remove a specific handler by reference. No-op if not found. */
+  off: <K extends keyof Events>(
+    event: K,
+    handler: (payload: Events[K]) => void | Promise<void>
+  ) => void;
+  /** Subscribe to an event for a single invocation. Returns an unsubscribe function. */
+  once: <K extends keyof Events>(
+    event: K,
+    handler: (payload: Events[K]) => void | Promise<void>
+  ) => () => void;
+  /** Clear all handlers, or handlers for a specific event. */
+  clear: (event?: keyof Events) => void;
 };
+
+/**
+ * Type alias for the createEventBus function returned by createCore.
+ * Accepts an optional config for maxListeners and onError.
+ */
+// biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability in TypeScript
+type CreateEventBusFunction = <
+  Events extends Record<string, any> = Record<string, unknown>
+>(config?: {
+  maxListeners?: number;
+  onError?: (error: unknown) => void;
+}) => EventBus<Events>;
 
 /**
  * Type alias for the createPluginFactory function returned by createCore.
@@ -817,5 +843,6 @@ export type {
   CreateComponentFunction,
   CreateModuleFunction,
   CreateEventBusFunction,
-  CreatePluginFactoryFunction
+  CreatePluginFactoryFunction,
+  EventBus
 };
