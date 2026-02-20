@@ -493,6 +493,83 @@ describe("end-to-end three-layer type flow", () => {
     await app.destroy();
   });
 
+  it("typed signals: SignalRegistry enforces payload, hooks receive it", async () => {
+    const core = createCore<BaseConfig, BusContract, SignalRegistry>("moku", {
+      config: {
+        site: { title: "Test", url: "https://test.com" },
+        build: { outDir: "./out", minify: false }
+      }
+    });
+
+    // Track what the listener receives
+    const signalLog: Array<{ from: string; to: string }> = [];
+    const untypedLog: unknown[] = [];
+
+    // Plugin that listens to both typed and untyped signals via hooks
+    const listenerPlugin = core.createPlugin("listener", {
+      defaultConfig: {},
+      api: () => ({
+        getSignalLog: () => [...signalLog],
+        getUntypedLog: () => [...untypedLog]
+      }),
+      hooks: {
+        "route:change": (payload: unknown) => {
+          // At the hooks level, payload is unknown (hooks don't carry generics).
+          // The typing benefit is on the SENDER side (ctx.signal / app.signal).
+          signalLog.push(payload as { from: string; to: string });
+        },
+        "custom:adhoc": (payload: unknown) => {
+          untypedLog.push(payload);
+        }
+      }
+    });
+
+    // Plugin that fires a typed signal during onStart
+    const navigatorPlugin = core.createPlugin("navigator", {
+      defaultConfig: {},
+      api: () => ({}),
+      onStart: async ctx => {
+        // TYPED: "route:change" is in SignalRegistry — TS enforces { from, to }
+        await ctx.signal("route:change", { from: "/home", to: "/dashboard" });
+
+        // UNTYPED: "custom:adhoc" is NOT in SignalRegistry — falls through to untyped overload
+        await ctx.signal("custom:adhoc", { message: "hello from navigator" });
+      }
+    });
+
+    const config = core.createConfig({
+      plugins: [listenerPlugin, navigatorPlugin]
+    });
+    const app = await core.createApp(config);
+
+    // Before start: no signals fired yet
+    expect(app.listener.getSignalLog()).toEqual([]);
+    expect(app.listener.getUntypedLog()).toEqual([]);
+
+    // Start triggers navigatorPlugin.onStart which fires both signals
+    await app.start();
+
+    // Typed signal: listener received the route:change payload
+    expect(app.listener.getSignalLog()).toEqual([{ from: "/home", to: "/dashboard" }]);
+
+    // Untyped signal: listener received the custom:adhoc payload
+    expect(app.listener.getUntypedLog()).toEqual([{ message: "hello from navigator" }]);
+
+    // App-level typed signal — TS enforces the payload shape
+    await app.signal("route:change", { from: "/dashboard", to: "/settings" });
+    expect(app.listener.getSignalLog()).toEqual([
+      { from: "/home", to: "/dashboard" },
+      { from: "/dashboard", to: "/settings" }
+    ]);
+
+    // App-level untyped signal — any string works
+    await app.signal("some:random:event", { data: 42 });
+    // No hook registered for "some:random:event", so untypedLog unchanged
+    expect(app.listener.getUntypedLog()).toHaveLength(1);
+
+    await app.destroy();
+  });
+
   it("component lifecycle maps onMount/onUnmount correctly", async () => {
     const core = createCore<BaseConfig, BusContract, SignalRegistry>("moku", {
       config: {
