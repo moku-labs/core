@@ -395,7 +395,14 @@ interface ComponentInstance<
 
   /** The component specification containing lifecycle methods and config. */
   // biome-ignore lint/suspicious/noExplicitAny: Spec uses any for framework generics since instances are decoupled from specific framework generics
-  readonly spec: ComponentSpec<N, C, A, S, any, any, any, any>;
+  readonly spec: ComponentSpec<N, C, A, S, any, any, any, any> & {
+    /** Present at runtime after createComponent maps onMount -> onStart. */
+    // biome-ignore lint/suspicious/noExplicitAny: Widened to reflect runtime shape after lifecycle mapping
+    readonly onStart?: ((...arguments_: any[]) => any) | undefined;
+    /** Present at runtime after createComponent maps onUnmount -> onStop. */
+    // biome-ignore lint/suspicious/noExplicitAny: Widened to reflect runtime shape after lifecycle mapping
+    readonly onStop?: ((...arguments_: any[]) => any) | undefined;
+  };
 }
 
 /** Union of PluginInstance | ComponentInstance for constraints that accept both. */
