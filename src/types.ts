@@ -363,6 +363,13 @@ interface ComponentInstance<
   readonly spec: ComponentSpec<N, C, A, S, any, any, any>;
 }
 
+/** Union of PluginInstance | ComponentInstance for constraints that accept both. */
+type PluginLikeInstance =
+  // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability in TypeScript
+  | PluginInstance<string, any, any, any>
+  // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability in TypeScript
+  | ComponentInstance<string, any, any, any>;
+
 /**
  * A module instance produced by createModule. Modules are consumed during
  * Phase 0 flattening and do not exist at runtime.
@@ -387,17 +394,14 @@ interface ModuleInstance<N extends string = string, C = void> {
 // types and the App type. All are internal to the package.
 // =============================================================================
 
-/** Extract the name literal type from a plugin instance. */
-// biome-ignore lint/suspicious/noExplicitAny: Required for conditional type inference pattern
-type PluginName<P> = P extends PluginInstance<infer N, any, any, any> ? N : never;
+/** Extract the name literal type from a plugin or component instance (structural). */
+type PluginName<P> = P extends { readonly name: infer N extends string } ? N : never;
 
-/** Extract the config type from a plugin instance. */
-// biome-ignore lint/suspicious/noExplicitAny: Required for conditional type inference pattern
-type PluginConfigType<P> = P extends PluginInstance<any, infer C, any, any> ? C : never;
+/** Extract the config type from a plugin or component instance (structural). */
+type PluginConfigType<P> = P extends { readonly _types: { config: infer C } } ? C : never;
 
-/** Extract the API type from a plugin instance. */
-// biome-ignore lint/suspicious/noExplicitAny: Required for conditional type inference pattern
-type PluginApiType<P> = P extends PluginInstance<any, any, infer A, any> ? A : never;
+/** Extract the API type from a plugin or component instance (structural). */
+type PluginApiType<P> = P extends { readonly _types: { api: infer A } } ? A : never;
 
 /**
  * Check if a config type is void or empty (no keys).
@@ -412,12 +416,15 @@ type IsEmptyConfig<C> = C extends void ? true : [keyof C] extends [never] ? true
 type HasDefaults<P> = P extends { _hasDefaults: true } ? true : false;
 
 /**
- * Extract a plugin's raw API by plugin name from a union.
+ * Extract a plugin's raw API by plugin name from a union (structural).
  * Config is NOT attached -- config lives on app.configs per CONTEXT decision.
  */
-type PluginApiByName<P, N extends string> =
-  // biome-ignore lint/suspicious/noExplicitAny: Required for conditional type inference pattern
-  P extends PluginInstance<N, any, infer A, any> ? Prettify<A> : never;
+type PluginApiByName<P, N extends string> = P extends {
+  readonly name: N;
+  readonly _types: { api: infer A };
+}
+  ? Prettify<A>
+  : never;
 
 // =============================================================================
 // Section 7: Aggregate Type Helpers (internal)
@@ -434,8 +441,7 @@ type PluginApiByName<P, N extends string> =
  *   - defaultConfig provided -> OPTIONAL (Partial<C>)
  *   - no defaultConfig -> REQUIRED (full C)
  */
-// biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability -- default PluginInstance has C=void which rejects concrete config types
-type BuildPluginConfigs<P extends PluginInstance<string, any, any, any>> = Prettify<
+type BuildPluginConfigs<P extends PluginLikeInstance> = Prettify<
   OmitNever<{
     [K in P as IsEmptyConfig<PluginConfigType<K>> extends true
       ? never
@@ -458,8 +464,7 @@ type BuildPluginConfigs<P extends PluginInstance<string, any, any, any>> = Prett
  * Plugins with void/empty API (Record<string, never>) are excluded from the app surface.
  * Config is NOT attached to the API -- it lives on app.configs per CONTEXT decision.
  */
-// biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability -- default PluginInstance has C=void which rejects concrete config types
-type BuildPluginApis<P extends PluginInstance<string, any, any, any>> = {
+type BuildPluginApis<P extends PluginLikeInstance> = {
   [K in P as PluginApiType<K> extends Record<string, never> ? never : PluginName<K>]: Prettify<
     PluginApiType<K>
   >;
@@ -470,8 +475,7 @@ type BuildPluginApis<P extends PluginInstance<string, any, any, any>> = {
  * Maps every plugin name to its resolved frozen config.
  * Plugins with void config get Record<string, never>.
  */
-// biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability -- default PluginInstance has C=void which rejects concrete config types
-type BuildPluginConfigsAccessor<P extends PluginInstance<string, any, any, any>> = {
+type BuildPluginConfigsAccessor<P extends PluginLikeInstance> = {
   readonly [K in P as PluginName<K>]: PluginConfigType<K> extends void
     ? Record<string, never>
     : Readonly<PluginConfigType<K>>;
@@ -529,10 +533,8 @@ type CoreDefaults<BaseConfig extends Record<string, any>> = {
 type AppConfig<
   // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability in TypeScript
   G extends Record<string, any>,
-  // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability -- default PluginInstance has C=void which rejects concrete config types
-  DefaultP extends PluginInstance<string, any, any, any>,
-  // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability -- default PluginInstance has C=void which rejects concrete config types
-  ExtraPlugins extends readonly PluginInstance<string, any, any, any>[]
+  DefaultP extends PluginLikeInstance = never,
+  ExtraPlugins extends readonly PluginLikeInstance[] = []
 > = {
   readonly _brand: "AppConfig";
   /** Fully resolved global config (framework defaults + consumer overrides). Frozen. */
@@ -569,8 +571,7 @@ type App<
   Bus extends Record<string, any>,
   // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability in TypeScript
   Signals extends Record<string, any>,
-  // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability -- default PluginInstance has C=void which rejects concrete config types
-  P extends PluginInstance<string, any, any, any>
+  P extends PluginLikeInstance = PluginLikeInstance
 > = Prettify<
   {
     /** Global config, frozen. */
@@ -637,13 +638,12 @@ type PluginLike =
  */
 // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability in TypeScript
 type CreateConfigFunction<BaseConfig extends Record<string, any>> = <
-  // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability -- default PluginInstance has C=void which rejects concrete config types
-  const ExtraPlugins extends readonly PluginInstance<string, any, any, any>[] = []
+  const ExtraPlugins extends readonly PluginLikeInstance[] = []
 >(options?: {
   config?: Partial<BaseConfig>;
   plugins?: ExtraPlugins | readonly PluginLike[];
   pluginConfigs?: Record<string, unknown>;
-}) => AppConfig<BaseConfig, PluginInstance, ExtraPlugins>;
+}) => AppConfig<BaseConfig, never, ExtraPlugins>;
 
 /**
  * Type alias for the createApp function returned by createCore.
@@ -657,10 +657,12 @@ type CreateAppFunction<
   BusContract extends Record<string, any>,
   // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability in TypeScript
   SignalRegistry extends Record<string, any>
-> = <P extends PluginInstance>(
-  // biome-ignore lint/suspicious/noExplicitAny: AppConfig accepts any plugin union at call site
-  config: AppConfig<BaseConfig, any, any>
-) => Promise<App<BaseConfig, BusContract, SignalRegistry, P>>;
+> = <
+  DefaultP extends PluginLikeInstance = never,
+  ExtraPlugins extends readonly PluginLikeInstance[] = []
+>(
+  config: AppConfig<BaseConfig, DefaultP, ExtraPlugins>
+) => Promise<App<BaseConfig, BusContract, SignalRegistry, DefaultP | ExtraPlugins[number]>>;
 
 /**
  * Type alias for the createPlugin function returned by createCore.
@@ -813,6 +815,7 @@ export type {
   PluginInstance,
   ComponentInstance,
   ModuleInstance,
+  PluginLikeInstance,
   // Internal types re-exported for use within the package (not re-exported from index.ts)
   Prettify,
   OmitNever,

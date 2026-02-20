@@ -242,8 +242,8 @@ describe("full lifecycle integration", () => {
     const config = core.createConfig();
     const app = await core.createApp(config);
 
-    expect(() => app.require("missing")).toThrow("[mini]");
-    expect(() => app.require("missing")).toThrow("missing");
+    expect(() => app.require("missing" as never)).toThrow("[mini]");
+    expect(() => app.require("missing" as never)).toThrow("missing");
   });
 
   it("global config is frozen and accessible on app.config", async () => {

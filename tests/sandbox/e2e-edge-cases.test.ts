@@ -72,8 +72,7 @@ describe("zero-plugin app", () => {
     });
     const app = await core.createApp(config);
 
-    const appConfig = app.config as Record<string, unknown>;
-    expect(appConfig.appName).toBe("overridden");
+    expect(app.config.appName).toBe("overridden");
 
     await app.destroy();
   });
@@ -108,24 +107,18 @@ describe("single-plugin app", () => {
     });
 
     const app = await core.createApp(config);
-    const appAny = app as Record<string, unknown>;
-    const soloApi = appAny.solo as {
-      play: () => void;
-      isPlaying: () => boolean;
-      getVolume: () => number;
-    };
 
     // API works before start
-    expect(soloApi.getVolume()).toBe(80); // Consumer override
-    expect(soloApi.isPlaying()).toBe(false);
+    expect(app.solo.getVolume()).toBe(80); // Consumer override
+    expect(app.solo.isPlaying()).toBe(false);
 
     // Start lifecycle
     await app.start();
-    expect(soloApi.isPlaying()).toBe(false); // Reset by onStart
+    expect(app.solo.isPlaying()).toBe(false); // Reset by onStart
 
     // Use API after start
-    soloApi.play();
-    expect(soloApi.isPlaying()).toBe(true);
+    app.solo.play();
+    expect(app.solo.isPlaying()).toBe(true);
 
     // Plugin registry
     expect(app.has("solo")).toBe(true);
@@ -179,18 +172,15 @@ describe("component-only app", () => {
     });
 
     const app = await core.createApp(config);
-    const appAny = app as Record<string, unknown>;
 
     // Before start: components not mounted
-    const headerApi = appAny.header as { isVisible: () => boolean };
-    const footerApi = appAny.footer as { isRendered: () => boolean };
-    expect(headerApi.isVisible()).toBe(false);
-    expect(footerApi.isRendered()).toBe(false);
+    expect(app.header.isVisible()).toBe(false);
+    expect(app.footer.isRendered()).toBe(false);
 
     // Start -> onMount fires
     await app.start();
-    expect(headerApi.isVisible()).toBe(true);
-    expect(footerApi.isRendered()).toBe(true);
+    expect(app.header.isVisible()).toBe(true);
+    expect(app.footer.isRendered()).toBe(true);
     expect(mountLog).toContain("header:mounted");
     expect(mountLog).toContain("footer:mounted");
 
@@ -239,30 +229,18 @@ describe("factory-produced plugins", () => {
     });
 
     const app = await core.createApp(config);
-    const appAny = app as Record<string, unknown>;
-
-    const apiA = appAny["widget-a"] as {
-      getLabel: () => string;
-      click: () => void;
-      getClicks: () => number;
-    };
-    const apiB = appAny["widget-b"] as {
-      getLabel: () => string;
-      click: () => void;
-      getClicks: () => number;
-    };
 
     // Instance A has consumer-overridden label
-    expect(apiA.getLabel()).toBe("Alpha");
+    expect(app["widget-a"].getLabel()).toBe("Alpha");
     // Instance B uses default
-    expect(apiB.getLabel()).toBe("default");
+    expect(app["widget-b"].getLabel()).toBe("default");
 
     // State is independent per instance
-    apiA.click();
-    apiA.click();
-    apiB.click();
-    expect(apiA.getClicks()).toBe(2);
-    expect(apiB.getClicks()).toBe(1);
+    app["widget-a"].click();
+    app["widget-a"].click();
+    app["widget-b"].click();
+    expect(app["widget-a"].getClicks()).toBe(2);
+    expect(app["widget-b"].getClicks()).toBe(1);
 
     expect(app.has("widget-a")).toBe(true);
     expect(app.has("widget-b")).toBe(true);
@@ -309,28 +287,20 @@ describe("config override chains", () => {
     });
 
     const app = await core.createApp(config);
-    const appAny = app as Record<string, unknown>;
-    const themeApi = appAny.theme as {
-      getPrimary: () => string;
-      getSecondary: () => string;
-      getFontSize: () => number;
-      getFont: () => string;
-    };
 
     // Consumer overrides applied
-    expect(themeApi.getPrimary()).toBe("red");
-    expect(themeApi.getFontSize()).toBe(20);
+    expect(app.theme.getPrimary()).toBe("red");
+    expect(app.theme.getFontSize()).toBe(20);
 
     // Defaults preserved for non-overridden keys (shallow merge)
-    expect(themeApi.getSecondary()).toBe("gray");
-    expect(themeApi.getFont()).toBe("sans-serif");
+    expect(app.theme.getSecondary()).toBe("gray");
+    expect(app.theme.getFont()).toBe("sans-serif");
 
     // Verify via configs accessor
-    const configs = appAny.configs as Record<string, Record<string, unknown>>;
-    expect(configs.theme?.primaryColor).toBe("red");
-    expect(configs.theme?.secondaryColor).toBe("gray");
-    expect(configs.theme?.fontSize).toBe(20);
-    expect(configs.theme?.fontFamily).toBe("sans-serif");
+    expect(app.configs.theme.primaryColor).toBe("red");
+    expect(app.configs.theme.secondaryColor).toBe("gray");
+    expect(app.configs.theme.fontSize).toBe(20);
+    expect(app.configs.theme.fontFamily).toBe("sans-serif");
 
     await app.destroy();
   });
@@ -419,23 +389,18 @@ describe("event round-trip", () => {
     });
 
     const app = await core.createApp(config);
-    const appAny = app as Record<string, unknown>;
-    const trackerApi = appAny.tracker as {
-      record: (event: string) => void;
-      getEvents: () => string[];
-    };
 
     // Pre-record an event via API
-    trackerApi.record("init");
-    expect(trackerApi.getEvents()).toEqual(["[track] init"]);
+    app.tracker.record("init");
+    expect(app.tracker.getEvents()).toEqual(["[track] init"]);
 
     // Emit typed bus event -- hook in listener fires
     await app.emit("test:event", { value: 42 });
     expect(hookLog).toContain("received:42");
 
     // Record another event via API after emit
-    trackerApi.record("post-emit");
-    expect(trackerApi.getEvents()).toEqual(["[track] init", "[track] post-emit"]);
+    app.tracker.record("post-emit");
+    expect(app.tracker.getEvents()).toEqual(["[track] init", "[track] post-emit"]);
 
     await app.destroy();
   });
@@ -453,8 +418,7 @@ describe("global config merging", () => {
     });
     const app = await core.createApp(config);
 
-    const appConfig = app.config as Record<string, unknown>;
-    expect(appConfig.appName).toBe("my-app");
+    expect(app.config.appName).toBe("my-app");
 
     await app.destroy();
   });

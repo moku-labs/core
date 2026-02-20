@@ -230,15 +230,9 @@ describe("Component instance in plugin union", () => {
     expectTypeOf<SpaComponent["_types"]["state"]>().toEqualTypeOf<{ active: boolean }>();
   });
 
-  it("PluginInstance with same generics is structurally compatible for type helpers", () => {
-    // Runtime converts ComponentInstance to PluginInstance-like. Verify same generics work.
-    type SpaAsPlugin = PluginInstance<
-      "spa",
-      { mountPoint: string },
-      { mounted: () => boolean },
-      { active: boolean }
-    >;
-    type Apis = BuildPluginApis<SpaAsPlugin>;
+  it("ComponentInstance works directly in BuildPluginApis (structural type helpers)", () => {
+    // After structural helper fix, ComponentInstance works directly without casting to PluginInstance.
+    type Apis = BuildPluginApis<SpaComponent>;
     expectTypeOf<Apis>().toHaveProperty("spa");
     expectTypeOf<Apis["spa"]>().toHaveProperty("mounted");
   });

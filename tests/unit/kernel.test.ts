@@ -1153,7 +1153,7 @@ describe("app object shape", () => {
     const config = core.createConfig();
     const app = await core.createApp(config);
 
-    expect(app.getPlugin("nonexistent")).toBeUndefined();
+    expect(app.getPlugin("nonexistent" as never)).toBeUndefined();
   });
 
   it("require() throws for unregistered plugin", async () => {
@@ -1161,7 +1161,7 @@ describe("app object shape", () => {
     const config = core.createConfig();
     const app = await core.createApp(config);
 
-    expect(() => app.require("nonexistent")).toThrow("[test]");
+    expect(() => app.require("nonexistent" as never)).toThrow("[test]");
   });
 });
 

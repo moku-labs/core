@@ -260,58 +260,35 @@ describe("end-to-end three-layer type flow", () => {
     // Zero-annotation access tests
     // =========================================================================
 
-    // TYPE ISSUE: createApp's return type uses `App<BaseConfig, BusContract, SignalRegistry, P>`
-    // where P is inferred from the config. However, because createApp's signature uses
-    // `AppConfig<BaseConfig, any, any>` for the config parameter, the P generic defaults
-    // to PluginInstance (base) and the plugin API surface is not directly typed on `app`.
-    // We need to cast through Record to access plugin APIs at runtime.
-    // This is a known limitation -- the type system proves correctness at the type level
-    // (in the .test-d.ts file), while runtime access uses the dynamic mounting.
-    const appAny = app as Record<string, unknown>;
+    // --- Plugin API access (zero-annotation, typed directly on app) ---
+    expect(app.router.resolve("/about")).toBe("/about");
 
-    // --- Plugin API access ---
-    const routerApi = appAny.router as {
-      resolve: (path: string) => string;
-      routes: () => string[];
-    };
-    expect(routerApi.resolve("/about")).toBe("/about");
+    expect(app.i18n.t("hello")).toBe("[fr] hello");
+    expect(app.i18n.locale()).toBe("fr");
 
-    const i18nApi = appAny.i18n as { t: (key: string) => string; locale: () => string };
-    expect(i18nApi.t("hello")).toBe("[fr] hello");
-    expect(i18nApi.locale()).toBe("fr");
+    app.analytics.track("pageview");
+    expect(app.analytics.events()).toEqual(["[UA-123] pageview"]);
 
-    const analyticsApi = appAny.analytics as {
-      track: (event: string) => void;
-      events: () => string[];
-    };
-    analyticsApi.track("pageview");
-    expect(analyticsApi.events()).toEqual(["[UA-123] pageview"]);
-
-    const spaApi = appAny.spa as { mounted: () => boolean };
     // Before start, onMount hasn't run yet -- but api() has run during build phase
     // The SPA component's onMount runs during onStart, so mounted() is false before start
-    expect(spaApi.mounted()).toBe(false);
+    expect(app.spa.mounted()).toBe(false);
 
-    // --- Global config access ---
-    const appConfig = app.config as Record<string, unknown>;
-    const siteConfig = appConfig.site as { title: string; url: string };
-    expect(siteConfig.title).toBe("My Blog"); // Consumer override
-    expect(siteConfig.url).toBe("https://blog.example"); // Consumer override
+    // --- Global config access (typed directly) ---
+    expect(app.config.site.title).toBe("My Blog"); // Consumer override
+    expect(app.config.site.url).toBe("https://blog.example"); // Consumer override
 
-    const buildConfig = appConfig.build as { outDir: string; minify: boolean };
-    expect(buildConfig.outDir).toBe("./build"); // Framework default (not overridden)
-    expect(buildConfig.minify).toBe(false); // Framework default
+    expect(app.config.build.outDir).toBe("./build"); // Framework default (not overridden)
+    expect(app.config.build.minify).toBe(false); // Framework default
 
-    // --- Per-plugin config access via app.configs ---
-    const configs = appAny.configs as Record<string, Record<string, unknown>>;
-    expect(configs.router?.basePath).toBe("/"); // Default
-    expect(configs.router?.trailingSlash).toBe(false); // Default
-    expect(configs.build?.outDir).toBe("./dist"); // Consumer override
-    expect(configs.build?.feeds).toBe(true); // Consumer provided
-    expect(configs.build?.sitemap).toBe(true); // Consumer provided
-    expect(configs.i18n?.locale).toBe("fr"); // Consumer override
-    expect(configs.i18n?.fallback).toBe("en"); // Default preserved (shallow merge)
-    expect(configs.spa?.mountPoint).toBe("#app"); // Default
+    // --- Per-plugin config access via app.configs (typed directly) ---
+    expect(app.configs.router.basePath).toBe("/"); // Default
+    expect(app.configs.router.trailingSlash).toBe(false); // Default
+    expect(app.configs.build.outDir).toBe("./dist"); // Consumer override
+    expect(app.configs.build.feeds).toBe(true); // Consumer provided
+    expect(app.configs.build.sitemap).toBe(true); // Consumer provided
+    expect(app.configs.i18n.locale).toBe("fr"); // Consumer override
+    expect(app.configs.i18n.fallback).toBe("en"); // Default preserved (shallow merge)
+    expect(app.configs.spa.mountPoint).toBe("#app"); // Default
 
     // --- Typed bus event ---
     await app.emit("content:updated", { path: "/", hash: "abc123" });
@@ -344,31 +321,30 @@ describe("end-to-end three-layer type flow", () => {
     expect(lifecycleLog).toContain("ready");
 
     // After start, SPA component's onMount should have fired
-    expect(spaApi.mounted()).toBe(true);
+    expect(app.spa.mounted()).toBe(true);
 
     // Router's onStart registered default routes
-    expect(routerApi.routes()).toEqual(["/", "/about", "/blog"]);
+    expect(app.router.routes()).toEqual(["/", "/about", "/blog"]);
 
     // Build plugin's onStart accessed router API (cross-plugin communication)
-    const buildApi = appAny.build as { run: () => Promise<string[]> };
     // Build plugin's onStart pushed "resolved:/build-output" to artifacts
     // We can verify by running build which returns all artifacts
-    const buildOutput = await buildApi.run();
+    const buildOutput = await app.build.run();
     expect(buildOutput).toContain("./dist/index.html");
     expect(buildOutput).toContain("./dist/feed.xml");
     expect(buildOutput).toContain("./dist/sitemap.xml");
 
     // --- Interact with APIs after start ---
-    analyticsApi.track("click:header");
-    analyticsApi.track("click:footer");
-    expect(analyticsApi.events()).toEqual([
+    app.analytics.track("click:header");
+    app.analytics.track("click:footer");
+    expect(app.analytics.events()).toEqual([
       "[UA-123] pageview",
       "[UA-123] click:header",
       "[UA-123] click:footer"
     ]);
 
-    expect(i18nApi.t("goodbye")).toBe("[fr] goodbye");
-    expect(routerApi.resolve("/blog")).toBe("/blog");
+    expect(app.i18n.t("goodbye")).toBe("[fr] goodbye");
+    expect(app.router.resolve("/blog")).toBe("/blog");
 
     // --- Stop ---
     await app.stop();
@@ -430,31 +406,27 @@ describe("end-to-end three-layer type flow", () => {
     });
 
     const app = await core.createApp(config);
-    const appAny = app as Record<string, unknown>;
-    const configs = appAny.configs as Record<string, Record<string, unknown>>;
 
     // Router: default { basePath: "/", trailingSlash: false } overridden
-    expect(configs.router?.basePath).toBe("/app");
-    expect(configs.router?.trailingSlash).toBe(true);
+    expect(app.configs.router.basePath).toBe("/app");
+    expect(app.configs.router.trailingSlash).toBe(true);
 
     // Build: required config provided
-    expect(configs.build?.outDir).toBe("./output/build");
-    expect(configs.build?.feeds).toBe(false);
+    expect(app.configs.build.outDir).toBe("./output/build");
+    expect(app.configs.build.feeds).toBe(false);
 
     // SPA: default { mountPoint: "#app" } overridden
-    expect(configs.spa?.mountPoint).toBe("#root");
+    expect(app.configs.spa.mountPoint).toBe("#root");
 
     // i18n: default { locale: "en", fallback: "en" } overridden
-    expect(configs.i18n?.locale).toBe("de");
-    expect(configs.i18n?.fallback).toBe("en");
+    expect(app.configs.i18n.locale).toBe("de");
+    expect(app.configs.i18n.fallback).toBe("en");
 
     // Global config shallow merged
-    const siteConfig = (app.config as Record<string, unknown>).site as { title: string };
-    expect(siteConfig.title).toBe("Override");
+    expect(app.config.site.title).toBe("Override");
 
     // Verify router with custom config
-    const routerApi = appAny.router as { resolve: (path: string) => string };
-    expect(routerApi.resolve("/about")).toBe("/app/about/"); // basePath + trailingSlash
+    expect(app.router.resolve("/about")).toBe("/app/about/"); // basePath + trailingSlash
 
     await app.destroy();
   });
@@ -543,16 +515,14 @@ describe("end-to-end three-layer type flow", () => {
     });
 
     const app = await core.createApp(config);
-    const appAny = app as Record<string, unknown>;
-    const widgetApi = appAny.widget as { isActive: () => boolean };
 
     // Before start: onMount has not fired
-    expect(widgetApi.isActive()).toBe(false);
+    expect(app.widget.isActive()).toBe(false);
     expect(mountLog).toEqual([]);
 
     // Start triggers onMount (mapped from onStart)
     await app.start();
-    expect(widgetApi.isActive()).toBe(true);
+    expect(app.widget.isActive()).toBe(true);
     expect(mountLog).toContain("mounted");
 
     // Stop triggers onUnmount (mapped from onStop)
@@ -613,13 +583,9 @@ describe("end-to-end three-layer type flow", () => {
     });
 
     const app = await core.createApp(config);
-    const appAny = app as Record<string, unknown>;
 
-    const heroApi = appAny.hero as { getTitle: () => string };
-    const sideApi = appAny.side as { getTitle: () => string };
-
-    expect(heroApi.getTitle()).toBe("Welcome"); // Consumer override
-    expect(sideApi.getTitle()).toBe("Untitled"); // Default
+    expect(app.hero.getTitle()).toBe("Welcome"); // Consumer override
+    expect(app.side.getTitle()).toBe("Untitled"); // Default
 
     expect(app.has("hero")).toBe(true);
     expect(app.has("side")).toBe(true);
