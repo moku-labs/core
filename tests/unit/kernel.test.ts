@@ -1377,3 +1377,238 @@ describe("edge cases", () => {
     expect((otherApi as Record<string, unknown>).value).toBe(99);
   });
 });
+
+// =============================================================================
+// App Interface Tests (Phase 12 Plan 02)
+// =============================================================================
+
+describe("app interface", () => {
+  // -------------------------------------------------------------------------
+  // Void-API plugin not mounted
+  // -------------------------------------------------------------------------
+
+  it("void-API plugin is not mounted on app surface", async () => {
+    const core = testCore();
+    const voidPlugin = core.createPlugin("lifecycle", {
+      defaultConfig: {},
+      onCreate: () => {
+        // lifecycle-only plugin, no api function
+      }
+    });
+
+    const config = core.createConfig({ plugins: [voidPlugin] });
+    const app = await core.createApp(config);
+    const appRecord = app as unknown as Record<string, unknown>;
+
+    expect(appRecord.lifecycle).toBeUndefined();
+  });
+
+  it("void-API plugin is still registered (has() returns true)", async () => {
+    const core = testCore();
+    const voidPlugin = core.createPlugin("lifecycle", {
+      defaultConfig: {},
+      onCreate: () => {
+        // lifecycle-only
+      }
+    });
+
+    const config = core.createConfig({ plugins: [voidPlugin] });
+    const app = await core.createApp(config);
+
+    expect(app.has("lifecycle")).toBe(true);
+  });
+
+  // -------------------------------------------------------------------------
+  // app.configs accessor
+  // -------------------------------------------------------------------------
+
+  it("app.configs is a frozen object with per-plugin configs", async () => {
+    const core = testCore();
+    const pluginA = core.createPlugin("alpha", {
+      defaultConfig: { level: "info" },
+      api: () => ({})
+    });
+    const pluginB = core.createPlugin("beta", {
+      defaultConfig: { port: 3000 },
+      api: () => ({})
+    });
+
+    const config = core.createConfig({ plugins: [pluginA, pluginB] });
+    const app = await core.createApp(config);
+
+    const appRecord = app as unknown as Record<string, unknown>;
+    const configs = appRecord.configs as Record<string, unknown>;
+
+    expect(configs).toBeDefined();
+    expect(typeof configs).toBe("object");
+    expect(Object.isFrozen(configs)).toBe(true);
+  });
+
+  it("app.configs.<pluginName> returns the frozen resolved config (defaultConfig only)", async () => {
+    const core = testCore();
+    const plugin = core.createPlugin("myPlugin", {
+      defaultConfig: { color: "blue", size: 10 },
+      api: () => ({})
+    });
+
+    const config = core.createConfig({ plugins: [plugin] });
+    const app = await core.createApp(config);
+
+    const appRecord = app as unknown as Record<string, unknown>;
+    const configs = appRecord.configs as Record<string, Record<string, unknown>>;
+
+    expect(configs["myPlugin"]).toBeDefined();
+    expect(configs["myPlugin"]!.color).toBe("blue");
+    expect(configs["myPlugin"]!.size).toBe(10);
+    expect(Object.isFrozen(configs["myPlugin"])).toBe(true);
+  });
+
+  it("app.configs.<pluginName> returns shallow-merged frozen config (with consumer override)", async () => {
+    const core = testCore();
+    const plugin = core.createPlugin("myPlugin", {
+      defaultConfig: { color: "blue", size: 10 },
+      api: () => ({})
+    });
+
+    const config = core.createConfig({
+      plugins: [plugin],
+      pluginConfigs: { myPlugin: { color: "red" } }
+    });
+    const app = await core.createApp(config);
+
+    const appRecord = app as unknown as Record<string, unknown>;
+    const configs = appRecord.configs as Record<string, Record<string, unknown>>;
+
+    expect(configs["myPlugin"]).toBeDefined();
+    expect(configs["myPlugin"]!.color).toBe("red"); // overridden
+    expect(configs["myPlugin"]!.size).toBe(10); // default preserved
+    expect(Object.isFrozen(configs["myPlugin"])).toBe(true);
+  });
+
+  // -------------------------------------------------------------------------
+  // Name collision detection
+  // -------------------------------------------------------------------------
+
+  it("createApp throws when plugin name conflicts with 'start'", async () => {
+    const core = testCore();
+    const plugin = core.createPlugin("start", {
+      defaultConfig: {},
+      api: () => ({})
+    });
+
+    const config = core.createConfig({ plugins: [plugin] });
+    await expect(core.createApp(config)).rejects.toThrow("conflicts with built-in app method");
+  });
+
+  it("createApp throws when plugin name conflicts with 'configs'", async () => {
+    const core = testCore();
+    const plugin = core.createPlugin("configs", {
+      defaultConfig: {},
+      api: () => ({})
+    });
+
+    const config = core.createConfig({ plugins: [plugin] });
+    await expect(core.createApp(config)).rejects.toThrow("conflicts with built-in app method");
+  });
+
+  it("createApp throws when plugin name conflicts with 'emit'", async () => {
+    const core = testCore();
+    const plugin = core.createPlugin("emit", {
+      defaultConfig: {},
+      api: () => ({})
+    });
+
+    const config = core.createConfig({ plugins: [plugin] });
+    await expect(core.createApp(config)).rejects.toThrow("conflicts with built-in app method");
+  });
+
+  // -------------------------------------------------------------------------
+  // getPlugin/require/has throw on destroyed app
+  // -------------------------------------------------------------------------
+
+  it("getPlugin throws on destroyed app", async () => {
+    const core = testCore();
+    const plugin = core.createPlugin("myPlugin", {
+      defaultConfig: {},
+      api: () => ({ value: 1 })
+    });
+    const config = core.createConfig({ plugins: [plugin] });
+    const app = await core.createApp(config);
+    await app.destroy();
+
+    expect(() => app.getPlugin("myPlugin")).toThrow("destroyed");
+  });
+
+  it("require throws on destroyed app", async () => {
+    const core = testCore();
+    const plugin = core.createPlugin("myPlugin", {
+      defaultConfig: {},
+      api: () => ({ value: 1 })
+    });
+    const config = core.createConfig({ plugins: [plugin] });
+    const app = await core.createApp(config);
+    await app.destroy();
+
+    expect(() => app.require("myPlugin")).toThrow("destroyed");
+  });
+
+  it("has throws on destroyed app", async () => {
+    const core = testCore();
+    const plugin = core.createPlugin("myPlugin", {
+      defaultConfig: {},
+      api: () => ({ value: 1 })
+    });
+    const config = core.createConfig({ plugins: [plugin] });
+    const app = await core.createApp(config);
+    await app.destroy();
+
+    expect(() => app.has("myPlugin")).toThrow("destroyed");
+  });
+
+  // -------------------------------------------------------------------------
+  // start() warning signal on redundant call
+  // -------------------------------------------------------------------------
+
+  it("start() emits app:warn:redundant-start signal on second call", async () => {
+    const log: string[] = [];
+    const core = testCore();
+    const plugin = core.createPlugin("watcher", {
+      hooks: {
+        "app:warn:redundant-start": () => {
+          log.push("redundant-start-warning");
+        }
+      }
+    });
+
+    const config = core.createConfig({ plugins: [plugin] });
+    const app = await core.createApp(config);
+    await app.start();
+    await app.start(); // second call should emit warning
+
+    expect(log).toEqual(["redundant-start-warning"]);
+  });
+
+  // -------------------------------------------------------------------------
+  // has() registration semantics
+  // -------------------------------------------------------------------------
+
+  it("has() returns true for void-API plugins (registration check)", async () => {
+    const core = testCore();
+    const voidPlugin = core.createPlugin("noApi", {
+      // No api function, no lifecycle that requires config
+    });
+
+    const config = core.createConfig({ plugins: [voidPlugin] });
+    const app = await core.createApp(config);
+
+    expect(app.has("noApi")).toBe(true);
+  });
+
+  it("has() returns false for non-registered names", async () => {
+    const core = testCore();
+    const config = core.createConfig();
+    const app = await core.createApp(config);
+
+    expect(app.has("nonexistent")).toBe(false);
+  });
+});
