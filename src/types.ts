@@ -412,14 +412,12 @@ type IsEmptyConfig<C> = C extends void ? true : [keyof C] extends [never] ? true
 type HasDefaults<P> = P extends { _hasDefaults: true } ? true : false;
 
 /**
- * Extract a plugin's API augmented with its config, by plugin name from a union.
- * The config property uses Readonly<C> for IDE hover readability.
+ * Extract a plugin's raw API by plugin name from a union.
+ * Config is NOT attached -- config lives on app.configs per CONTEXT decision.
  */
 type PluginApiByName<P, N extends string> =
   // biome-ignore lint/suspicious/noExplicitAny: Required for conditional type inference pattern
-  P extends PluginInstance<N, infer C, infer A, any>
-    ? Prettify<A & { readonly config: C extends void ? Record<string, never> : Readonly<C> }>
-    : never;
+  P extends PluginInstance<N, any, infer A, any> ? Prettify<A> : never;
 
 // =============================================================================
 // Section 7: Aggregate Type Helpers (internal)
@@ -456,18 +454,27 @@ type BuildPluginConfigs<P extends PluginInstance<string, any, any, any>> = Prett
 
 /**
  * Build the app's API surface from the plugin union.
- * Maps each plugin in the union to a property keyed by plugin name,
- * with the plugin's API augmented with a readonly config property.
+ * Maps each plugin with a non-void API to a property keyed by plugin name.
+ * Plugins with void/empty API (Record<string, never>) are excluded from the app surface.
+ * Config is NOT attached to the API -- it lives on app.configs per CONTEXT decision.
  */
 // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability -- default PluginInstance has C=void which rejects concrete config types
 type BuildPluginApis<P extends PluginInstance<string, any, any, any>> = {
-  [K in P as PluginName<K>]: Prettify<
-    PluginApiType<K> & {
-      readonly config: PluginConfigType<K> extends void
-        ? Record<string, never>
-        : Readonly<PluginConfigType<K>>;
-    }
+  [K in P as PluginApiType<K> extends Record<string, never> ? never : PluginName<K>]: Prettify<
+    PluginApiType<K>
   >;
+};
+
+/**
+ * Build the per-plugin configs accessor type for app.configs.
+ * Maps every plugin name to its resolved frozen config.
+ * Plugins with void config get Record<string, never>.
+ */
+// biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability -- default PluginInstance has C=void which rejects concrete config types
+type BuildPluginConfigsAccessor<P extends PluginInstance<string, any, any, any>> = {
+  readonly [K in P as PluginName<K>]: PluginConfigType<K> extends void
+    ? Record<string, never>
+    : Readonly<PluginConfigType<K>>;
 };
 
 /**
@@ -567,9 +574,10 @@ type App<
 > = Prettify<
   {
     /** Global config, frozen. */
-    readonly config: Readonly<G> & {
-      get: <K extends keyof G>(key: K) => G[K];
-    };
+    readonly config: Readonly<G>;
+
+    /** Per-plugin resolved configs accessor. Frozen. */
+    readonly configs: Prettify<BuildPluginConfigsAccessor<P>>;
 
     /** Fire typed bus event. Constrained to BusContract. */
     emit: <K extends string & keyof Bus>(hook: K, payload: Bus[K]) => Promise<void>;
@@ -794,6 +802,7 @@ export type {
   PluginApiByName,
   BuildPluginConfigs,
   BuildPluginApis,
+  BuildPluginConfigsAccessor,
   CoreDefaults,
   AppConfig,
   App,

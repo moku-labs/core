@@ -10,6 +10,7 @@ import { expectTypeOf, test } from "vitest";
 import type {
   BuildPluginApis,
   BuildPluginConfigs,
+  BuildPluginConfigsAccessor,
   HasDefaults,
   InitContext,
   IsEmptyConfig,
@@ -186,12 +187,12 @@ test("PluginApiByName extracts correct API by name from plugin union", () => {
   type RouterResult = PluginApiByName<PluginUnion, "router">;
   expectTypeOf<RouterResult>().toHaveProperty("navigate");
   expectTypeOf<RouterResult>().toHaveProperty("back");
-  expectTypeOf<RouterResult>().toHaveProperty("config");
 });
 
-test("PluginApiByName includes readonly config property", () => {
+test("PluginApiByName returns raw API without config property", () => {
   type Result = PluginApiByName<RouterPlugin, "router">;
-  expectTypeOf<Result["config"]>().toEqualTypeOf<Readonly<RouterConfig>>();
+  // Config is NOT on the API -- it lives on app.configs per CONTEXT decision
+  expectTypeOf<Result>().not.toHaveProperty("config");
 });
 
 test("PluginApiByName for non-existent name returns never", () => {
@@ -235,27 +236,51 @@ test("BuildPluginConfigs: void-config plugin is excluded", () => {
 // 10. BuildPluginApis
 // =============================================================================
 
-test("BuildPluginApis maps plugin names to API + config", () => {
+test("BuildPluginApis maps non-void-API plugin names to raw API", () => {
   type PluginUnion = RouterPlugin | AnalyticsPlugin;
   type Apis = BuildPluginApis<PluginUnion>;
   expectTypeOf<Apis>().toHaveProperty("router");
   expectTypeOf<Apis>().toHaveProperty("analytics");
 });
 
-test("BuildPluginApis: each entry includes API methods and config", () => {
+test("BuildPluginApis: each entry includes API methods without config", () => {
   type PluginUnion = RouterPlugin | AnalyticsPlugin;
   type Apis = BuildPluginApis<PluginUnion>;
-  // Router entry should have navigate, back, and config
+  // Router entry should have navigate, back, but NOT config
   expectTypeOf<Apis["router"]>().toHaveProperty("navigate");
   expectTypeOf<Apis["router"]>().toHaveProperty("back");
-  expectTypeOf<Apis["router"]>().toHaveProperty("config");
+  expectTypeOf<Apis["router"]>().not.toHaveProperty("config");
 });
 
-test("BuildPluginApis: void-config plugin gets empty config", () => {
-  type PluginUnion = RouterPlugin | AnalyticsPlugin;
+test("BuildPluginApis: void-API plugins are excluded from the map", () => {
+  // A plugin with default Record<string, never> API should be excluded
+  type VoidApiPlugin = PluginInstance<"lifecycle-only", { debug: boolean }>;
+  type PluginUnion = RouterPlugin | VoidApiPlugin;
   type Apis = BuildPluginApis<PluginUnion>;
-  // Analytics has void config -> config is Record<string, never>
-  expectTypeOf<Apis["analytics"]["config"]>().toEqualTypeOf<Record<string, never>>();
+  expectTypeOf<Apis>().toHaveProperty("router");
+  type HasLifecycleOnly = "lifecycle-only" extends keyof Apis ? true : false;
+  expectTypeOf<HasLifecycleOnly>().toEqualTypeOf<false>();
+});
+
+// =============================================================================
+// 10b. BuildPluginConfigsAccessor
+// =============================================================================
+
+test("BuildPluginConfigsAccessor maps all plugin names to readonly configs", () => {
+  type PluginUnion = RouterPlugin | AnalyticsPlugin;
+  type Configs = BuildPluginConfigsAccessor<PluginUnion>;
+  expectTypeOf<Configs>().toHaveProperty("router");
+  expectTypeOf<Configs>().toHaveProperty("analytics");
+});
+
+test("BuildPluginConfigsAccessor: concrete config is Readonly", () => {
+  type Configs = BuildPluginConfigsAccessor<RouterPlugin>;
+  expectTypeOf<Configs["router"]>().toEqualTypeOf<Readonly<RouterConfig>>();
+});
+
+test("BuildPluginConfigsAccessor: void-config plugin gets Record<string, never>", () => {
+  type Configs = BuildPluginConfigsAccessor<AnalyticsPlugin>;
+  expectTypeOf<Configs["analytics"]>().toEqualTypeOf<Record<string, never>>();
 });
 
 // =============================================================================
