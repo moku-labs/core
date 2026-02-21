@@ -45,11 +45,14 @@ interface PluginSpec<
 
   /**
    * Event subscriptions. Keys are event names, values are handlers.
-   * Handles BOTH bus events (typed at BusContract level) and signals (untyped).
-   * At kernel level: Record<string, handler>. Type safety is the plugin author's job.
+   * Known events (in EventContract) get typed payloads. Unknown events get `unknown`.
    * Handlers execute in plugin registration order, sequentially.
    */
-  hooks?: Record<string, (...args: any[]) => void | Promise<void>>;
+  hooks?: {
+    [K in string]?: K extends keyof Events
+      ? (payload: Events[K]) => void | Promise<void>
+      : (payload: unknown) => void | Promise<void>;
+  };
 
   /** Sub-plugins. Flattened depth-first, children before parent. */
   plugins?: PluginInstance[];
@@ -91,7 +94,11 @@ interface PluginSpec<
   /** Final cleanup. Reverse order. Minimal context. */
   onDestroy?: (ctx: { global: Readonly<any> }) => void | Promise<void>;
 
-  hooks?: Record<string, (...args: any[]) => void | Promise<void>>;
+  hooks?: {
+    [K in string]?: K extends keyof Events
+      ? (payload: Events[K]) => void | Promise<void>
+      : (payload: unknown) => void | Promise<void>;
+  };
   plugins?: PluginInstance[];
 }
 ```
@@ -179,7 +186,7 @@ function createPlugin<
 
 Returns a `PluginInstance` -- a readonly object with the plugin's name, spec, kind field, and phantom types.
 
-**The consumer's `createPlugin` is the SAME function the framework uses.** It comes from `createCore` and is bound to the same `BaseConfig`, `BusContract`, and `SignalRegistry`. The consumer's plugin gets typed `ctx.global` and typed `ctx.emit` for free.
+**The consumer's `createPlugin` is the SAME function the framework uses.** It comes from `createCore` and is bound to the same `BaseConfig` and `EventContract`. The consumer's plugin gets typed `ctx.global` and typed `ctx.emit` for free.
 
 ### Consumer Custom Plugin Example
 
@@ -202,7 +209,7 @@ export const ContactFormPlugin = createPlugin<
     api: createContactFormApi,
     hooks: {
       'page:render': (payload) => {
-        // BusContract event -- framework typed
+        // EventContract event -- framework typed
         // payload: { path: string; html: string }
       },
     },

@@ -43,9 +43,8 @@ function createTestCtx<G, C, S>(options?: {
   state?: Partial<S>;
   plugins?: Record<string, any>;  // mock plugin APIs
 }): {
-  ctx: PluginCtx<G, any, any, C, S>;
+  ctx: PluginContext<G, any, C, S>;
   emitted: Array<{ name: string; payload: any }>;   // captured emit calls
-  signaled: Array<{ name: string; payload: any }>;  // captured signal calls
 };
 ```
 
@@ -62,7 +61,6 @@ function createTestCtx<G, C, S>(options?: {
 - `require(name)` that returns from `plugins` or throws
 - `has(name)` that checks the `plugins` map
 - `emit(name, payload)` that pushes to the `emitted` array
-- `signal(name, payload)` that pushes to the `signaled` array
 
 No kernel. No lifecycle. No framework. Just the ctx shape that domain functions expect.
 
@@ -90,11 +88,11 @@ test('navigate updates current path', () => {
 });
 ```
 
-### Test signal emission
+### Test event emission
 
 ```typescript
-test('navigate to unknown page signals notFound', () => {
-  const { ctx, signaled } = createTestCtx<any, RouterConfig, RouterState>({
+test('navigate to unknown page emits notFound', () => {
+  const { ctx, emitted } = createTestCtx<any, RouterConfig, RouterState>({
     config: { default: 'home', pages: { home: {} } },
     state: { currentPath: 'home', history: ['home'] },
   });
@@ -102,7 +100,7 @@ test('navigate to unknown page signals notFound', () => {
   const api = createRouterApi(ctx);
   api.navigate('nonexistent');
 
-  expect(signaled[0]).toEqual({
+  expect(emitted[0]).toEqual({
     name: 'router:notFound',
     payload: { attempted: 'nonexistent', fallback: 'home' },
   });

@@ -52,7 +52,7 @@ Phase 5: START (triggered by app.start())
      onStart(PluginCtx)
 
 Phase 6: RUNNING
-  Plugins communicate via emit()/signal() and getPlugin()/require().
+  Plugins communicate via emit() and getPlugin()/require().
 
 Phase 7: STOP (triggered by app.stop())
   1. For each plugin (in REVERSE order):
@@ -135,13 +135,13 @@ For each plugin in order:
 2. **Register hooks:** Iterate `spec.hooks`, register each handler in the hook dispatch map.
 3. **onCreate:** Call with `{ global, config }`. Validate config, set up internal structure.
 
-**Context available:** Only `{ global, config }`. NO `getPlugin`, `require`, `has`, `emit`, `signal` -- not all plugins exist yet.
+**Context available:** Only `{ global, config }`. NO `getPlugin`, `require`, `has`, `emit` -- not all plugins exist yet.
 
 ### Phase 3: Build APIs
 
 For each plugin in order:
 
-1. **api factory:** Call with full `PluginCtx` (global, config, state, emit, signal, getPlugin, require, has). Returns `A` (or `Promise<A>` in Variant B).
+1. **api factory:** Call with full `PluginCtx` (global, config, state, emit, getPlugin, require, has). Returns `A` (or `Promise<A>` in Variant B).
 2. **Attach config:** `api.config = resolvedConfig` (frozen).
 3. **Register:** Store API object in the plugin registry.
 

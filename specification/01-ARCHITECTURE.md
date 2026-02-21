@@ -17,7 +17,7 @@ The kernel does 6 things:
 2. Validates names (no duplicates) and dependencies
 3. Resolves config (shallow merge, no magic)
 4. Runs lifecycle in deterministic order
-5. Dispatches events (typed bus + untyped/optionally-typed signals)
+5. Dispatches events (typed for known events, untyped fallback for ad-hoc)
 6. Freezes everything when done
 
 That's it. Everything else is a plugin.
@@ -64,8 +64,7 @@ Moku is an application *skeleton*. It answers "how do I compose my app from inde
 |                                                               |
 |  Framework authors define:                                    |
 |    - Base config shape (what every app of this kind needs)    |
-|    - Bus contract (what lifecycle events exist)               |
-|    - Signal registry (what plugin signals are known)          |
+|    - Event contract (what events exist and their payload types)|
 |    - Default plugins (what ships built-in)                    |
 |    - Available plugins (what consumers can opt into)          |
 |                                                               |
@@ -239,11 +238,10 @@ Moku provides exactly these four things and nothing else. Any additional feature
 ## 8. What the Framework Author Decides (Layer 2)
 
 1. **BaseConfig** -- what global config every app of this kind needs
-2. **BusContract** -- what lifecycle events plugins can subscribe to with type safety
-3. **SignalRegistry** -- what plugin-to-plugin signals are known (optional)
-4. **Default plugins** -- what ships built-in (Router, Renderer, SEO for a site builder)
-5. **Optional plugins** -- what consumers can add (Analytics, Auth, Blog)
-6. **Lifecycle hooks** -- onBoot, onReady, onShutdown for framework-level concerns
+2. **EventContract** -- what events exist and their payload types (framework + known plugin events)
+3. **Default plugins** -- what ships built-in (Router, Renderer, SEO for a site builder)
+4. **Optional plugins** -- what consumers can add (Analytics, Auth, Blog)
+5. **Lifecycle hooks** -- onBoot, onReady, onShutdown for framework-level concerns
 
 ### What the Framework Author Does NOT Decide
 

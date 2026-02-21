@@ -44,7 +44,7 @@ export const RouterPlugin = createPlugin<'router', RouterConfig, RouterApi, Rout
     },
 
     onStart: async (ctx) => {
-      void ctx.signal('router:navigate', {
+      void ctx.emit('router:navigate', {
         from: '',
         to: ctx.config.default,
       });
@@ -128,19 +128,16 @@ export type BaseConfig = {
   mode: 'development' | 'production';
 };
 
-export type BusContract = {
-  'app:boot':    { config: BaseConfig };
-  'app:ready':   { config: BaseConfig };
-  'page:render': { path: string; html: string };
-  'page:error':  { path: string; error: Error };
+export type EventContract = {
+  'app:boot':         { config: BaseConfig };
+  'app:ready':        { config: BaseConfig };
+  'page:render':      { path: string; html: string };
+  'page:error':       { path: string; error: Error };
+  'router:navigate':  { from: string; to: string };
+  'router:notFound':  { path: string; fallback: string };
 };
 
-export type SignalRegistry = {
-  'router:navigate': { from: string; to: string };
-  'router:notFound': { path: string; fallback: string };
-};
-
-const core = createCore<BaseConfig, BusContract, SignalRegistry>('moku-site', {
+const core = createCore<BaseConfig, EventContract>('moku-site', {
   config: { siteName: 'Untitled', mode: 'development' },
   plugins: [RouterPlugin, RendererPlugin, SEOPlugin],
   onBoot: ({ config }) => {
@@ -259,7 +256,7 @@ You are generating code for a Moku-based application.
 ARCHITECTURE (3 layers):
 - Layer 1 (moku_core): Never touch this. Exports createCore only.
 - Layer 2 (framework): Defines createConfig, createApp, createPlugin,
-  createPluginFactory, BaseConfig, BusContract, SignalRegistry, default plugins.
+  createPluginFactory, BaseConfig, EventContract, default plugins.
 - Layer 3 (consumer): Uses createConfig + await createApp from the framework.
   Configures and composes.
 
@@ -276,7 +273,7 @@ CUSTOM PLUGINS:
   import { createPlugin } from 'my-framework';  // NOT from moku_core
   export const MyPlugin = createPlugin<'myPlugin', MyConfig, MyApi>('myPlugin', { ... });
 
-  The framework's createPlugin gives your plugin typed ctx.global, ctx.emit, and ctx.signal.
+  The framework's createPlugin gives your plugin typed ctx.global and ctx.emit.
 
 MULTI-INSTANCE PLUGINS:
   import { createPluginFactory } from 'my-framework';
@@ -290,8 +287,7 @@ RULES:
 - Never put more than ~50 lines of logic in a plugin index.ts.
 - Plugin index.ts is a CONNECTION POINT. Domain code lives in separate files.
 - Use ctx.require('name') for dependencies. Use ctx.has('name') for optional deps.
-- Use ctx.emit() for framework events (typed via BusContract).
-- Use ctx.signal() for plugin-to-plugin events (typed if in SignalRegistry, untyped otherwise).
+- Use ctx.emit() for all events (typed for known EventContract names, untyped fallback for ad-hoc).
 - Config types define the contract:
     void = no config
     { field?: string } = optional field
@@ -323,10 +319,10 @@ LIFECYCLE ORDER:
   -> app.stop() -> onStop (reverse) -> app.destroy() -> onDestroy (reverse)
 
 CONTEXT RULES:
-  createState/onCreate: only { global, config }. NO getPlugin/require/emit/signal.
-  api: full PluginCtx. HAS everything including state and all communication.
-  onInit: BaseCtx + config. HAS getPlugin/require/has/emit/signal. Use for dependency checks.
-  onStart: full PluginCtx. HAS everything. Async.
+  createState/onCreate: only { global, config }. NO getPlugin/require/emit.
+  api: full PluginContext. HAS everything including state and all communication.
+  onInit: InitContext + config. HAS getPlugin/require/has/emit. Use for dependency checks.
+  onStart: full PluginContext. HAS everything. Async.
   onStop/onDestroy: only { global }. Minimal teardown context.
 
 TESTING:

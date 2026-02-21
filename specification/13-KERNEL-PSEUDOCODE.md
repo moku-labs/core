@@ -73,7 +73,6 @@ function createCore(name, defaults) {
       for (const h of handlers) { await h(payload); }
     }
     const emit = (n, p) => dispatch(n, p);
-    const signal = (n, p) => dispatch(n, p);
     const getPlugin = (n) => apis.get(n);
     const requirePlugin = (n, requester) => {
       const api = apis.get(n);
@@ -120,7 +119,7 @@ function createCore(name, defaults) {
       if (item.spec.api) {
         api = await item.spec.api({
           global: globalConfig, config: conf, state,
-          emit, signal, getPlugin,
+          emit, getPlugin,
           require: (n) => requirePlugin(n, item.name), has,
         });
       }
@@ -133,7 +132,7 @@ function createCore(name, defaults) {
       if (item.spec.onInit) {
         await item.spec.onInit({
           global: globalConfig, config: configs.get(item.name),
-          emit, signal, getPlugin,
+          emit, getPlugin,
           require: (n) => requirePlugin(n, item.name), has,
         });
       }
@@ -142,7 +141,7 @@ function createCore(name, defaults) {
     // === Build app ===
     const app = {
       config: Object.freeze({ ...globalConfig, get: (k) => globalConfig[k] }),
-      emit, signal, getPlugin, require: (n) => requirePlugin(n, 'app'), has,
+      emit, getPlugin, require: (n) => requirePlugin(n, 'app'), has,
 
       start: async () => {
         if (started) return;
@@ -154,7 +153,7 @@ function createCore(name, defaults) {
             await item.spec.onStart({
               global: globalConfig, config: configs.get(item.name),
               state: states.get(item.name),
-              emit, signal, getPlugin,
+              emit, getPlugin,
               require: (n) => requirePlugin(n, item.name), has,
             });
           }
@@ -312,8 +311,7 @@ Every significant "why" in this spec:
 | `createConfig` returns opaque AppConfig | Return plain tuple/array | Opaque type prevents misuse. Phantom types carry plugin union. |
 | No configRequired field | Boolean flag + defaultConfig | Config type IS the contract. One mechanism, one truth. |
 | `defaultConfig` is full `C` | `Partial<C>` | Consumer gets complete valid config when omitting. |
-| `emit` (typed) + `signal` (optionally typed) | Single untyped emit | Bus contract gives type safety for framework events. Signal with overloads gives optional safety for plugin events. |
-| SignalRegistry as 3rd generic on createCore | Typed signal as separate concept | Overloads keep one `signal` method. 3rd generic defaults to `{}` for zero-cost opt-out. |
+| Unified `emit` with overloads (typed + untyped) | Separate `emit` + `signal` methods | Single method is simpler. EventContract provides type safety for known events. Untyped overload is the ad-hoc escape hatch. |
 | Sequential async execution (not parallel) | Parallel execution within phases | Preserves ordering guarantee. Predictable. Debuggable. |
 | No topological sort | Auto-sort by `depends` | Explicit ordering is simpler, more predictable, more debuggable. |
 | `depends` as validation only | Dependency resolution | Just checks. Doesn't change order. Doesn't add magic. |
@@ -322,7 +320,7 @@ Every significant "why" in this spec:
 | Typed getPlugin/require on App type | Loose typing everywhere | Consumers get full type safety. Plugin internals stay loose (full union not known). |
 | createPluginFactory in CoreAPI | External utility | Multi-instance plugins (two databases, three loggers) are a real need. Minimal addition. |
 | moku_core/testing sub-path export | Testing in main entry point | Keeps core entry minimal. Testing is opt-in. |
-| Hooks untyped at kernel level | Typed hook registry via generics | Keep kernel simple. Layer typing via BusContract + SignalRegistry. |
+| Typed hooks via EventContract | Untyped hooks at kernel level | EventContract gives typed payloads for known events, `unknown` for ad-hoc. Single mechanism. |
 | No middleware in kernel | Built-in `pipe()` | Plugins implement their own. One less concept to learn. |
 | Component = plugin at runtime | Separate runtime paths | Less code, fewer bugs, same capability. |
 | Module = flattening container | Runtime entity with own lifecycle | Modules are organization, not runtime. |
@@ -334,14 +332,14 @@ Every significant "why" in this spec:
 | Default plugins immutable | Consumer can remove | Framework identity defined by its defaults. |
 | Plugin = connection point | Plugin = code container | Enables independent testing, LLM navigation, separation of concerns. |
 | Framework provides BaseConfig defaults | Consumer provides full config | Consumer only overrides what they need. Partial<BaseConfig>. |
-| Consumer uses framework's createPlugin | Consumer creates plugins independently | Ensures custom plugins inherit BaseConfig, BusContract, and SignalRegistry typing. |
+| Consumer uses framework's createPlugin | Consumer creates plugins independently | Ensures custom plugins inherit BaseConfig and EventContract typing. |
 
 ### Open Design Decisions (Variants to Choose During Implementation)
 
 | Decision | Variant A | Variant B | Tradeoffs |
 |---|---|---|---|
 | createApp sync/async | Sync (Phases 2-4 sync) | Async (Phases 2-4 async) | B: Plugins can do real I/O during init. A: Simpler, no await needed. |
-| createCore generics | 2 (BaseConfig, BusContract) | 3 (+SignalRegistry) | B: Typed signals. A: Simpler API. |
+| createCore generics | 2 (BaseConfig, EventContract) | **Resolved: 2 generics with unified EventContract** | EventContract replaces BusContract+SignalRegistry. Single generic for all events. |
 | CoreAPI function count | 6 functions | 7 (+createPluginFactory) | B: Multi-instance plugins. A: Smaller API. |
 | App getPlugin/require | Loose `<T = any>(string)` | Constrained to registered names | B: Full type safety. A: Simpler types. |
 | PluginSpec lifecycle | Sync for Phases 2-4 | Async-compatible for Phases 2-4 | B: Real I/O during init. A: Simpler plugin authoring. |

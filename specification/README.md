@@ -15,8 +15,8 @@
 | 04 | [Component & Module](./04-COMPONENT-MODULE.md) | ComponentSpec, ModuleSpec, flattening algorithm |
 | 05 | [Config System](./05-CONFIG-SYSTEM.md) | Config resolution, defaults, BuildPluginConfigs, no configRequired |
 | 06 | [Lifecycle](./06-LIFECYCLE.md) | All 9 stages, ordering, sync/async variants |
-| 07 | [Communication](./07-COMMUNICATION.md) | emit, signal, hooks, BusContract, SignalRegistry |
-| 08 | [Context](./08-CONTEXT.md) | ctx object, BaseCtx, PluginCtx, stages-appropriate context rules |
+| 07 | [Communication](./07-COMMUNICATION.md) | emit, hooks, EventContract |
+| 08 | [Context](./08-CONTEXT.md) | ctx object, context tiers, phase-appropriate context rules |
 | 09 | [Type System](./09-TYPE-SYSTEM.md) | Phantom types, type helpers, BuildPluginApis, App type |
 | 10 | [Testing](./10-TESTING.md) | createTestCtx, testing patterns |
 | 11 | [Invariants](./11-INVARIANTS.md) | Guarantees, error messages, anti-patterns |
@@ -26,22 +26,22 @@
 
 ---
 
-## Open Design Variants
+## Resolved Design Variants
 
-These variants are documented throughout the spec. Choose during implementation.
+These variants were documented throughout the spec and have been resolved during implementation.
 
-| Decision | Variant A | Variant B | Affects |
-|---|---|---|---|
-| **createApp sync/async** | Sync (Milestone 2-4 sync) | Async (`Promise<App>`, Milestone 2-4 async) | 02, 03, 06, 13 |
-| **createCore generics** | 2 (BaseConfig, BusContract) | 3 (+SignalRegistry) | 02, 07, 08, 09 |
-| **CoreAPI function count** | 6 functions | 7 (+createPluginFactory) | 02, 03 |
-| **App getPlugin/require** | Loose `<T = any>(string)` | Constrained to registered names | 09 |
-| **PluginSpec lifecycle** | Sync for Milestone 2-4 | Async-compatible (`S \| Promise<S>`) | 03, 04, 06 |
+| Decision | Chosen | Rationale |
+|---|---|---|
+| **createApp sync/async** | Async (`Promise<App>`) | Plugins can do real I/O during init |
+| **createCore generics** | 2 (BaseConfig, EventContract) | Unified EventContract replaces BusContract+SignalRegistry |
+| **CoreAPI function count** | 7 (+createPluginFactory) | Multi-instance plugins are a real need |
+| **App getPlugin/require** | Constrained to registered names | Full type safety at consumption site |
+| **PluginSpec lifecycle** | Async-compatible (`S \| Promise<S>`) | Real I/O during init |
 
-These variants are interconnected:
-- If you choose **async createApp** (B), you naturally get **async lifecycle methods** (B).
-- If you choose **SignalRegistry** (B), you get **3 generics** and typed signals.
-- **createPluginFactory** and **typed getPlugin** are independent decisions.
+The event system uses a unified `EventContract` generic with overloaded `emit`:
+- Known events (in EventContract) get typed required payload
+- Unknown events (any string) get untyped optional payload (escape hatch)
+- No separate `signal` method -- everything goes through `emit`
 
 ---
 

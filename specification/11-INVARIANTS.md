@@ -44,9 +44,9 @@ Plugins initialize in array order. Always. Teardown in reverse. Always. No topol
 
 **Ordering is the consumer's responsibility.** If plugin B depends on plugin A, put A before B. `depends` validates this but does not fix it.
 
-### 1.5 Hook / Signal Execution Order
+### 1.5 Hook Execution Order
 
-When an event fires (via `emit` or `signal`), handlers execute in plugin registration order, sequentially. Each handler is awaited before the next. No parallelism.
+When an event fires (via `emit`), handlers execute in plugin registration order, sequentially. Each handler is awaited before the next. No parallelism.
 
 ### 1.6 Immutability
 
@@ -82,7 +82,7 @@ Consumers cannot remove framework default plugins. They can only configure them.
 
 ### 1.10 Phase-Appropriate Context
 
-`createState` and `onCreate` do NOT have access to `getPlugin`, `require`, `has`, `emit`, or `signal`. At that point, not all plugins have been created. Providing these methods would return incomplete data.
+`createState` and `onCreate` do NOT have access to `getPlugin`, `require`, `has`, or `emit`. At that point, not all plugins have been created. Providing these methods would return incomplete data.
 
 ### 1.11 Async Sequential Execution
 
@@ -170,11 +170,11 @@ defaultConfig: {
 
 Shallow merge means nested objects are replaced wholesale. If you use nested configs, document this clearly.
 
-### 2.7 Using emit()/signal() for Request/Response
+### 2.7 Using emit() for Request/Response
 
 ```typescript
-// BAD: trying to get a return value from emit/signal
-ctx.signal('auth:getToken');  // returns Promise<void>, not the token
+// BAD: trying to get a return value from emit
+ctx.emit('auth:getToken');  // returns Promise<void>, not the token
 
 // GOOD: use require for request/response
 const auth = ctx.require<{ getToken: () => string }>('auth');

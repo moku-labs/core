@@ -15,7 +15,7 @@
 1. **createCore function**
    - Single export from `moku_core`
    - Accepts `name`, `defaults` (CoreDefaults)
-   - Returns CoreAPI bound to generics (BaseConfig, BusContract, SignalRegistry)
+   - Returns CoreAPI bound to generics (BaseConfig, EventContract)
 
 2. **createConfig function**
    - Accepts `Partial<BaseConfig>` and optional `extraPlugins` array
@@ -59,8 +59,7 @@
    - Required config validation (runtime safety net)
 
 9. **Event dispatch**
-   - `emit()` for typed bus events (BusContract)
-   - `signal()` for plugin-to-plugin events
+   - `emit()` with overloads: typed for known events (EventContract), untyped for ad-hoc
    - Hook registration from plugin `hooks` field
    - Sequential handler execution, awaited
 
@@ -77,12 +76,12 @@
 - `PluginSpec<N, C, A, S>` -- all lifecycle methods
 - `ComponentSpec<N, C, A, S>`
 - `ModuleSpec<N, C>`
-- `BaseCtx<G, Bus, Signals>` (or `BaseCtx<G, Bus>` for Variant A)
-- `PluginCtx<G, Bus, Signals, C, S>` (or `PluginCtx<G, Bus, C, S>`)
+- `InitContext<G, Events, C, Deps>` -- init context with communication methods
+- `PluginContext<G, Events, C, S, Deps>` -- full context with mutable state
 - `BuildPluginConfigs<P>` -- config enforcement type
 - `BuildPluginApis<P>` -- API surface type
 - `AppConfig<G, DefaultP, ExtraPlugins>` -- opaque config type
-- `App<G, Bus, Signals, P>` (or `App<G, Bus, P>`)
+- `App<G, Events, P>` -- app type with unified emit and typed getPlugin/require
 - Type helpers: `PluginName`, `PluginConfigType`, `PluginApiType`, `IsEmptyConfig`, `HasDefaults`, `PluginApiByName`
 - `Prettify` and `OmitNever` utility types
 
@@ -110,10 +109,10 @@
    - Variant B: Async createApp, Promise<App>, Milestone 2-4 async
    - Recommendation: Variant B (enables real I/O during init)
 
-2. **SignalRegistry (3rd generic)**
-   - Variant A: 2 generics (BaseConfig, BusContract), signals fully untyped
-   - Variant B: 3 generics (+SignalRegistry), signals optionally typed via overloads
-   - Recommendation: Variant B (zero cost when unused, high value when used)
+2. **EventContract (unified event generic)** -- RESOLVED
+   - Chosen: 2 generics (BaseConfig, EventContract)
+   - EventContract replaces BusContract+SignalRegistry with single unified type
+   - `emit` has overloaded signatures: typed for known events, untyped for ad-hoc
 
 3. **createPluginFactory**
    - Variant A: 6 functions in CoreAPI
@@ -154,10 +153,9 @@
 
 1. **createTestCtx function**
    - Accepts optional `{ global, config, state, plugins }` partials
-   - Returns `{ ctx, emitted, signaled }`
-   - `ctx` matches `PluginCtx` shape
+   - Returns `{ ctx, emitted }`
+   - `ctx` matches `PluginContext` shape
    - `emitted` captures emit calls
-   - `signaled` captures signal calls
    - `getPlugin`/`require`/`has` use mock `plugins` map
 
 2. **Sub-path export**
