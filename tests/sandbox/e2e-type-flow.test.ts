@@ -659,13 +659,46 @@ describe("end-to-end three-layer type flow", () => {
       })
     });
 
+    const { createPlugin } = core;
+
+    type PlaginConfig = {
+      property: string[];
+    };
+
+    type PlaginState = {
+      stateProp: string[];
+    };
+
+    type PlaginApi = {
+      test: (data: string[]) => number;
+    };
+
     const heroCard = cardFactory("hero");
     const sideCard = cardFactory("side");
 
+    const testPlugin = createPlugin<"test2", PlaginConfig, PlaginApi, PlaginState>("test2", {
+      depends: [heroCard],
+      defaultConfig: {
+        property: ["prop"]
+      },
+      createState: () => ({
+        stateProp: ["test"]
+      }),
+      api: ctx => ({
+        test: data => {
+          ctx.require(heroCard).getTitle();
+          return ctx.state.stateProp.length + data.length;
+        }
+      })
+    });
+
     const config = core.createConfig({
-      plugins: [heroCard, sideCard],
+      plugins: [heroCard, sideCard, testPlugin],
       pluginConfigs: {
-        hero: { title: "Welcome" }
+        hero: { title: "Welcome" },
+        test2: {
+          property: ["overridden"]
+        }
       }
     });
 
@@ -676,6 +709,9 @@ describe("end-to-end three-layer type flow", () => {
 
     expect(app.has("hero")).toBe(true);
     expect(app.has("side")).toBe(true);
+
+    expect(app.test2.test(["a", "b"])).toBe(3); // stateProp.length(1) + data.length(2)
+    expect(app.configs.test2.property).toEqual(["overridden"]);
 
     await app.destroy();
   });
