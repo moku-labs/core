@@ -46,12 +46,9 @@ type BaseConfig = {
   build: { outDir: string; minify: boolean };
 };
 
-type BusContract = {
+type EventContract = {
   "content:updated": { path: string; hash: string };
   "build:complete": { files: string[]; duration: number };
-};
-
-type SignalRegistry = {
   "route:change": { from: string; to: string };
 };
 
@@ -90,18 +87,18 @@ type AllPlugins = RouterPlugin | BuildPlugin | SpaPlugin | I18nPlugin | Analytic
 // =============================================================================
 
 describe("CoreAPI carries framework generics", () => {
-  type TestCore = CoreAPI<BaseConfig, BusContract, SignalRegistry>;
+  type TestCore = CoreAPI<BaseConfig, EventContract>;
 
   it("createPlugin is CreatePluginFunction with correct generics", () => {
-    // TS infers: CreatePluginFunction<BaseConfig, BusContract, SignalRegistry>
+    // TS infers: CreatePluginFunction<BaseConfig, EventContract>
     expectTypeOf<TestCore["createPlugin"]>().toEqualTypeOf<
-      CreatePluginFunction<BaseConfig, BusContract, SignalRegistry>
+      CreatePluginFunction<BaseConfig, EventContract>
     >();
   });
 
   it("createComponent is CreateComponentFunction with correct generics", () => {
     expectTypeOf<TestCore["createComponent"]>().toEqualTypeOf<
-      CreateComponentFunction<BaseConfig, BusContract, SignalRegistry>
+      CreateComponentFunction<BaseConfig, EventContract>
     >();
   });
 
@@ -111,7 +108,7 @@ describe("CoreAPI carries framework generics", () => {
 
   it("createApp is CreateAppFunction with correct generics", () => {
     expectTypeOf<TestCore["createApp"]>().toEqualTypeOf<
-      CreateAppFunction<BaseConfig, BusContract, SignalRegistry>
+      CreateAppFunction<BaseConfig, EventContract>
     >();
   });
 
@@ -125,7 +122,7 @@ describe("CoreAPI carries framework generics", () => {
 
   it("createPluginFactory is CreatePluginFactoryFunction with correct generics", () => {
     expectTypeOf<TestCore["createPluginFactory"]>().toEqualTypeOf<
-      CreatePluginFactoryFunction<BaseConfig, BusContract, SignalRegistry>
+      CreatePluginFactoryFunction<BaseConfig, EventContract>
     >();
   });
 });
@@ -323,7 +320,7 @@ describe("BuildPluginApis produces correct app surface", () => {
 // =============================================================================
 
 describe("App type has correct accessors", () => {
-  type TestApp = App<BaseConfig, BusContract, SignalRegistry, AllPlugins>;
+  type TestApp = App<BaseConfig, EventContract, AllPlugins>;
 
   // --- Plugin APIs mounted on app ---
   it("app.router has resolve and routes", () => {
@@ -357,7 +354,7 @@ describe("App type has correct accessors", () => {
 
   it("app.configs maps void-config plugins to Record<string, never>", () => {
     type VoidPlugin = PluginInstance<"noop", void, Record<string, never>, void>;
-    type TestAppWithVoid = App<BaseConfig, BusContract, SignalRegistry, RouterPlugin | VoidPlugin>;
+    type TestAppWithVoid = App<BaseConfig, EventContract, RouterPlugin | VoidPlugin>;
     type Configs = TestAppWithVoid["configs"];
     expectTypeOf<Configs["noop"]>().toEqualTypeOf<Record<string, never>>();
   });
@@ -372,8 +369,8 @@ describe("App type has correct accessors", () => {
     expectTypeOf<Accessor>().toHaveProperty("analytics");
   });
 
-  // --- emit constrained to BusContract ---
-  it("emit accepts BusContract keys with correct payloads", () => {
+  // --- emit constrained to EventContract ---
+  it("emit accepts EventContract keys with correct payloads", () => {
     expectTypeOf<TestApp["emit"]>().toBeFunction();
     expectTypeOf<TestApp["emit"]>().toBeCallableWith("content:updated", {
       path: "/",
@@ -383,15 +380,17 @@ describe("App type has correct accessors", () => {
       files: ["a.html"],
       duration: 100
     });
-  });
-
-  // --- signal constrained to SignalRegistry ---
-  it("signal accepts SignalRegistry keys with correct payloads", () => {
-    expectTypeOf<TestApp["signal"]>().toBeFunction();
-    expectTypeOf<TestApp["signal"]>().toBeCallableWith("route:change", {
+    // Events formerly in SignalRegistry now go through emit too
+    expectTypeOf<TestApp["emit"]>().toBeCallableWith("route:change", {
       from: "/",
       to: "/about"
     });
+  });
+
+  // --- emit untyped overload for unknown events ---
+  it("emit accepts unknown event names via untyped overload", () => {
+    expectTypeOf<TestApp["emit"]>().toBeCallableWith("custom:adhoc");
+    expectTypeOf<TestApp["emit"]>().toBeCallableWith("custom:adhoc", { any: "data" });
   });
 
   // --- getPlugin constrained to registered names ---
@@ -440,7 +439,7 @@ describe("App type has correct accessors", () => {
 
   // --- EventBus type ---
   it("EventBus generic constrains emit/on/off/once to event keys", () => {
-    type TestBus = EventBus<BusContract>;
+    type TestBus = EventBus<EventContract>;
     expectTypeOf<TestBus["emit"]>().toBeFunction();
     expectTypeOf<TestBus["on"]>().toBeFunction();
     expectTypeOf<TestBus["off"]>().toBeFunction();

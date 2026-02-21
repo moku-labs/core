@@ -55,8 +55,7 @@ declare const sidebarComponent: SidebarComponent;
 
 // Framework generics for context types
 type G = Record<string, unknown>;
-type Bus = Record<string, unknown>;
-type Signals = Record<string, unknown>;
+type Events = Record<string, unknown>;
 
 // =============================================================================
 // Section A: ExtractDepsMap helper
@@ -104,7 +103,7 @@ describe("ExtractDepsMap helper", () => {
 // =============================================================================
 
 describe("InitContext overloaded require", () => {
-  type TestCtx = InitContext<G, Bus, Signals, void, readonly [RouterPlugin, AuthPlugin]>;
+  type TestCtx = InitContext<G, Events, void, readonly [RouterPlugin, AuthPlugin]>;
 
   it("require(routerPlugin) returns RouterApi (instance overload)", () => {
     // Instance overload: pass a PluginInstance from the Deps tuple
@@ -152,7 +151,7 @@ describe("InitContext overloaded require", () => {
 // =============================================================================
 
 describe("InitContext overloaded getPlugin", () => {
-  type TestCtx = InitContext<G, Bus, Signals, void, readonly [RouterPlugin, AuthPlugin]>;
+  type TestCtx = InitContext<G, Events, void, readonly [RouterPlugin, AuthPlugin]>;
 
   it("getPlugin(routerPlugin) returns RouterApi | undefined (instance overload)", () => {
     expectTypeOf<TestCtx["getPlugin"]>().toBeCallableWith(routerPlugin);
@@ -193,8 +192,7 @@ describe("InitContext overloaded getPlugin", () => {
 describe("PluginContext carries Deps", () => {
   type TestPluginCtx = PluginContext<
     G,
-    Bus,
-    Signals,
+    Events,
     { port: number },
     { connections: number },
     readonly [RouterPlugin, AuthPlugin]
@@ -228,8 +226,7 @@ describe("PluginContext carries Deps", () => {
       Record<string, never>,
       void,
       G,
-      Bus,
-      Signals,
+      Events,
       readonly [RouterPlugin]
     >;
     // The api function receives PluginContext with the Deps parameter
@@ -252,8 +249,7 @@ describe("PluginSpec.depends type", () => {
       Record<string, never>,
       void,
       G,
-      Bus,
-      Signals,
+      Events,
       readonly [RouterPlugin]
     >;
     // The depends field should accept a readonly tuple of PluginLikeInstance
@@ -268,8 +264,7 @@ describe("PluginSpec.depends type", () => {
       Record<string, never>,
       void,
       G,
-      Bus,
-      Signals,
+      Events,
       readonly [RouterPlugin, AuthPlugin]
     >;
     type DepsField = NonNullable<SpecWithMultiDeps["depends"]>;
@@ -284,8 +279,7 @@ describe("PluginSpec.depends type", () => {
       Record<string, never>,
       void,
       G,
-      Bus,
-      Signals,
+      Events,
       readonly [RouterPlugin]
     >;
     type DepsField = NonNullable<CompSpecWithDeps["depends"]>;
@@ -303,8 +297,7 @@ describe("PluginSpec.depends type", () => {
       Record<string, never>,
       void,
       G,
-      Bus,
-      Signals,
+      Events,
       readonly [RouterPlugin, SidebarComponent]
     >;
     type DepsField = NonNullable<MixedSpec["depends"]>;

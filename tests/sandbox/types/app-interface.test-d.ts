@@ -20,8 +20,7 @@ import type {
 // =============================================================================
 
 type TestConfig = { debug: boolean; port: number };
-type TestBus = { "page:render": { path: string } };
-type TestSignals = { "nav:change": { from: string; to: string } };
+type TestEvents = { "page:render": { path: string }; "nav:change": { from: string; to: string } };
 
 type RouterApi = { navigate: (path: string) => void; currentPath: () => string };
 type RouterConfig = { basePath: string };
@@ -37,7 +36,7 @@ type LoggerPlugin = PluginInstance<"logger", LoggerConfig, LoggerApi, void>;
 type LifecyclePlugin = PluginInstance<"lifecycle", void, Record<string, never>, void>;
 
 // Full App type with all test plugins
-type TestApp = App<TestConfig, TestBus, TestSignals, RouterPlugin | LoggerPlugin | LifecyclePlugin>;
+type TestApp = App<TestConfig, TestEvents, RouterPlugin | LoggerPlugin | LifecyclePlugin>;
 
 // =============================================================================
 // 1. BuildPluginApis excludes void-API plugins
@@ -163,33 +162,29 @@ describe("App lifecycle methods", () => {
 });
 
 // =============================================================================
-// 7. App.emit constrained to BusContract
+// 7. App.emit constrained to EventContract
 // =============================================================================
 
 describe("App.emit", () => {
-  it("emit is constrained to BusContract keys", () => {
+  it("emit is constrained to EventContract keys with typed payloads", () => {
     expectTypeOf<TestApp["emit"]>().toBeFunction();
-    // The emit function should accept "page:render" with the correct payload
+    // The emit function should accept known events with correct payloads
     type EmitFunction = TestApp["emit"];
     expectTypeOf<EmitFunction>().toBeCallableWith("page:render", {
       path: "/home"
     });
-  });
-});
-
-// =============================================================================
-// 8. App.signal overloads
-// =============================================================================
-
-describe("App.signal", () => {
-  it("signal has typed and untyped signatures", () => {
-    expectTypeOf<TestApp["signal"]>().toBeFunction();
-    // Typed: known signal name with typed payload
-    type SignalFunction = TestApp["signal"];
-    expectTypeOf<SignalFunction>().toBeCallableWith("nav:change", {
+    // Also accepts events that were formerly signals
+    expectTypeOf<EmitFunction>().toBeCallableWith("nav:change", {
       from: "/a",
       to: "/b"
     });
+  });
+
+  it("emit accepts unknown event names with optional payload (untyped overload)", () => {
+    type EmitFunction = TestApp["emit"];
+    // Unknown events use the untyped overload: (name: string, payload?: unknown) => Promise<void>
+    expectTypeOf<EmitFunction>().toBeCallableWith("custom:adhoc");
+    expectTypeOf<EmitFunction>().toBeCallableWith("custom:adhoc", { any: "data" });
   });
 });
 

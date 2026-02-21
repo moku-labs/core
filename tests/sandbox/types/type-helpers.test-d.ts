@@ -46,8 +46,7 @@ type LoggerPluginWithDefaults = PluginInstance<"logger", LoggerConfig, LoggerApi
 type AnalyticsApi = { track: (event: string) => void };
 type AnalyticsPlugin = PluginInstance<"analytics", void, AnalyticsApi, void>;
 
-type TestBus = { "page:load": { url: string }; "page:error": { code: number } };
-type TestSignals = { "theme:changed": { dark: boolean } };
+type TestEvents = { "page:load": { url: string }; "page:error": { code: number }; "theme:changed": { dark: boolean } };
 type TestGlobal = { appName: string; debug: boolean };
 
 // =============================================================================
@@ -293,11 +292,10 @@ test("TeardownContext has only global", () => {
   expectTypeOf<Teardown["global"]>().toEqualTypeOf<Readonly<TestGlobal>>();
 });
 
-test("TeardownContext does not have config, emit, signal, state", () => {
+test("TeardownContext does not have config, emit, state", () => {
   type Teardown = TeardownContext<TestGlobal>;
   expectTypeOf<Teardown>().not.toHaveProperty("config");
   expectTypeOf<Teardown>().not.toHaveProperty("emit");
-  expectTypeOf<Teardown>().not.toHaveProperty("signal");
   expectTypeOf<Teardown>().not.toHaveProperty("state");
 });
 
@@ -308,41 +306,37 @@ test("MinimalContext extends TeardownContext with config", () => {
   expectTypeOf<Minimal["config"]>().toEqualTypeOf<Readonly<RouterConfig>>();
 });
 
-test("MinimalContext does not have emit, signal, state", () => {
+test("MinimalContext does not have emit, state", () => {
   type Minimal = MinimalContext<TestGlobal, RouterConfig>;
   expectTypeOf<Minimal>().not.toHaveProperty("emit");
-  expectTypeOf<Minimal>().not.toHaveProperty("signal");
   expectTypeOf<Minimal>().not.toHaveProperty("state");
 });
 
 test("InitContext extends MinimalContext with communication methods", () => {
-  type Init = InitContext<TestGlobal, TestBus, TestSignals, RouterConfig>;
+  type Init = InitContext<TestGlobal, TestEvents, RouterConfig>;
   expectTypeOf<Init>().toHaveProperty("global");
   expectTypeOf<Init>().toHaveProperty("config");
   expectTypeOf<Init>().toHaveProperty("emit");
-  expectTypeOf<Init>().toHaveProperty("signal");
   expectTypeOf<Init>().toHaveProperty("getPlugin");
   expectTypeOf<Init>().toHaveProperty("require");
   expectTypeOf<Init>().toHaveProperty("has");
 });
 
 test("InitContext does not have state", () => {
-  type Init = InitContext<TestGlobal, TestBus, TestSignals, RouterConfig>;
+  type Init = InitContext<TestGlobal, TestEvents, RouterConfig>;
   expectTypeOf<Init>().not.toHaveProperty("state");
 });
 
 test("PluginContext extends InitContext with state", () => {
   type Full = PluginContext<
     TestGlobal,
-    TestBus,
-    TestSignals,
+    TestEvents,
     RouterConfig,
     { currentPath: string }
   >;
   expectTypeOf<Full>().toHaveProperty("global");
   expectTypeOf<Full>().toHaveProperty("config");
   expectTypeOf<Full>().toHaveProperty("emit");
-  expectTypeOf<Full>().toHaveProperty("signal");
   expectTypeOf<Full>().toHaveProperty("getPlugin");
   expectTypeOf<Full>().toHaveProperty("require");
   expectTypeOf<Full>().toHaveProperty("has");
@@ -350,17 +344,17 @@ test("PluginContext extends InitContext with state", () => {
   expectTypeOf<Full["state"]>().toEqualTypeOf<{ currentPath: string }>();
 });
 
-test("InitContext signal has overloaded signatures for known and unknown names", () => {
-  type Init = InitContext<TestGlobal, TestBus, TestSignals, RouterConfig>;
-  // Signal should accept known signal names with typed payloads
-  type SignalFunction = Init["signal"];
-  expectTypeOf<SignalFunction>().toBeFunction();
+test("InitContext emit has overloaded signatures for known and unknown events", () => {
+  type Init = InitContext<TestGlobal, TestEvents, RouterConfig>;
+  // emit should accept known event names with typed payloads and unknown names with optional payload
+  type EmitFunction = Init["emit"];
+  expectTypeOf<EmitFunction>().toBeFunction();
 });
 
-test("PluginContext signal has same overloaded signatures", () => {
-  type Full = PluginContext<TestGlobal, TestBus, TestSignals, RouterConfig, void>;
-  type SignalFunction = Full["signal"];
-  expectTypeOf<SignalFunction>().toBeFunction();
+test("PluginContext emit has same overloaded signatures", () => {
+  type Full = PluginContext<TestGlobal, TestEvents, RouterConfig, void>;
+  type EmitFunction = Full["emit"];
+  expectTypeOf<EmitFunction>().toBeFunction();
 });
 
 test("Context tier structural compatibility: MinimalContext extends TeardownContext", () => {
@@ -369,11 +363,11 @@ test("Context tier structural compatibility: MinimalContext extends TeardownCont
 });
 
 test("Context tier structural compatibility: InitContext extends MinimalContext", () => {
-  type Init = InitContext<TestGlobal, TestBus, TestSignals, RouterConfig>;
+  type Init = InitContext<TestGlobal, TestEvents, RouterConfig>;
   expectTypeOf<Init>().toMatchTypeOf<MinimalContext<TestGlobal, RouterConfig>>();
 });
 
 test("Context tier structural compatibility: PluginContext extends InitContext", () => {
-  type Full = PluginContext<TestGlobal, TestBus, TestSignals, RouterConfig, void>;
-  expectTypeOf<Full>().toMatchTypeOf<InitContext<TestGlobal, TestBus, TestSignals, RouterConfig>>();
+  type Full = PluginContext<TestGlobal, TestEvents, RouterConfig, void>;
+  expectTypeOf<Full>().toMatchTypeOf<InitContext<TestGlobal, TestEvents, RouterConfig>>();
 });

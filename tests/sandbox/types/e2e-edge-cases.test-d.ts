@@ -36,11 +36,9 @@ import type {
 // =============================================================================
 
 type BaseConfig = { appName: string; debug: boolean };
-type BusContract = {
+type EventContract = {
   "content:updated": { path: string; hash: string };
   "build:complete": { files: string[]; duration: number };
-};
-type SignalRegistry = {
   "route:change": { from: string; to: string };
 };
 
@@ -115,7 +113,7 @@ describe("All void-API plugins", () => {
   });
 
   it("App surface has no plugin API properties for void-API plugins", () => {
-    type TestApp = App<BaseConfig, BusContract, SignalRegistry, LifecycleA | LifecycleB>;
+    type TestApp = App<BaseConfig, EventContract, LifecycleA | LifecycleB>;
     // The app should still have core methods
     expectTypeOf<TestApp>().toHaveProperty("start");
     expectTypeOf<TestApp>().toHaveProperty("emit");
@@ -305,40 +303,40 @@ describe("Negative: accessing non-existent plugin", () => {
 // =============================================================================
 
 describe("Negative: wrong event type in emit", () => {
-  it("wrong payload shape is not assignable to BusContract event", () => {
+  it("wrong payload shape is not assignable to EventContract event", () => {
     // "content:updated" expects { path: string; hash: string }
     // { wrong: true } should not be assignable
-    type CorrectPayload = BusContract["content:updated"];
+    type CorrectPayload = EventContract["content:updated"];
     type WrongPayload = { wrong: true };
     type IsAssignable = WrongPayload extends CorrectPayload ? true : false;
     expectTypeOf<IsAssignable>().toEqualTypeOf<false>();
   });
 
-  it("emit is constrained to BusContract keys only", () => {
-    // "fake:event" is not in BusContract
-    type BusKeys = string & keyof BusContract;
-    type IsFakeInBus = "fake:event" extends BusKeys ? true : false;
-    expectTypeOf<IsFakeInBus>().toEqualTypeOf<false>();
+  it("emit typed overload is constrained to EventContract keys", () => {
+    // "fake:event" is not in EventContract's typed overload
+    type EventKeys = string & keyof EventContract;
+    type IsFakeInEvents = "fake:event" extends EventKeys ? true : false;
+    expectTypeOf<IsFakeInEvents>().toEqualTypeOf<false>();
   });
 });
 
 // =============================================================================
-// 10. Negative: wrong signal type
+// 10. Negative: wrong payload for typed emit event
 // =============================================================================
 
-describe("Negative: wrong signal type", () => {
-  it("wrong signal payload is not assignable to SignalRegistry type", () => {
+describe("Negative: wrong payload for typed emit event", () => {
+  it("wrong payload is not assignable to EventContract type for route:change", () => {
     // "route:change" expects { from: string; to: string }
-    type CorrectPayload = SignalRegistry["route:change"];
+    type CorrectPayload = EventContract["route:change"];
     type WrongPayload = { wrong: true };
     type IsAssignable = WrongPayload extends CorrectPayload ? true : false;
     expectTypeOf<IsAssignable>().toEqualTypeOf<false>();
   });
 
-  it("signal typed overload constrains to SignalRegistry keys", () => {
-    type SignalKeys = string & keyof SignalRegistry;
-    type IsFakeInSignals = "fake:signal" extends SignalKeys ? true : false;
-    expectTypeOf<IsFakeInSignals>().toEqualTypeOf<false>();
+  it("emit typed overload constrains known event keys", () => {
+    type EventKeys = string & keyof EventContract;
+    type IsFakeInEvents = "fake:signal" extends EventKeys ? true : false;
+    expectTypeOf<IsFakeInEvents>().toEqualTypeOf<false>();
   });
 });
 
@@ -360,7 +358,7 @@ describe("Negative: require with unregistered name", () => {
   });
 
   it("require return type for known name is non-never API", () => {
-    type TestApp = App<BaseConfig, BusContract, SignalRegistry, RouterPlugin>;
+    type TestApp = App<BaseConfig, EventContract, RouterPlugin>;
     type RequireResult = ReturnType<TestApp["require"]>;
     expectTypeOf<RequireResult>().not.toBeNever();
   });
@@ -377,7 +375,7 @@ describe("Single-plugin app", () => {
     { play: () => void; isPlaying: () => boolean },
     { playing: boolean }
   >;
-  type SoloApp = App<BaseConfig, BusContract, SignalRegistry, Solo>;
+  type SoloApp = App<BaseConfig, EventContract, Solo>;
 
   it("single-plugin app has the plugin API on surface", () => {
     expectTypeOf<SoloApp>().toHaveProperty("solo");
@@ -443,14 +441,14 @@ describe("Plugin with complex nested state", () => {
   });
 
   it("complex state does not leak into App surface", () => {
-    type TestApp = App<BaseConfig, BusContract, SignalRegistry, ComplexPlugin>;
+    type TestApp = App<BaseConfig, EventContract, ComplexPlugin>;
     expectTypeOf<TestApp["complex"]>().not.toHaveProperty("cache");
     expectTypeOf<TestApp["complex"]>().not.toHaveProperty("metrics");
     expectTypeOf<TestApp["complex"]>().not.toHaveProperty("connections");
   });
 
   it("complex state does not leak into configs accessor", () => {
-    type TestApp = App<BaseConfig, BusContract, SignalRegistry, ComplexPlugin>;
+    type TestApp = App<BaseConfig, EventContract, ComplexPlugin>;
     // Configs only has the config type, not state
     expectTypeOf<TestApp["configs"]["complex"]>().toEqualTypeOf<Readonly<{ endpoint: string }>>();
   });
