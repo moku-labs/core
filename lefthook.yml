@@ -10,4 +10,4 @@ pre-commit:
       glob: "*.{ts,js,mjs,cjs}"
       run: bunx eslint --no-fix {staged_files}
     - name: test-all
-      run: bun run test
+      run: bun run test:unit && bun run test:integration
