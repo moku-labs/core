@@ -1,22 +1,23 @@
 import { describe, expect, it, vi } from "vitest";
 import { createCore } from "../../src/index";
+import type { PluginLikeInstance } from "../../src/types";
 
 // =============================================================================
 // Helper: create a test core with default empty config
 // =============================================================================
-function testCore(
+function testCore<const P extends readonly PluginLikeInstance[] = []>(
   options: {
     config?: Record<string, unknown>;
-    plugins?: unknown[];
+    plugins?: P;
     onBoot?: (ctx: { config: Readonly<Record<string, unknown>> }) => void;
     onReady?: (ctx: { config: Readonly<Record<string, unknown>> }) => void | Promise<void>;
     onShutdown?: (ctx: { config: Readonly<Record<string, unknown>> }) => void | Promise<void>;
     onError?: (ctx: { error: unknown; phase: string; pluginName?: string }) => void | Promise<void>;
-  } = {}
+  } = {} as never
 ) {
   return createCore("test", {
     config: options.config ?? {},
-    plugins: options.plugins as never[],
+    plugins: (options.plugins ?? []) as never,
     onBoot: options.onBoot as never,
     onReady: options.onReady as never,
     onShutdown: options.onShutdown as never,
@@ -402,7 +403,7 @@ describe("CoreDefaults callbacks (APP-08)", () => {
   });
 
   it("onBoot is sync (receives config, returns void)", async () => {
-    let receivedConfig: unknown;
+    let receivedConfig: Readonly<Record<string, unknown>> | undefined;
     const core = testCore({
       config: { debug: true },
       onBoot: ctx => {
@@ -415,7 +416,7 @@ describe("CoreDefaults callbacks (APP-08)", () => {
     await core.createApp(config);
 
     expect(receivedConfig).toBeDefined();
-    expect((receivedConfig as Record<string, unknown>).debug).toBe(true);
+    expect(receivedConfig?.debug).toBe(true);
   });
 
   it("onReady runs before app:start dispatch", async () => {
@@ -490,7 +491,10 @@ describe("CoreDefaults callbacks (APP-08)", () => {
     expect(errorContext).toBeDefined();
     expect(errorContext?.phase).toBe("create");
     expect(errorContext?.pluginName).toBe("broken");
-    expect((errorContext?.error as Error).message).toBe("create boom");
+    expect(errorContext?.error).toBeInstanceOf(Error);
+    if (errorContext?.error instanceof Error) {
+      expect(errorContext.error.message).toBe("create boom");
+    }
   });
 
   it("onError does not suppress the error (error still propagates)", async () => {
@@ -795,13 +799,8 @@ describe("destroy contract", () => {
     const app = await core.createApp(config);
     await app.destroy();
 
-    try {
-      await app.start();
-      expect.unreachable("should have thrown");
-    } catch (error) {
-      expect((error as Error).message).toContain("[test]");
-      expect((error as Error).message).toContain("Cannot call start() on a destroyed app");
-    }
+    await expect(app.start()).rejects.toThrow("[test]");
+    await expect(app.start()).rejects.toThrow("Cannot call start() on a destroyed app");
   });
 });
 
@@ -851,12 +850,20 @@ describe("idempotency", () => {
 
 describe("context shapes", () => {
   it("createState receives { global, config } (MinimalContext)", async () => {
-    let context: Record<string, unknown> | undefined;
+    let context:
+      | {
+          global?: Record<string, unknown>;
+          config?: Record<string, unknown>;
+          state?: unknown;
+          emit?: unknown;
+          signal?: unknown;
+        }
+      | undefined;
     const core = testCore({ config: { env: "test" } });
     const plugin = core.createPlugin("checker", {
       defaultConfig: { key: "value" },
       createState: (ctx: Record<string, unknown>) => {
-        context = ctx;
+        context = ctx as typeof context;
         return {};
       }
     });
@@ -867,8 +874,8 @@ describe("context shapes", () => {
     expect(context).toBeDefined();
     expect(context?.global).toBeDefined();
     expect(context?.config).toBeDefined();
-    expect((context?.global as Record<string, unknown>).env).toBe("test");
-    expect((context?.config as Record<string, unknown>).key).toBe("value");
+    expect(context?.global?.env).toBe("test");
+    expect(context?.config?.key).toBe("value");
     // Should NOT have state, emit, signal, getPlugin, require, has
     expect(context?.state).toBeUndefined();
     expect(context?.emit).toBeUndefined();
@@ -970,11 +977,11 @@ describe("context shapes", () => {
   });
 
   it("onStop receives TeardownContext { global }", async () => {
-    let context: Record<string, unknown> | undefined;
+    let context: { global?: Record<string, unknown> } | undefined;
     const core = testCore({ config: { env: "test" } });
     const plugin = core.createPlugin("checker", {
       onStop: (ctx: Record<string, unknown>) => {
-        context = ctx;
+        context = ctx as typeof context;
       }
     });
 
@@ -985,7 +992,7 @@ describe("context shapes", () => {
 
     expect(context).toBeDefined();
     expect(context?.global).toBeDefined();
-    expect((context?.global as Record<string, unknown>).env).toBe("test");
+    expect(context?.global?.env).toBe("test");
     // Only global -- nothing else
     expect(Object.keys(context ?? {})).toEqual(["global"]);
   });
@@ -1041,10 +1048,12 @@ describe("error format (KERN-03)", () => {
       await core.createApp(config);
       expect.unreachable("should have thrown");
     } catch (error) {
-      const message = (error as Error).message;
-      expect(message).toContain("[test]");
-      expect(message).toContain("needy");
-      expect(message).toContain("missing");
+      expect(error).toBeInstanceOf(Error);
+      if (error instanceof Error) {
+        expect(error.message).toContain("[test]");
+        expect(error.message).toContain("needy");
+        expect(error.message).toContain("missing");
+      }
     }
   });
 
@@ -1054,12 +1063,7 @@ describe("error format (KERN-03)", () => {
     const app = await core.createApp(config);
     await app.destroy();
 
-    try {
-      await app.start();
-      expect.unreachable("should have thrown");
-    } catch (error) {
-      expect((error as Error).message).toContain("[test]");
-    }
+    await expect(app.start()).rejects.toThrow("[test]");
   });
 });
 
@@ -1092,10 +1096,9 @@ describe("app object shape", () => {
     const config = core.createConfig({ plugins: [plugin] });
     const app = await core.createApp(config);
 
-    expect((app as Record<string, unknown>).greeter).toBeDefined();
-    const api = (app as Record<string, unknown>).greeter as Record<string, unknown>;
-    expect(typeof api.greet).toBe("function");
-    expect((api.greet as () => string)()).toBe("hello");
+    expect(app.greeter).toBeDefined();
+    expect(typeof app.greeter.greet).toBe("function");
+    expect(app.greeter.greet()).toBe("hello");
   });
 
   it("plugin config is accessible via app.configs (not api.config)", async () => {
@@ -1111,14 +1114,15 @@ describe("app object shape", () => {
     });
     const app = await core.createApp(config);
 
-    const appRecord = app as unknown as Record<string, unknown>;
-    const configs = appRecord.configs as Record<string, Record<string, unknown>>;
-    expect(configs["configured"]).toBeDefined();
-    expect(configs["configured"]!.setting).toBe("override");
+    expect(app.configs.configured).toBeDefined();
+    expect(app.configs.configured.setting).toBe("override");
 
-    // Config is NOT on the API object
-    const api = appRecord.configured as Record<string, unknown>;
-    expect(api.config).toBeUndefined();
+    // Config is NOT on the API object -- config lives on app.configs, not app.<pluginName>.config
+    // The plugin has api: () => ({}), so at runtime it's mounted but has no .config property.
+    // Use getPlugin to access the runtime API and verify no .config property on it.
+    const pluginApi = app.getPlugin("configured");
+    expect(pluginApi).toBeDefined();
+    expect(pluginApi).not.toHaveProperty("config");
   });
 
   it("has() returns true for registered plugin", async () => {
@@ -1143,9 +1147,9 @@ describe("app object shape", () => {
     const config = core.createConfig({ plugins: [plugin] });
     const app = await core.createApp(config);
 
-    const api = app.getPlugin("myPlugin") as unknown as Record<string, unknown>;
+    const api = app.getPlugin("myPlugin");
     expect(api).toBeDefined();
-    expect(api.value).toBe(42);
+    expect(api?.value).toBe(42);
   });
 
   it("getPlugin() returns undefined for unregistered plugin", async () => {
@@ -1334,7 +1338,7 @@ describe("edge cases", () => {
 
   it("plugins can use getPlugin during onInit to access other plugin APIs", async () => {
     const core = testCore();
-    let otherApi: unknown;
+    let otherApi: { getData?: () => string } | undefined;
     const pluginA = core.createPlugin("provider", {
       defaultConfig: {},
       api: () => ({ getData: () => "secret" })
@@ -1343,7 +1347,7 @@ describe("edge cases", () => {
       defaultConfig: {},
       depends: [pluginA],
       onInit: (ctx: { getPlugin: (name: string) => unknown }) => {
-        otherApi = ctx.getPlugin("provider");
+        otherApi = ctx.getPlugin("provider") as typeof otherApi;
       }
     });
 
@@ -1351,12 +1355,12 @@ describe("edge cases", () => {
     await core.createApp(config);
 
     expect(otherApi).toBeDefined();
-    expect((otherApi as Record<string, unknown>).getData).toBeDefined();
+    expect(otherApi?.getData).toBeDefined();
   });
 
   it("plugins can use require during api to access other plugin APIs", async () => {
     const core = testCore();
-    let otherApi: unknown;
+    let otherApi: { value?: number } | undefined;
     const pluginA = core.createPlugin("provider", {
       defaultConfig: {},
       api: () => ({ value: 99 })
@@ -1365,7 +1369,7 @@ describe("edge cases", () => {
       defaultConfig: {},
       depends: [pluginA],
       api: (ctx: { require: (name: string) => unknown }) => {
-        otherApi = ctx.require("provider");
+        otherApi = ctx.require("provider") as typeof otherApi;
         return {};
       }
     });
@@ -1374,7 +1378,7 @@ describe("edge cases", () => {
     await core.createApp(config);
 
     expect(otherApi).toBeDefined();
-    expect((otherApi as Record<string, unknown>).value).toBe(99);
+    expect(otherApi?.value).toBe(99);
   });
 });
 
@@ -1398,9 +1402,9 @@ describe("app interface", () => {
 
     const config = core.createConfig({ plugins: [voidPlugin] });
     const app = await core.createApp(config);
-    const appRecord = app as unknown as Record<string, unknown>;
 
-    expect(appRecord.lifecycle).toBeUndefined();
+    // Void-API plugins are excluded from BuildPluginApis, so "lifecycle" key should not exist at runtime
+    expect("lifecycle" in app).toBe(false);
   });
 
   it("void-API plugin is still registered (has() returns true)", async () => {
@@ -1436,12 +1440,9 @@ describe("app interface", () => {
     const config = core.createConfig({ plugins: [pluginA, pluginB] });
     const app = await core.createApp(config);
 
-    const appRecord = app as unknown as Record<string, unknown>;
-    const configs = appRecord.configs as Record<string, unknown>;
-
-    expect(configs).toBeDefined();
-    expect(typeof configs).toBe("object");
-    expect(Object.isFrozen(configs)).toBe(true);
+    expect(app.configs).toBeDefined();
+    expect(typeof app.configs).toBe("object");
+    expect(Object.isFrozen(app.configs)).toBe(true);
   });
 
   it("app.configs.<pluginName> returns the frozen resolved config (defaultConfig only)", async () => {
@@ -1454,13 +1455,10 @@ describe("app interface", () => {
     const config = core.createConfig({ plugins: [plugin] });
     const app = await core.createApp(config);
 
-    const appRecord = app as unknown as Record<string, unknown>;
-    const configs = appRecord.configs as Record<string, Record<string, unknown>>;
-
-    expect(configs["myPlugin"]).toBeDefined();
-    expect(configs["myPlugin"]!.color).toBe("blue");
-    expect(configs["myPlugin"]!.size).toBe(10);
-    expect(Object.isFrozen(configs["myPlugin"])).toBe(true);
+    expect(app.configs.myPlugin).toBeDefined();
+    expect(app.configs.myPlugin.color).toBe("blue");
+    expect(app.configs.myPlugin.size).toBe(10);
+    expect(Object.isFrozen(app.configs.myPlugin)).toBe(true);
   });
 
   it("app.configs.<pluginName> returns shallow-merged frozen config (with consumer override)", async () => {
@@ -1476,13 +1474,10 @@ describe("app interface", () => {
     });
     const app = await core.createApp(config);
 
-    const appRecord = app as unknown as Record<string, unknown>;
-    const configs = appRecord.configs as Record<string, Record<string, unknown>>;
-
-    expect(configs["myPlugin"]).toBeDefined();
-    expect(configs["myPlugin"]!.color).toBe("red"); // overridden
-    expect(configs["myPlugin"]!.size).toBe(10); // default preserved
-    expect(Object.isFrozen(configs["myPlugin"])).toBe(true);
+    expect(app.configs.myPlugin).toBeDefined();
+    expect(app.configs.myPlugin.color).toBe("red"); // overridden
+    expect(app.configs.myPlugin.size).toBe(10); // default preserved
+    expect(Object.isFrozen(app.configs.myPlugin)).toBe(true);
   });
 
   // -------------------------------------------------------------------------
