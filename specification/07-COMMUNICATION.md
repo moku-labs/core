@@ -1,144 +1,222 @@
 # 07 - Communication Model
 
-**Domain:** emit, hooks, EventContract
-**Sources:** SPEC_EVOLUTION (v2), SPEC_DEFINITIVE (v1.0.0-rc1), SPEC_IMPROVEMENTS_IDEAS (P3)
+**Domain:** emit, hooks, Events, PluginEvents, event merging via depends
+**Version:** v3 (3-step architecture)
 
 ---
 
-## 1. Two Channels
+## 1. Two Communication Channels
 
 The kernel provides exactly two communication mechanisms:
 
 **Channel 1: Lifecycle callbacks (typed ctx)**
 
-`onCreate`, `onInit`, `onStart`, `onStop`, `onDestroy` -- each receives a typed `ctx` object. These are the structured, predictable communication points. The kernel calls them in a defined order.
+`onInit`, `onStart`, `onStop` -- each receives a typed `ctx` object. These are the structured, predictable communication points. The kernel calls them in a defined order.
 
-**Channel 2: Events -- `emit(name, payload)` (unified)**
+**Channel 2: Events -- `emit(name, payload)` (broadcast)**
 
-A single `emit` method handles all event communication. Known event names (declared in the framework's `EventContract`) get fully typed payloads. Unknown event names (any string) are allowed as an untyped escape hatch for ad-hoc plugin-to-plugin communication.
+A single `emit` method handles all event communication. Known event names get fully typed payloads. Unknown event names are allowed as an untyped escape hatch.
 
 ---
 
-## 2. emit -- Unified Events
+## 2. Event Sources
+
+v3 has two sources of typed events:
+
+### Global Events
+
+Defined in `createCoreConfig<Config, Events>`. Available to ALL plugins. The framework author defines the global event contract:
+
+```typescript
+type Events = {
+  'page:render':     { path: string; html: string };
+  'router:navigate': { from: string; to: string };
+  'build:complete':  { outputDir: string };
+};
+
+const coreConfig = createCoreConfig<Config, Events>('my-framework', {
+  config: { /* ... */ },
+});
+```
+
+Every plugin created from this `coreConfig` sees these events in `emit` and `hooks`.
+
+### Per-Plugin Events
+
+Defined via the `PluginEvents` generic on `createPlugin`. Available to the declaring plugin and any plugin that lists it in `depends`:
+
+```typescript
+type AuthEvents = {
+  'auth:login':  { userId: string };
+  'auth:logout': {};
+};
+
+const authPlugin = createPlugin<AuthEvents>('auth', {
+  api: (ctx) => ({
+    login: (userId: string) => {
+      // ctx.emit knows about AuthEvents because this plugin declared them
+      void ctx.emit('auth:login', { userId });
+    },
+  }),
+});
+```
+
+If no per-plugin events are needed, omit the generic entirely:
+
+```typescript
+const simplePlugin = createPlugin('simple', {
+  // no PluginEvents generic -- only global events available
+  api: (ctx) => ({ /* ... */ }),
+});
+```
+
+---
+
+## 3. emit -- Unified Event Dispatch
 
 ```typescript
 emit: {
   // Overload 1: known event name -- typed required payload
-  <K extends string & keyof Events>(name: K, payload: Events[K]): Promise<void>;
+  <K extends string & keyof AllEvents>(name: K, payload: AllEvents[K]): Promise<void>;
   // Overload 2: unknown event name -- untyped optional payload (escape hatch)
   (name: string, payload?: unknown): Promise<void>;
 };
 ```
 
-- Known names constrained to `EventContract` keys -- payload type checked at compile time
-- Unknown names allowed as untyped escape hatch -- payload is optional `unknown`
-- Defined by framework author (Layer 2) for known events
-- Plugin authors can emit ad-hoc events via the untyped overload
-- Convention: `app:*` for kernel events, `page:*`, `build:*` for framework events, `pluginName:eventName` for plugin events
+Where `AllEvents` = `Events` (global) + `PluginEvents` (own) + dependency events (from `depends` chain).
 
-**emit is overloaded:** Known event names (in EventContract) get strict type checking. Unknown names fall through to the untyped overload. One method, two behaviors. This replaces the previous dual `emit`/`signal` model with a single unified approach.
-
-When `EventContract` is `{}` (the default): the first overload matches nothing. All events are untyped. Zero cost for frameworks that don't use it.
-
----
-
-## 3. EventContract
-
-The `EventContract` is a type-level declaration of "events this framework declares." Defined at Layer 2 by the framework author.
+**Known events** get strict type checking -- payload type and presence are enforced at compile time:
 
 ```typescript
-type EventContract = {
-  'app:boot':           { config: BaseConfig };
-  'app:ready':          { config: BaseConfig };
-  'app:shutdown':       { config: BaseConfig };
-  'page:render':        { path: string; html: string };
-  'page:error':         { path: string; error: Error };
-  'router:navigate':    { from: string; to: string };
-  'router:notFound':    { path: string; fallback: string };
-  'renderer:render':    { path: string; html: string };
-  'auth:login':         { userId: string };
-  'auth:logout':        {};
-};
+// In a plugin with access to Events and AuthEvents:
+ctx.emit('page:render', { path: '/about', html: '<h1>About</h1>' });  // typed
+ctx.emit('auth:login', { userId: '123' });                             // typed
 ```
 
-**What it does:**
+**Unknown events** fall through to the untyped overload -- payload is optional `unknown`:
 
-1. `ctx.emit('page:render', payload)` -- TypeScript checks that `'page:render'` is a valid key and that `payload` matches `{ path: string; html: string }`.
-2. `ctx.emit('myPlugin:customEvent', data)` -- Unknown name, falls through to untyped overload. No compile error. Payload is optional `unknown`.
-3. **IDE autocomplete** -- Plugin authors get autocomplete for known event names and typed payload shapes.
-4. **Documentation** -- The EventContract IS the documentation of the framework's event API. An LLM reads the type and knows every event that can fire.
+```typescript
+ctx.emit('my:custom:event', { anything: true });  // untyped escape hatch
+ctx.emit('my:custom:event');                       // payload optional for unknown events
+```
 
-**EventContract is Layer 2.** `moku_core` (Layer 1) is generic over `EventContract`. It doesn't define any events itself.
-
-### Different Frameworks, Different Vocabularies
-
-Same kernel. Different event contracts. Different frameworks.
-
-- A site builder has `page:render`, `page:error`, `seo:meta`, `router:navigate`
-- A game engine has `loop:tick`, `input:keydown`, `physics:collision`
-- A CLI toolkit has `cli:beforeRun`, `cli:afterRun`, `output:write`
-- A bot SDK has `agent:beforeCall`, `agent:afterCall`, `memory:store`
+One method, two behaviors. When `Events` is `{}` (the default), the first overload matches nothing. All events are untyped. Zero cost for frameworks that don't define events.
 
 ---
 
 ## 4. Hooks
 
-Plugins subscribe to events via the `hooks` field on `PluginSpec`:
+Plugins subscribe to events via the `hooks` field on the plugin spec:
 
 ```typescript
-hooks: {
-  'page:render': (payload) => {
-    // EventContract event -- payload type is { path: string; html: string }
-    console.log(`Rendered ${payload.path}`);
+const dashboardPlugin = createPlugin('dashboard', {
+  depends: [authPlugin],
+  hooks: {
+    // Global event -- payload typed from Events
+    'page:render': (payload) => {
+      console.log(`Rendered ${payload.path}`);  // payload.path is string
+    },
+    // Dependency event -- payload typed from AuthEvents via depends
+    'auth:login': (payload) => {
+      console.log(`User ${payload.userId} logged in`);  // payload.userId is string
+    },
+    // Unknown event -- payload is `unknown`, cast manually
+    'custom:event': (payload) => {
+      const data = payload as { value: number };
+    },
   },
-  'router:navigate': (payload) => {
-    // EventContract event -- payload type is { from: string; to: string }
-    console.log(`${payload.from} -> ${payload.to}`);
-  },
-  'myPlugin:customEvent': (payload) => {
-    // Unknown event -- payload type is `unknown`, cast manually
-    const { data } = payload as { data: number };
-  },
-}
+});
 ```
 
-**Typed hooks:** When a hook key matches a known event name in EventContract, the handler receives a typed payload. When the key is an unknown event name, the handler receives `unknown`. This is enforced via a mapped conditional type:
+**Typed hooks:** When a hook key matches a known event name (in global Events or dependency PluginEvents), the handler receives a typed payload. When the key is an unknown event name, the handler receives `unknown`.
 
 ```typescript
 hooks?: {
-  [K in string]?: K extends keyof Events
-    ? (payload: Events[K]) => void | Promise<void>
+  [K in string]?: K extends keyof AllEvents
+    ? (payload: AllEvents[K]) => void | Promise<void>
     : (payload: unknown) => void | Promise<void>;
 };
 ```
-
-**Convention: namespace with the emitting plugin's name.** `router:navigate`, `build:start`, `auth:login`. This prevents collisions. Convention, not enforced.
 
 **Execution order:** Handlers execute in plugin registration order, sequentially. Each handler is awaited before the next. No parallelism.
 
 ---
 
-## 5. Kernel-Emitted Events
+## 5. Event Merging via depends
 
-Regardless of what the framework puts in `EventContract`, the kernel always emits:
+When Plugin B declares `depends: [pluginA]`, Plugin B's `hooks` and `emit` see `Events & PluginAEvents`. This means B can listen to A's events and emit A's events.
 
-| Event | When | Payload |
-|---|---|---|
-| `app:start` | Before plugin onStart calls | `{ config }` |
-| `app:stop` | After plugin onStop calls | `{ config }` |
-| `app:destroy` | After plugin onDestroy calls | `{}` |
+```typescript
+// authPlugin declares per-plugin events:
+type AuthEvents = {
+  'auth:login':  { userId: string };
+  'auth:logout': {};
+};
 
-If the framework's `EventContract` includes these keys, the payload type is enforced. If not, they still fire with the default payload via the untyped overload.
+const authPlugin = createPlugin<AuthEvents>('auth', {
+  api: (ctx) => ({
+    login: (userId: string) => {
+      void ctx.emit('auth:login', { userId });
+    },
+    logout: () => {
+      void ctx.emit('auth:logout', {});
+    },
+  }),
+});
+
+// dashboardPlugin depends on authPlugin:
+const dashboardPlugin = createPlugin('dashboard', {
+  depends: [authPlugin],
+  // dashboard now sees: Events & AuthEvents
+  hooks: {
+    'auth:login': (payload) => {
+      // payload is typed as { userId: string } -- from AuthEvents via depends
+      console.log(`User ${payload.userId} logged in`);
+    },
+  },
+  api: (ctx) => ({
+    refresh: () => {
+      // dashboard can also EMIT auth events because of depends
+      void ctx.emit('auth:logout', {});
+    },
+  }),
+});
+```
+
+**Transitive merging:** If Plugin C depends on Plugin B which depends on Plugin A, Plugin C sees `Events & PluginAEvents & PluginBEvents`. The entire depends chain contributes events.
 
 ---
 
-## 6. What About Middleware / Pipes?
+## 6. Kernel-Emitted Events
+
+Regardless of what the framework puts in `Events`, the kernel always emits these events:
+
+| Event | When | Payload |
+|---|---|---|
+| `app:init` | After all plugins initialized | `{ config }` |
+| `app:start` | Before plugin onStart calls | `{ config }` |
+| `app:stop` | After plugin onStop calls | `{ config }` |
+
+If the framework's `Events` includes these keys, the payload type is enforced. If not, they still fire with the default payload via the untyped overload.
+
+---
+
+## 7. Convention: Event Naming
+
+Convention: namespace events with the emitting plugin's name. `router:navigate`, `auth:login`, `build:complete`. This prevents collisions. Convention, not enforced.
+
+- `app:*` -- kernel events
+- `framework-domain:*` -- framework-level events (e.g., `page:render`, `build:start`)
+- `pluginName:eventName` -- per-plugin events
+
+---
+
+## 8. What About Middleware / Pipes?
 
 **Not in the kernel.** If a plugin needs request transformation, build pipeline, or render chain, it implements that internally. The plugin exposes an API method for other plugins to register middleware:
 
 ```typescript
-// A plugin that wants middleware: implement it yourself
-const HttpPlugin = createPlugin('http', {
+const httpPlugin = createPlugin('http', {
   createState: () => ({ middlewares: [] as Function[] }),
   api: (ctx) => ({
     use: (fn: Function) => { ctx.state.middlewares.push(fn); },
@@ -152,10 +230,10 @@ const HttpPlugin = createPlugin('http', {
   }),
 });
 
-// Another plugin registers middleware via the API
-const AuthPlugin = createPlugin('auth', {
+const authPlugin = createPlugin('auth', {
+  depends: [httpPlugin],
   onInit: (ctx) => {
-    const http = ctx.require<{ use: Function }>('http');
+    const http = ctx.require(httpPlugin);
     http.use((req: any) => ({ ...req, user: 'authenticated' }));
   },
 });

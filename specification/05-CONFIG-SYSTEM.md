@@ -1,19 +1,19 @@
 # 05 - Config System
 
-**Domain:** Config resolution, defaults, BuildPluginConfigs, no configRequired
-**Sources:** SPEC_INITIAL (v0.1), SPEC_EVOLUTION (v2), SPEC_DEFINITIVE (v1.0.0-rc1)
+**Domain:** Config resolution, defaults, BuildPluginConfigs, flat createApp object
+**Version:** v3 (3-step architecture)
 
 ---
 
-## 1. No configRequired
+## 1. Two Levels of Config
 
-```typescript
-// v0.1: TWO mechanisms, conflicting
-configRequired?: boolean;     // KILLED
-defaultConfig?: Partial<C>;   // Changed to full C
-```
+The system has two levels of configuration:
 
-`configRequired` does not exist. The config type itself is the contract.
+**Global Config:** Defined via `createCoreConfig<Config, Events>(id, { config })`. The framework provides defaults; the consumer can override any field in the flat `createApp` object.
+
+**Per-Plugin Config:** Defined via `defaultConfig` on each plugin's spec. The consumer can override any field by passing a keyed object in the flat `createApp` object.
+
+Both levels use the same resolution strategy: **shallow merge**.
 
 ---
 
@@ -23,8 +23,8 @@ TypeScript's own type system determines config behavior. No flags. No metadata. 
 
 | Plugin Config Type `C` | `defaultConfig` | Consumer must provide |
 |---|---|---|
-| `void` | (ignored) | Nothing. No key in pluginConfigs. |
-| `{}` | (ignored) | Nothing. No key in pluginConfigs. |
+| `void` | (ignored) | Nothing. No key in createApp. |
+| `{}` | (ignored) | Nothing. No key in createApp. |
 | `{ field: string }` | absent | **Required.** `{ field: "value" }` -- must provide full C. |
 | `{ field: string }` | present | **Optional.** Can omit entirely or partially override. |
 | `{ req: string; opt?: number }` | absent | **Required.** `{ req: "value" }` at minimum. |
@@ -48,7 +48,58 @@ If `defaultConfig` has a nested object `{ database: { host: 'localhost', port: 5
 
 ---
 
-## 4. defaultConfig Is Full C, Not Partial
+## 4. Per-Plugin Config in createApp
+
+In v3, consumers pass plugin configs in the flat `createApp` object, keyed by plugin name:
+
+```typescript
+const app = await createApp({
+  // Global config overrides
+  siteName: 'My Blog',
+  mode: 'production',
+
+  // Extra plugins
+  plugins: [blogPlugin],
+
+  // Per-plugin configs (keyed by plugin name)
+  router: { basePath: '/blog' },
+  blog: { postsPerPage: 5 },
+});
+```
+
+The type system discriminates between global config keys (from `Config`), the reserved `plugins` key, and plugin config keys (from plugin names in the registered set). Each plugin name becomes a key in the flat object whose value type is the plugin's config type `C`.
+
+---
+
+## 5. Global Config Resolution
+
+Global config resolution follows the same shallow merge pattern:
+
+```typescript
+resolvedGlobal = { ...coreConfig.config, ...consumerOverrides }
+```
+
+The global config defaults come from `createCoreConfig`'s `options.config`. Consumer overrides are top-level keys in the `createApp` flat object that match `Config` property names.
+
+```typescript
+// Framework config.ts
+const coreConfig = createCoreConfig<Config, Events>('my-framework', {
+  config: {
+    siteName: 'Untitled',
+    mode: 'development',
+  },
+});
+
+// Consumer main.ts
+const app = await createApp({
+  siteName: 'My Blog',    // overrides 'Untitled'
+  // mode not provided -- stays 'development' from defaults
+});
+```
+
+---
+
+## 6. defaultConfig Is Full C, Not Partial
 
 `defaultConfig` must provide a complete `C` value -- all fields, even optional ones with `?`. This ensures that when the consumer omits config entirely, every field has a defined value. No `undefined` surprises. Partial defaults create ambiguity about which fields the consumer must provide.
 
@@ -62,7 +113,7 @@ defaultConfig: { level: 'info', prefix: '[app]', silent: false }
 
 ---
 
-## 5. Optional Fields in Plugin Config Types
+## 7. Optional Fields in Plugin Config Types
 
 Plugin config types fully support TypeScript's `?` optional modifier:
 
@@ -74,23 +125,24 @@ type AnalyticsConfig = {
 };
 
 // With defaultConfig: config key is optional in createApp
-const AnalyticsPlugin = createPlugin<'analytics', AnalyticsConfig>('analytics', {
+const analyticsPlugin = createPlugin('analytics', {
   defaultConfig: {
     trackingId: '',          // empty string -- must be overridden at runtime
     sampleRate: 1.0,
     debugMode: false,
   },
-  onCreate: ({ config }) => {
-    if (!config.trackingId) {
+  onInit: (ctx) => {
+    if (!ctx.config.trackingId) {
       throw new Error('[analytics] trackingId is required. Set it in your plugin config.');
     }
   },
 });
 
 // Without defaultConfig: config key is required in createApp
-const StrictAnalyticsPlugin = createPlugin<'analytics', AnalyticsConfig>('analytics', {
+const strictAnalyticsPlugin = createPlugin('analytics', {
   // no defaultConfig -> consumer MUST provide at minimum: { trackingId: 'G-XXXXX' }
   // sampleRate and debugMode are optional per the type, so consumer can omit them
+  onInit: (ctx) => { /* config is required at createApp call site */ },
 });
 ```
 
@@ -103,19 +155,7 @@ const StrictAnalyticsPlugin = createPlugin<'analytics', AnalyticsConfig>('analyt
 
 ---
 
-## 6. Global Config Resolution
-
-The global config (BaseConfig) follows the same shallow merge:
-
-```typescript
-resolvedGlobal = { ...frameworkDefaults.config, ...consumerGlobalConfig }
-```
-
-Consumer provides `Partial<BaseConfig>` in `createConfig`. Framework provides full defaults. The consumer only overrides what they need.
-
----
-
-## 7. Type-Level Config Enforcement (BuildPluginConfigs)
+## 8. Type-Level Config Enforcement (BuildPluginConfigs)
 
 ```typescript
 /**
@@ -154,18 +194,26 @@ type BuildPluginConfigs<P extends PluginInstance> = Prettify<
 }
 ```
 
+These plugin config keys are merged into the flat `createApp` options type alongside global config keys (`Partial<Config>`) and the reserved `plugins` key.
+
 ---
 
-## 8. Runtime Validation
+## 9. Config Immutability
 
-At runtime, the kernel also validates config completeness:
+All resolved configs are `Object.freeze`'d after resolution. Both global config and per-plugin configs are frozen and read-only at runtime. This prevents accidental mutation after initialization.
+
+---
+
+## 10. Runtime Validation
+
+At runtime, the kernel validates config completeness:
 
 - If a plugin requires config (no `defaultConfig`, non-void `C`), and the consumer didn't provide it, throw with a clear error message.
 - TypeScript catches this at compile time, but runtime validation is a safety net.
 
 ```
 Error: [moku-site] Plugin "router" requires config but none was provided.
-  Add a "router" key to your pluginConfigs object.
+  Add a "router" key to your createApp options object.
 ```
 
 ---
@@ -175,4 +223,3 @@ Error: [moku-site] Plugin "router" requires config but none was provided.
 - Plugin system: [03-PLUGIN-SYSTEM](./03-PLUGIN-SYSTEM.md)
 - Type system: [09-TYPE-SYSTEM](./09-TYPE-SYSTEM.md)
 - Invariants: [11-INVARIANTS](./11-INVARIANTS.md)
-
