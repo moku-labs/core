@@ -12,6 +12,7 @@
 // kernel function (create-app.ts, Plan 04) with all captured context.
 // =============================================================================
 
+import { kernel } from "./create-app";
 import { type BoundCreatePluginFunction, createPluginFactory } from "./create-plugin";
 import { flattenPlugins, validatePlugins } from "./flatten";
 import type { PluginInstance } from "./types";
@@ -175,27 +176,18 @@ function createCoreConfig<
       // Validate: reserved names, duplicates, dependency existence and order
       validatePlugins(_frameworkId, flatPlugins);
 
-      // Delegate to kernel function (create-app.ts, Plan 04).
+      // Delegate to kernel function (create-app.ts).
       // The kernel receives all captured context and handles:
       // config resolution, state creation, event bus, API building, lifecycle.
-      // biome-ignore lint/suspicious/noExplicitAny: kernel context is loosely typed until Plan 04
-      const kernelContext: any = {
+      return kernel({
         id: _frameworkId,
         configDefaults,
-        defaultPlugins,
         frameworkPluginConfigs,
-        onReady,
-        onError,
         flatPlugins,
-        consumerOverrides: rest
-      };
-
-      // Kernel implementation goes here in Plan 04 (create-app.ts).
-      // For now, throw to indicate Plan 04 is needed.
-      throw new Error(
-        `[${_frameworkId}] createApp kernel is not yet implemented.\n` +
-          `  The kernel runtime will be added in plan 20-04. Context captured: ${Object.keys(kernelContext).join(", ")}`
-      );
+        consumerOverrides: rest,
+        onReady,
+        onError
+      });
     };
 
     return { createApp, createPlugin };
