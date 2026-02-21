@@ -32,7 +32,11 @@ type RouterState = { currentPath: string };
 type LoggerConfig = { level: "debug" | "info" | "warn" | "error" };
 type LoggerApi = { log: (message: string) => void };
 
-type TestEvents = { "page:load": { url: string }; "page:error": { code: number }; "theme:changed": { dark: boolean } };
+type TestEvents = {
+  "page:load": { url: string };
+  "page:error": { code: number };
+  "theme:changed": { dark: boolean };
+};
 type TestGlobal = { appName: string; debug: boolean };
 
 // =============================================================================
@@ -173,14 +177,7 @@ test("HasDefaults returns false for default _hasDefaults (boolean)", () => {
 // =============================================================================
 
 test("PluginSpec createState accepts MinimalContext and returns S | Promise<S>", () => {
-  type Spec = PluginSpec<
-    "test",
-    RouterConfig,
-    RouterApi,
-    RouterState,
-    TestGlobal,
-    TestEvents
-  >;
+  type Spec = PluginSpec<"test", RouterConfig, RouterApi, RouterState, TestGlobal, TestEvents>;
   type CreateState = NonNullable<Spec["createState"]>;
   expectTypeOf<CreateState>()
     .parameter(0)
@@ -189,27 +186,13 @@ test("PluginSpec createState accepts MinimalContext and returns S | Promise<S>",
 });
 
 test("PluginSpec onCreate accepts MinimalContext", () => {
-  type Spec = PluginSpec<
-    "test",
-    RouterConfig,
-    RouterApi,
-    RouterState,
-    TestGlobal,
-    TestEvents
-  >;
+  type Spec = PluginSpec<"test", RouterConfig, RouterApi, RouterState, TestGlobal, TestEvents>;
   type OnCreate = NonNullable<Spec["onCreate"]>;
   expectTypeOf<OnCreate>().parameter(0).toMatchTypeOf<MinimalContext<TestGlobal, RouterConfig>>();
 });
 
 test("PluginSpec api accepts PluginContext (full context)", () => {
-  type Spec = PluginSpec<
-    "test",
-    RouterConfig,
-    RouterApi,
-    RouterState,
-    TestGlobal,
-    TestEvents
-  >;
+  type Spec = PluginSpec<"test", RouterConfig, RouterApi, RouterState, TestGlobal, TestEvents>;
   type ApiMethod = NonNullable<Spec["api"]>;
   expectTypeOf<ApiMethod>()
     .parameter(0)
@@ -217,14 +200,7 @@ test("PluginSpec api accepts PluginContext (full context)", () => {
 });
 
 test("PluginSpec onInit accepts InitContext (no state)", () => {
-  type Spec = PluginSpec<
-    "test",
-    RouterConfig,
-    RouterApi,
-    RouterState,
-    TestGlobal,
-    TestEvents
-  >;
+  type Spec = PluginSpec<"test", RouterConfig, RouterApi, RouterState, TestGlobal, TestEvents>;
   type OnInit = NonNullable<Spec["onInit"]>;
   expectTypeOf<OnInit>()
     .parameter(0)
@@ -232,14 +208,7 @@ test("PluginSpec onInit accepts InitContext (no state)", () => {
 });
 
 test("PluginSpec onStart accepts PluginContext (full context)", () => {
-  type Spec = PluginSpec<
-    "test",
-    RouterConfig,
-    RouterApi,
-    RouterState,
-    TestGlobal,
-    TestEvents
-  >;
+  type Spec = PluginSpec<"test", RouterConfig, RouterApi, RouterState, TestGlobal, TestEvents>;
   type OnStart = NonNullable<Spec["onStart"]>;
   expectTypeOf<OnStart>()
     .parameter(0)
@@ -247,40 +216,19 @@ test("PluginSpec onStart accepts PluginContext (full context)", () => {
 });
 
 test("PluginSpec onStop accepts TeardownContext", () => {
-  type Spec = PluginSpec<
-    "test",
-    RouterConfig,
-    RouterApi,
-    RouterState,
-    TestGlobal,
-    TestEvents
-  >;
+  type Spec = PluginSpec<"test", RouterConfig, RouterApi, RouterState, TestGlobal, TestEvents>;
   type OnStop = NonNullable<Spec["onStop"]>;
   expectTypeOf<OnStop>().parameter(0).toMatchTypeOf<TeardownContext<TestGlobal>>();
 });
 
 test("PluginSpec onDestroy accepts TeardownContext", () => {
-  type Spec = PluginSpec<
-    "test",
-    RouterConfig,
-    RouterApi,
-    RouterState,
-    TestGlobal,
-    TestEvents
-  >;
+  type Spec = PluginSpec<"test", RouterConfig, RouterApi, RouterState, TestGlobal, TestEvents>;
   type OnDestroy = NonNullable<Spec["onDestroy"]>;
   expectTypeOf<OnDestroy>().parameter(0).toMatchTypeOf<TeardownContext<TestGlobal>>();
 });
 
 test("PluginSpec lifecycle methods accept both sync and async returns", () => {
-  type Spec = PluginSpec<
-    "test",
-    RouterConfig,
-    RouterApi,
-    RouterState,
-    TestGlobal,
-    TestEvents
-  >;
+  type Spec = PluginSpec<"test", RouterConfig, RouterApi, RouterState, TestGlobal, TestEvents>;
   // onCreate returns void | Promise<void>
   type OnCreate = NonNullable<Spec["onCreate"]>;
   expectTypeOf<OnCreate>().returns.toEqualTypeOf<void | Promise<void>>();
@@ -303,14 +251,7 @@ test("PluginSpec lifecycle methods accept both sync and async returns", () => {
 // =============================================================================
 
 test("ComponentSpec onMount accepts PluginContext (maps to onStart)", () => {
-  type Spec = ComponentSpec<
-    "button",
-    RouterConfig,
-    RouterApi,
-    RouterState,
-    TestGlobal,
-    TestEvents
-  >;
+  type Spec = ComponentSpec<"button", RouterConfig, RouterApi, RouterState, TestGlobal, TestEvents>;
   type OnMount = NonNullable<Spec["onMount"]>;
   expectTypeOf<OnMount>()
     .parameter(0)
@@ -318,51 +259,23 @@ test("ComponentSpec onMount accepts PluginContext (maps to onStart)", () => {
 });
 
 test("ComponentSpec onUnmount accepts TeardownContext (maps to onStop)", () => {
-  type Spec = ComponentSpec<
-    "button",
-    RouterConfig,
-    RouterApi,
-    RouterState,
-    TestGlobal,
-    TestEvents
-  >;
+  type Spec = ComponentSpec<"button", RouterConfig, RouterApi, RouterState, TestGlobal, TestEvents>;
   type OnUnmount = NonNullable<Spec["onUnmount"]>;
   expectTypeOf<OnUnmount>().parameter(0).toMatchTypeOf<TeardownContext<TestGlobal>>();
 });
 
 test("ComponentSpec does not have onInit field", () => {
-  type Spec = ComponentSpec<
-    "button",
-    RouterConfig,
-    RouterApi,
-    RouterState,
-    TestGlobal,
-    TestEvents
-  >;
+  type Spec = ComponentSpec<"button", RouterConfig, RouterApi, RouterState, TestGlobal, TestEvents>;
   expectTypeOf<Spec>().not.toHaveProperty("onInit");
 });
 
 test("ComponentSpec does not have onStart field", () => {
-  type Spec = ComponentSpec<
-    "button",
-    RouterConfig,
-    RouterApi,
-    RouterState,
-    TestGlobal,
-    TestEvents
-  >;
+  type Spec = ComponentSpec<"button", RouterConfig, RouterApi, RouterState, TestGlobal, TestEvents>;
   expectTypeOf<Spec>().not.toHaveProperty("onStart");
 });
 
 test("ComponentSpec does not have onStop field", () => {
-  type Spec = ComponentSpec<
-    "button",
-    RouterConfig,
-    RouterApi,
-    RouterState,
-    TestGlobal,
-    TestEvents
-  >;
+  type Spec = ComponentSpec<"button", RouterConfig, RouterApi, RouterState, TestGlobal, TestEvents>;
   expectTypeOf<Spec>().not.toHaveProperty("onStop");
 });
 

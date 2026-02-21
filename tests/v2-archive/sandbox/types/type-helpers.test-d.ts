@@ -46,7 +46,11 @@ type LoggerPluginWithDefaults = PluginInstance<"logger", LoggerConfig, LoggerApi
 type AnalyticsApi = { track: (event: string) => void };
 type AnalyticsPlugin = PluginInstance<"analytics", void, AnalyticsApi, void>;
 
-type TestEvents = { "page:load": { url: string }; "page:error": { code: number }; "theme:changed": { dark: boolean } };
+type TestEvents = {
+  "page:load": { url: string };
+  "page:error": { code: number };
+  "theme:changed": { dark: boolean };
+};
 type TestGlobal = { appName: string; debug: boolean };
 
 // =============================================================================
@@ -328,12 +332,7 @@ test("InitContext does not have state", () => {
 });
 
 test("PluginContext extends InitContext with state", () => {
-  type Full = PluginContext<
-    TestGlobal,
-    TestEvents,
-    RouterConfig,
-    { currentPath: string }
-  >;
+  type Full = PluginContext<TestGlobal, TestEvents, RouterConfig, { currentPath: string }>;
   expectTypeOf<Full>().toHaveProperty("global");
   expectTypeOf<Full>().toHaveProperty("config");
   expectTypeOf<Full>().toHaveProperty("emit");
