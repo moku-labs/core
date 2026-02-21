@@ -361,7 +361,7 @@ describe("event round-trip", () => {
 
     const tracker = core.createPlugin("tracker", {
       defaultConfig: { prefix: "track" },
-      createState: () => ({ events: [] as string[] }),
+      createState: (): { events: string[] } => ({ events: [] }),
       api: (ctx: { config: { prefix: string }; state: { events: string[] } }) => ({
         record: (event: string) => {
           ctx.state.events.push(`[${ctx.config.prefix}] ${event}`);

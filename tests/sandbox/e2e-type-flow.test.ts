@@ -55,7 +55,7 @@ function createRouterPlugin(
 ) {
   return core.createPlugin("router", {
     defaultConfig: { basePath: "/", trailingSlash: false },
-    createState: () => ({ registeredRoutes: [] as string[] }),
+    createState: (): { registeredRoutes: string[] } => ({ registeredRoutes: [] }),
     api: ctx => ({
       resolve: (path: string) => {
         const base = ctx.config.basePath;
@@ -104,9 +104,9 @@ function createBuildPlugin(
 ) {
   return core.createPlugin<"build", BuildConfig, BuildApi, BuildState>("build", {
     depends: [routerPlugin],
-    createState: () => ({
-      artifacts: [] as string[],
-      eventLog: [] as string[]
+    createState: (): { artifacts: string[]; eventLog: string[] } => ({
+      artifacts: [],
+      eventLog: []
     }),
     api: ctx => ({
       run: async () => {
@@ -230,7 +230,7 @@ describe("end-to-end three-layer type flow", () => {
     // Consumer defines an extra plugin with required config (no defaultConfig)
     const analyticsPlugin = core.createPlugin("analytics", {
       defaultConfig: { trackingId: "UA-000" },
-      createState: () => ({ tracked: [] as string[] }),
+      createState: (): { tracked: string[] } => ({ tracked: [] }),
       api: ctx => ({
         track: (event: string) => {
           ctx.state.tracked.push(`[${ctx.config.trackingId}] ${event}`);
@@ -460,7 +460,7 @@ describe("end-to-end three-layer type flow", () => {
     const subscriberPlugin = core.createPlugin("subscriber", {
       depends: [publisherPlugin],
       defaultConfig: { verbose: false },
-      createState: () => ({ received: [] as string[] }),
+      createState: (): { received: string[] } => ({ received: [] }),
       api: ctx => ({
         getReceived: () => [...ctx.state.received]
       }),

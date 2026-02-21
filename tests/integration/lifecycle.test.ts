@@ -34,7 +34,7 @@ function createLoggerPlugin(core: {
 }): PluginInstance<"logger", LoggerConfig, LoggerApi, { entries: string[] }> {
   return core.createPlugin("logger", {
     defaultConfig: { prefix: "[LOG]" },
-    createState: () => ({ entries: [] as string[] }),
+    createState: (): { entries: string[] } => ({ entries: [] }),
     api: (ctx: { config: { prefix: string }; state: { entries: string[] } }) => ({
       log: (msg: string) => {
         ctx.state.entries.push(`${ctx.config.prefix} ${msg}`);
