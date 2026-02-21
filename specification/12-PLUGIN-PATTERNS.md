@@ -1,7 +1,7 @@
 # 12 - Plugin Patterns and LLM Guide
 
 **Domain:** Plugin = connection point, file structure, conventions, LLM system prompt
-**Sources:** SPEC_EVOLUTION (v2), SPEC_DEFINITIVE (v1.0.0-rc1)
+**Architecture:** v3 3-step (createCoreConfig -> createCore -> createApp)
 
 ---
 
@@ -18,39 +18,35 @@ Think of a plugin as a **wiring harness.** The harness connects the engine to th
 ```typescript
 // plugins/router/index.ts -- THIS IS THE PLUGIN
 
-import { createPlugin } from 'my-framework';
-import type { RouterConfig, RouterApi, RouterState } from './types';
+import { createPlugin } from '../../config';
+import type { RouterConfig, RouterState } from './types';
 import { createRouterState } from './state';
 import { createRouterApi } from './api';
-import { validateConfig } from './validation';
 import { handleNotFound } from './handlers';
 
-export const RouterPlugin = createPlugin<'router', RouterConfig, RouterApi, RouterState>(
-  'router',
-  {
-    depends: ['renderer'],
-    createState: createRouterState,
-    onCreate: ({ config }) => validateConfig(config),
-    api: createRouterApi,
+export const routerPlugin = createPlugin('router', {
+  depends: ['renderer'],
+  defaultConfig: { basePath: '/', default: 'home' },
+  createState: createRouterState,
+  api: createRouterApi,
 
-    onInit: (ctx) => {
-      if (ctx.has('logger')) {
-        ctx.require<{ info: Function }>('logger').info('Router ready');
-      }
-    },
-
-    hooks: {
-      'page:error': handleNotFound,
-    },
-
-    onStart: async (ctx) => {
-      void ctx.emit('router:navigate', {
-        from: '',
-        to: ctx.config.default,
-      });
-    },
+  onInit: (ctx) => {
+    if (ctx.has('logger')) {
+      ctx.require('logger').info('Router ready');
+    }
   },
-);
+
+  hooks: {
+    'page:error': handleNotFound,
+  },
+
+  onStart: async (ctx) => {
+    void ctx.emit('router:navigate', {
+      from: '',
+      to: ctx.config.default,
+    });
+  },
+});
 ```
 
 **Notice: the plugin file has almost no logic.** It imports everything from domain modules and connects them to lifecycle hooks and API slots. The plugin is ~30 lines. The domain code could be 3000 lines.
@@ -62,11 +58,10 @@ export const RouterPlugin = createPlugin<'router', RouterConfig, RouterApi, Rout
 ```
 plugins/
   router/
-    index.ts          <-- The plugin. Exports RouterPlugin. ~30 lines.
+    index.ts          <-- The plugin. Exports routerPlugin. ~30 lines.
     types.ts          <-- RouterConfig, RouterApi, RouterState types
     state.ts          <-- createRouterState() factory
     api.ts            <-- createRouterApi() factory
-    validation.ts     <-- Config validation logic
     handlers.ts       <-- Event handlers (navigation, errors)
     __tests__/
       state.test.ts   <-- Test state logic independently
@@ -97,7 +92,7 @@ plugins/
 
 The plugin file is the **map**. The domain files are the **territory.** An LLM reads the map (fast, cheap, ~30 lines) and then navigates to exactly the right domain file (precise, targeted). If all the code is in the plugin file, the LLM has to read and understand everything just to find where to make a change.
 
-This structure also enables independent testing. Domain functions (`createRouterState`, `createRouterApi`, `handleNotFound`) are pure functions that take `ctx` as input. They can be unit tested without spinning up the whole framework. See [10-TESTING](./10-TESTING.md).
+This structure also enables independent testing. Domain functions (`createRouterState`, `createRouterApi`, `handleNotFound`) are pure functions that take `ctx` as input. They can be unit tested without spinning up the whole framework -- `api.ts` and `handlers.ts` are just functions that accept a context-shaped object.
 
 ---
 
@@ -107,91 +102,112 @@ This structure also enables independent testing. Domain functions (`createRouter
 
 ```typescript
 // moku_core/src/index.ts
-export { createCore } from './core';
-
-// moku_core/testing (sub-path export)
-// export { createTestCtx } from './testing';
+export { createCoreConfig } from './core-config';
 ```
 
-### Layer 2: Site Builder Framework
+### Layer 2: Framework -- config.ts
 
 ```typescript
-// my-framework/src/index.ts
-import { createCore } from 'moku_core';
-import { RouterPlugin } from './plugins/router';
-import { RendererPlugin } from './plugins/renderer';
-import { SEOPlugin } from './plugins/seo';
+// my-framework/src/config.ts
+import { createCoreConfig } from 'moku_core';
 
-export type BaseConfig = {
+type Config = {
   siteName: string;
   description?: string;
   mode: 'development' | 'production';
 };
 
-export type EventContract = {
-  'app:boot':         { config: BaseConfig };
-  'app:ready':        { config: BaseConfig };
-  'page:render':      { path: string; html: string };
-  'page:error':       { path: string; error: Error };
-  'router:navigate':  { from: string; to: string };
-  'router:notFound':  { path: string; fallback: string };
+type Events = {
+  'app:start':       { config: Config };
+  'page:render':     { path: string; html: string };
+  'page:error':      { path: string; error: Error };
+  'router:navigate': { from: string; to: string };
+  'router:notFound': { path: string; fallback: string };
 };
 
-const core = createCore<BaseConfig, EventContract>('moku-site', {
-  config: { siteName: 'Untitled', mode: 'development' },
-  plugins: [RouterPlugin, RendererPlugin, SEOPlugin],
-  onBoot: ({ config }) => {
-    if (config.mode === 'development') {
-      console.log(`[moku-site] Starting ${config.siteName} in dev mode`);
-    }
+export const coreConfig = createCoreConfig<Config, Events>('moku-site', {
+  config: {
+    siteName: 'Untitled',
+    mode: 'development',
   },
 });
 
-export const {
-  createConfig,
-  createApp,
-  createPlugin,
-  createComponent,
-  createModule,
-  createPluginFactory,
-} = core;
-
-export { AnalyticsPlugin } from './plugins/analytics';
-export { BlogPlugin } from './plugins/blog';
+export const { createPlugin, createCore } = coreConfig;
 ```
 
-### Layer 3: Consumer Blog
+### Layer 2: Framework -- plugins/router/index.ts
+
+```typescript
+// my-framework/src/plugins/router/index.ts
+import { createPlugin } from '../../config';
+
+export const routerPlugin = createPlugin('router', {
+  defaultConfig: { basePath: '/' },
+  createState: () => ({ currentPath: '/' }),
+  api: (ctx) => ({
+    navigate: (path: string) => {
+      ctx.state.currentPath = path;
+      void ctx.emit('router:navigate', { from: '/', to: path });
+    },
+    current: () => ctx.state.currentPath,
+  }),
+  onInit: (ctx) => {
+    // All plugins created, can check dependencies
+  },
+  onStart: (ctx) => {
+    // App is starting
+  },
+  onStop: (ctx) => {
+    // Teardown
+  },
+});
+```
+
+### Layer 2: Framework -- index.ts
+
+```typescript
+// my-framework/src/index.ts
+import { createCore, coreConfig } from './config';
+import { routerPlugin } from './plugins/router';
+import { rendererPlugin } from './plugins/renderer';
+import { seoPlugin } from './plugins/seo';
+
+const framework = createCore(coreConfig, {
+  plugins: [routerPlugin, rendererPlugin, seoPlugin],
+});
+
+export const { createApp, createPlugin } = framework;
+```
+
+### Layer 3: Consumer -- main.ts
 
 ```typescript
 // my-blog/src/main.ts
-import { createConfig, createApp, createPlugin } from 'my-framework';
-import { BlogPlugin } from 'my-framework/plugins';
-import { ContactFormPlugin } from './plugins/contact-form';
+import { createApp, createPlugin } from 'my-framework';
 
-const HomePage = { render: () => '<h1>Welcome</h1>' };
-const AboutPage = { render: () => '<h1>About</h1>' };
+const blogPlugin = createPlugin('blog', {
+  defaultConfig: { postsPerPage: 10 },
+  api: (ctx) => ({
+    listPosts: () => ['post1', 'post2'],
+  }),
+});
 
-const config = createConfig(
-  { siteName: 'Code & Coffee', mode: 'production' },
-  [BlogPlugin, ContactFormPlugin],
-);
-
-const app = await createApp(config, {
-  router: { default: 'home', pages: { home: HomePage, about: AboutPage } },
-  blog: { postsDir: './content', postsPerPage: 5 },
-  contactForm: { recipient: 'me@example.com' },
+const app = await createApp({
+  plugins: [blogPlugin],
+  // Global config overrides (typed from Config)
+  siteName: 'Code & Coffee',
+  mode: 'production',
+  // Plugin configs (typed from plugin names)
+  blog: { postsPerPage: 5 },
 });
 
 await app.start();
 
-app.config.siteName;             // 'Code & Coffee' -- typed
-app.router.navigate('about');    // typed, framework default
-app.blog.listPosts();            // typed, consumer extra
-app.contactForm.submit({         // typed, consumer custom plugin
-  name: 'Alice', email: 'alice@example.com', message: 'Hello!',
-});
+app.router.navigate('/about');   // typed, framework default plugin
+app.blog.listPosts();            // typed, consumer extra plugin
+app.config.siteName;             // 'Code & Coffee' -- typed, frozen
 
-await app.destroy();
+await app.stop();
 ```
 
 ### Layer 3: Custom Plugin
@@ -199,12 +215,9 @@ await app.destroy();
 ```typescript
 // my-blog/src/plugins/contact-form/index.ts
 import { createPlugin } from 'my-framework';
-import type { ContactFormConfig, ContactFormApi } from './types';
 import { createContactFormApi } from './api';
 
-export const ContactFormPlugin = createPlugin<
-  'contactForm', ContactFormConfig, ContactFormApi
->('contactForm', {
+export const contactFormPlugin = createPlugin('contactForm', {
   depends: ['renderer'],
   api: createContactFormApi,
   hooks: { 'page:render': (payload) => { /* framework typed */ } },
@@ -223,27 +236,6 @@ export type ContactFormApi = {
 };
 ```
 
-### Layer 3: Multi-Instance Plugin
-
-```typescript
-import { createConfig, createApp, PrimaryDb, ReplicaDb } from 'my-api-framework';
-
-const config = createConfig(
-  { appName: 'My API' },
-  [PrimaryDb, ReplicaDb],
-);
-
-const app = await createApp(config, {
-  primaryDb: { connectionString: 'postgres://primary:5432/main' },
-  replicaDb: { connectionString: 'postgres://replica:5432/main' },
-});
-
-await app.start();
-
-app.primaryDb.query('INSERT INTO ...');   // typed, separate instance
-app.replicaDb.query('SELECT * FROM ...');  // typed, separate instance
-```
-
 ---
 
 ## 5. LLM System Prompt Fragment
@@ -253,87 +245,112 @@ For teams using Moku with LLM code generation, include this in your system promp
 ```
 You are generating code for a Moku-based application.
 
-ARCHITECTURE (3 layers):
-- Layer 1 (moku_core): Never touch this. Exports createCore only.
-- Layer 2 (framework): Defines createConfig, createApp, createPlugin,
-  createPluginFactory, BaseConfig, EventContract, default plugins.
-- Layer 3 (consumer): Uses createConfig + await createApp from the framework.
-  Configures and composes.
+ARCHITECTURE (3 layers, 3 steps):
+- Layer 1 (moku_core): Exports createCoreConfig only. Never import this in consumer code.
+- Layer 2 (framework): Uses createCoreConfig + createCore to define the framework.
+  Provides createApp and createPlugin to consumers.
+- Layer 3 (consumer): Uses createApp + createPlugin from the framework package.
 
-TWO-STEP PATTERN (ALWAYS follow this):
-  const config = createConfig(globalOverrides, [ExtraPlugin1, ExtraPlugin2]);
-  const app = await createApp(config, { pluginName: { ... }, ... });
+THREE-STEP PATTERN:
 
-  Step 1 (createConfig): declares WHAT the app is made of (global config + plugins).
-  Step 2 (await createApp): provides HOW each plugin is configured.
-  NEVER skip createConfig -- TypeScript needs it to type pluginConfigs.
-  ALWAYS await createApp -- it returns a Promise.
+  Step 1 -- Framework config.ts (createCoreConfig):
+    import { createCoreConfig } from 'moku_core';
+    type Config = { siteName: string; mode: 'dev' | 'prod' };
+    type Events = { 'app:start': { config: Config } };
+    export const coreConfig = createCoreConfig<Config, Events>('my-framework', {
+      config: { siteName: 'Untitled', mode: 'dev' },
+    });
+    export const { createPlugin, createCore } = coreConfig;
 
-CUSTOM PLUGINS:
+  Step 2 -- Framework index.ts (createCore):
+    import { createCore, coreConfig } from './config';
+    import { routerPlugin } from './plugins/router';
+    const framework = createCore(coreConfig, { plugins: [routerPlugin] });
+    export const { createApp, createPlugin } = framework;
+
+  Step 3 -- Consumer main.ts (createApp):
+    import { createApp, createPlugin } from 'my-framework';
+    const myPlugin = createPlugin('myPlugin', { ... });
+    const app = await createApp({
+      plugins: [myPlugin],
+      siteName: 'My App',
+      myPlugin: { someConfig: true },
+    });
+    await app.start();
+
+CREATING PLUGINS:
   import { createPlugin } from 'my-framework';  // NOT from moku_core
-  export const MyPlugin = createPlugin<'myPlugin', MyConfig, MyApi>('myPlugin', { ... });
+  export const myPlugin = createPlugin('myPlugin', {
+    defaultConfig: { /* optional defaults */ },
+    createState: (ctx) => ({ /* internal mutable state */ }),
+    api: (ctx) => ({
+      /* public methods -- this becomes app.myPlugin.methodName() */
+    }),
+    onInit: (ctx) => { /* runs during createApp, all plugins exist */ },
+    onStart: (ctx) => { /* runs during app.start() */ },
+    onStop: (ctx) => { /* runs during app.stop(), reverse order */ },
+    hooks: {
+      'eventName': (payload) => { /* react to typed events */ },
+    },
+  });
 
-  The framework's createPlugin gives your plugin typed ctx.global and ctx.emit.
-
-MULTI-INSTANCE PLUGINS:
-  import { createPluginFactory } from 'my-framework';
-  const createDbPlugin = createPluginFactory<DbConfig, DbApi, DbState>({ ... });
-  export const PrimaryDb = createDbPlugin('primaryDb');
-  export const ReplicaDb = createDbPlugin('replicaDb');
-
-RULES:
-- Never import from moku_core. Only import from the framework package.
-- Never create new abstractions (services, providers, managers). Use createPlugin.
-- Never put more than ~50 lines of logic in a plugin index.ts.
-- Plugin index.ts is a CONNECTION POINT. Domain code lives in separate files.
-- Use ctx.require('name') for dependencies. Use ctx.has('name') for optional deps.
-- Use ctx.emit() for all events (typed for known EventContract names, untyped fallback for ad-hoc).
-- Config types define the contract:
-    void = no config
-    { field?: string } = optional field
-    { field: string } = required field
-    defaultConfig present = config key optional in createApp
-    defaultConfig absent = config key required in createApp
-- If a plugin has defaultConfig, consumers can omit the config key entirely.
-- depends: ['pluginName'] declares dependencies. Validated at startup. Not a topological sort.
-
-ASYNC LIFECYCLE:
-  createState, onCreate, api(), onInit can all be async (return Promise).
-  Execution is sequential -- Plugin A completes before Plugin B begins.
-  createApp itself returns a Promise -- always use await.
-
-FILE STRUCTURE:
-plugins/
-  my-plugin/
-    index.ts       <- createPlugin() call, imports from other files (~30 lines)
-    types.ts       <- Config, API, State type definitions
-    state.ts       <- createState factory
-    api.ts         <- API factory
-    handlers.ts    <- Event handlers
-    validation.ts  <- Config validation
-    __tests__/     <- Tests for each domain file independently
-
-LIFECYCLE ORDER:
-  createState -> onCreate -> api() -> onInit -> [createApp resolves]
-  -> app.start() -> onStart
-  -> app.stop() -> onStop (reverse) -> app.destroy() -> onDestroy (reverse)
+  Optional generic: createPlugin<PluginEvents>('name', { ... })
+  for per-plugin typed events. All other types are inferred.
 
 CONTEXT RULES:
-  createState/onCreate: only { global, config }. NO getPlugin/require/emit.
-  api: full PluginContext. HAS everything including state and all communication.
-  onInit: InitContext + config. HAS getPlugin/require/has/emit. Use for dependency checks.
-  onStart: full PluginContext. HAS everything. Async.
-  onStop/onDestroy: only { global }. Minimal teardown context.
+  createState: only { global, config }. NO getPlugin/require/emit.
+  api, onInit, onStart: full PluginContext.
+    HAS global, config, state, emit, getPlugin, require, has.
+  onStop: TeardownContext. Only { global }. Minimal for cleanup.
 
-TESTING:
-  import { createTestCtx } from 'moku_core/testing';
-  Unit test domain files (api.ts, state.ts) with createTestCtx.
-  Integration test plugin wiring (index.ts) with createApp.
+LIFECYCLE (3 phases):
+  createApp: createState -> api -> onInit (forward order) -> app returned
+  app.start(): onStart (forward order)
+  app.stop(): onStop (REVERSE order)
+
+  All lifecycle methods support async (return void | Promise<void>).
+  Execution is sequential -- Plugin A completes before Plugin B begins.
+  createApp returns a Promise -- ALWAYS use await.
+
+EVENT SYSTEM:
+  Two sources of typed events:
+  1. Global events from createCoreConfig<Config, Events> -- available to all plugins.
+  2. Per-plugin events from createPlugin<PluginEvents> -- scoped to plugin.
+
+  ctx.emit('eventName', payload) -- fire event (typed for known names, untyped fallback).
+  hooks: { 'eventName': (payload) => { ... } } -- listen to events.
+  Events are notifications. Use ctx.require('name') for request/response.
+
+CONFIG RULES:
+  - defaultConfig present = config key optional in createApp
+  - defaultConfig absent + non-void config = config key required in createApp
+  - Shallow merge: { ...defaultConfig, ...consumerConfig }
+  - Configs are frozen after creation
+  - depends: ['pluginName'] declares dependencies. Validated at startup. Not a sort.
+
+FILE STRUCTURE:
+  plugins/
+    my-plugin/
+      index.ts       <- createPlugin() call, imports from other files (~30 lines)
+      types.ts       <- Config, API, State type definitions
+      state.ts       <- createState factory
+      api.ts         <- API factory
+      handlers.ts    <- Event handlers
+      __tests__/     <- Tests for each domain file independently
+
+RULES:
+  - Never import from moku_core. Only import from the framework package.
+  - Never create new abstractions (services, providers, managers). Use createPlugin.
+  - Never put more than ~50 lines of logic in a plugin index.ts.
+  - Plugin index.ts is a CONNECTION POINT. Domain code lives in separate files.
+  - Use ctx.require('name') for dependencies. Use ctx.has('name') for optional deps.
+  - ALWAYS await createApp -- it returns a Promise.
 
 APP-LEVEL TYPING:
-  app.getPlugin('router') returns RouterApi | undefined (typed, constrained to registered names)
-  app.require('router') returns RouterApi (typed, throws if missing)
-  app.router.navigate() is fully typed via BuildPluginApis
+  app.pluginName.method() is fully typed via the plugin's api return type.
+  app.config is the frozen global config object, fully typed.
+  app.start() starts all plugins (forward order).
+  app.stop() stops all plugins (reverse order). Terminal state after stop.
 ```
 
 ---
@@ -341,7 +358,5 @@ APP-LEVEL TYPING:
 ## Cross-References
 
 - Plugin system: [03-PLUGIN-SYSTEM](./03-PLUGIN-SYSTEM.md)
-- Testing: [10-TESTING](./10-TESTING.md)
 - Anti-patterns: [11-INVARIANTS](./11-INVARIANTS.md)
 - Architecture: [01-ARCHITECTURE](./01-ARCHITECTURE.md)
-
