@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createCore } from "../../src/index";
+import type { PluginInstance } from "../../src/types";
 
 // =============================================================================
 // Integration Test: Full Lifecycle Flow
@@ -22,8 +23,15 @@ import { createCore } from "../../src/index";
  * Hooks: "app:start" -> logs "app started"
  * defaultConfig: { prefix: "[LOG]" }
  */
-// biome-ignore lint/suspicious/noExplicitAny: Core parameter uses any to avoid CoreAPI generic invariance
-function createLoggerPlugin(core: { createPlugin: (...args: any[]) => any }) {
+type LoggerApi = { log: (msg: string) => void; getLog: () => string[] };
+type LoggerConfig = { prefix: string };
+type CounterApi = { increment: () => number; getCount: () => number };
+type CounterConfig = { initial: number };
+
+function createLoggerPlugin(core: {
+  // biome-ignore lint/suspicious/noExplicitAny: Core parameter uses any to avoid CoreAPI generic invariance
+  createPlugin: (...args: any[]) => any;
+}): PluginInstance<"logger", LoggerConfig, LoggerApi, { entries: string[] }> {
   return core.createPlugin("logger", {
     defaultConfig: { prefix: "[LOG]" },
     createState: () => ({ entries: [] as string[] }),
@@ -62,8 +70,12 @@ function createLoggerPlugin(core: { createPlugin: (...args: any[]) => any }) {
  * API: { increment: () => number, getCount: () => number }
  * depends: ["logger"]
  */
-// biome-ignore lint/suspicious/noExplicitAny: Core parameter uses any to avoid CoreAPI generic invariance
-function createCounterPlugin(core: { createPlugin: (...args: any[]) => any }, loggerPlugin: any) {
+function createCounterPlugin(
+  // biome-ignore lint/suspicious/noExplicitAny: Core parameter uses any to avoid CoreAPI generic invariance
+  core: { createPlugin: (...args: any[]) => any },
+  // biome-ignore lint/suspicious/noExplicitAny: Plugin instance used as dependency, erased at runtime
+  loggerPlugin: any
+): PluginInstance<"counter", CounterConfig, CounterApi, { count: number }> {
   return core.createPlugin("counter", {
     depends: [loggerPlugin],
     createState: (ctx: { config: { initial: number } }) => ({
@@ -120,52 +132,41 @@ describe("full lifecycle integration", () => {
     expect(Object.isFrozen(app)).toBe(true);
 
     // --- Verify plugin APIs exist on app ---
-    const appRecord = app as unknown as Record<string, unknown>;
-    expect(appRecord.logger).toBeDefined();
-    expect(appRecord.counter).toBeDefined();
-
-    const loggerApi = appRecord.logger as {
-      log: (msg: string) => void;
-      getLog: () => string[];
-    };
-    const counterApi = appRecord.counter as {
-      increment: () => number;
-      getCount: () => number;
-    };
-    const configs = appRecord.configs as Record<string, Record<string, unknown>>;
+    expect(app.logger).toBeDefined();
+    expect(app.counter).toBeDefined();
 
     // --- Verify config resolution via app.configs ---
     // Logger has defaultConfig { prefix: "[LOG]" }, no override -> uses default
-    expect(configs["logger"]!.prefix).toBe("[LOG]");
+    expect(app.configs.logger.prefix).toBe("[LOG]");
     // Counter was provided config { initial: 5 }
-    expect(configs["counter"]!.initial).toBe(5);
+    expect(app.configs.counter.initial).toBe(5);
 
     // --- Verify onInit ran (logger logged "initialized") ---
-    const preStartLog = loggerApi.getLog();
+    const preStartLog = app.logger.getLog();
     expect(preStartLog).toContain("[LOG] initialized");
 
     // --- Start the app ---
     await app.start();
 
     // --- Verify start order (onReady -> app:start hook -> onStart for each plugin) ---
-    const afterStartLog = loggerApi.getLog();
+    const afterStartLog = app.logger.getLog();
     // Logger's onStart adds "[LOG] started"
     expect(afterStartLog).toContain("[LOG] started");
     // Counter's onStart logs via logger
     expect(afterStartLog).toContain("[LOG] counter started at 5");
 
     // --- Use plugin APIs ---
-    const newCount = counterApi.increment();
+    const newCount = app.counter.increment();
     expect(newCount).toBe(6);
-    expect(counterApi.getCount()).toBe(6);
+    expect(app.counter.getCount()).toBe(6);
 
     // Verify increment was logged
-    const afterIncrementLog = loggerApi.getLog();
+    const afterIncrementLog = app.logger.getLog();
     expect(afterIncrementLog).toContain("[LOG] counter incremented to 6");
 
     // Increment again
-    counterApi.increment();
-    expect(counterApi.getCount()).toBe(7);
+    app.counter.increment();
+    expect(app.counter.getCount()).toBe(7);
 
     // --- Stop the app ---
     await app.stop();
@@ -173,7 +174,7 @@ describe("full lifecycle integration", () => {
     // --- Verify stop completed (no errors) ---
     // After stop, start() is a no-op again
     // We can verify by checking the log doesn't grow
-    const postStopLog = loggerApi.getLog();
+    const postStopLog = app.logger.getLog();
 
     // --- Destroy the app ---
     await app.destroy();
@@ -204,19 +205,14 @@ describe("full lifecycle integration", () => {
     });
 
     const app = await core.createApp(config);
-    const appRecord = app as unknown as Record<string, unknown>;
-    const loggerApi = appRecord.logger as {
-      getLog: () => string[];
-    };
-    const configs = appRecord.configs as Record<string, Record<string, unknown>>;
 
     // Logger gets overridden prefix via app.configs
-    expect(configs["logger"]!.prefix).toBe("[CUSTOM]");
+    expect(app.configs.logger.prefix).toBe("[CUSTOM]");
     // Counter gets provided initial via app.configs
-    expect(configs["counter"]!.initial).toBe(10);
+    expect(app.configs.counter.initial).toBe(10);
 
     // Verify the custom prefix is used in logs
-    const log = loggerApi.getLog();
+    const log = app.logger.getLog();
     expect(log[0]).toBe("[CUSTOM] initialized");
   });
 
@@ -233,7 +229,7 @@ describe("full lifecycle integration", () => {
     const logger = app.getPlugin("logger");
     expect(logger).toBeDefined();
 
-    const missing = app.getPlugin("counter");
+    const missing = app.getPlugin("counter" as never);
     expect(missing).toBeUndefined();
   });
 
@@ -252,9 +248,8 @@ describe("full lifecycle integration", () => {
     const app = await core.createApp(config);
 
     // Config is merged: framework defaults + consumer overrides
-    const appConfig = app.config as Record<string, unknown>;
-    expect(appConfig.env).toBe("test");
-    expect(appConfig.debug).toBe(true); // Consumer override wins
+    expect(app.config.env).toBe("test");
+    expect(app.config.debug).toBe(true); // Consumer override wins
 
     // Config is frozen
     expect(Object.isFrozen(app.config)).toBe(true);
