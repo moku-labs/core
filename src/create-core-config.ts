@@ -7,12 +7,13 @@
 // Config and Events flow from here into every downstream function. Plugin
 // authors never see or repeat these generics.
 //
-// createCore (Step 2) is defined within this closure but its implementation
-// body is deferred to Plan 03. The type signature is present so sandbox
-// tests can compile.
+// createCore (Step 2) captures framework defaults (plugins, pluginConfigs,
+// callbacks) and returns createApp + createPlugin. createApp delegates to the
+// kernel function (create-app.ts, Plan 04) with all captured context.
 // =============================================================================
 
 import { type BoundCreatePluginFunction, createPluginFactory } from "./create-plugin";
+import { flattenPlugins, validatePlugins } from "./flatten";
 import type { PluginInstance } from "./types";
 
 /** Widened PluginInstance type for generic constraints on arrays. */
@@ -113,8 +114,7 @@ function createCoreConfig<
   Config extends Record<string, unknown>,
   Events extends Record<string, unknown> = Record<string, never>
 >(id: string, options: { config: Config }): CoreConfigResult<Config, Events> {
-  // Capture in closure for downstream use by createCore (Plan 03).
-  // configDefaults is referenced only at type-level now; runtime use added in Plan 03.
+  // Capture in closure for downstream use by createCore and createApp.
   const configDefaults: Config = options.config;
   const _frameworkId: string = id;
 
@@ -127,13 +127,14 @@ function createCoreConfig<
   >(_frameworkId);
 
   // -------------------------------------------------------------------------
-  // createCore (Step 2 -- type signature present, runtime deferred to Plan 03)
+  // createCore (Step 2 -- captures framework defaults, returns createApp)
   // -------------------------------------------------------------------------
 
   /**
    * Step 2: Captures framework default plugins and returns createApp.
    * @param _coreConfig - The CoreConfigResult object (for type flow).
-   * @param _options - Framework-level defaults: plugins, pluginConfigs, onReady, onError.
+   * @param coreOptions - Framework-level defaults: plugins, pluginConfigs, onReady, onError.
+   * @returns An object with createApp (async function) and createPlugin (same reference).
    * @example
    * ```ts
    * const framework = createCore(coreConfig, { plugins: [routerPlugin] });
@@ -141,20 +142,63 @@ function createCoreConfig<
    */
   const createCore: BoundCreateCoreFunction<Config, Events> = (
     _coreConfig,
-    _options
+    coreOptions
   ): CreateCoreResult<Config, Events> => {
-    // configDefaults is captured in closure for runtime use in Plan 03.
-    // Reference it here to prevent unused variable lint error until then.
-    if (configDefaults === undefined) {
-      // unreachable: configDefaults is always defined from options.config
-    }
+    // Capture framework-level context for use by createApp
+    const defaultPlugins = coreOptions.plugins;
+    const frameworkPluginConfigs = coreOptions.pluginConfigs ?? {};
+    const onReady = coreOptions.onReady;
+    const onError = coreOptions.onError;
 
-    // Runtime implementation deferred to Plan 03 (kernel, flatten, lifecycle).
-    // This stub has the correct type signature so sandbox type tests compile.
-    throw new Error(
-      `[${_frameworkId}] createCore is not yet implemented.\n` +
-        `  The kernel runtime will be added in plan 20-03.`
-    );
+    /**
+     * Step 3: Creates and initializes the application.
+     * Merges consumer options with framework defaults, flattens and validates
+     * plugins, then delegates to the kernel for lifecycle execution.
+     * @param consumerOptions - Consumer-level config overrides, plugin configs, extra plugins.
+     * @returns A promise that resolves to the frozen App object.
+     * @example
+     * ```ts
+     * const app = await createApp({ siteName: "Blog", router: { basePath: "/blog" } });
+     * ```
+     */
+    // biome-ignore lint/suspicious/noExplicitAny: createApp options and return are dynamically typed based on registered plugins
+    const createApp = async (consumerOptions?: any): Promise<any> => {
+      // Extract extra plugins from consumer options
+      const { plugins: extraPlugins, ...rest } = consumerOptions ?? {};
+
+      // Merge plugin lists: framework defaults first, consumer extras second
+      const allPlugins = [...defaultPlugins, ...(extraPlugins ?? [])];
+
+      // Flatten sub-plugins depth-first (children before parent)
+      const flatPlugins = flattenPlugins(allPlugins);
+
+      // Validate: reserved names, duplicates, dependency existence and order
+      validatePlugins(_frameworkId, flatPlugins);
+
+      // Delegate to kernel function (create-app.ts, Plan 04).
+      // The kernel receives all captured context and handles:
+      // config resolution, state creation, event bus, API building, lifecycle.
+      // biome-ignore lint/suspicious/noExplicitAny: kernel context is loosely typed until Plan 04
+      const kernelContext: any = {
+        id: _frameworkId,
+        configDefaults,
+        defaultPlugins,
+        frameworkPluginConfigs,
+        onReady,
+        onError,
+        flatPlugins,
+        consumerOverrides: rest
+      };
+
+      // Kernel implementation goes here in Plan 04 (create-app.ts).
+      // For now, throw to indicate Plan 04 is needed.
+      throw new Error(
+        `[${_frameworkId}] createApp kernel is not yet implemented.\n` +
+          `  The kernel runtime will be added in plan 20-04. Context captured: ${Object.keys(kernelContext).join(", ")}`
+      );
+    };
+
+    return { createApp, createPlugin };
   };
 
   return { createPlugin, createCore };
