@@ -1,6 +1,6 @@
 # 09 - Type System
 
-**Domain:** Phantom types, type helpers, BuildPluginApis, App type, typed getPlugin
+**Domain:** Phantom types, type helpers, BuildPluginApis, App type, typed getPlugin, EventContract
 **Sources:** SPEC_EVOLUTION (v2), SPEC_DEFINITIVE (v1.0.0-rc1), SPEC_IMPROVEMENTS_IDEAS (P2, P5)
 
 ---
@@ -127,78 +127,36 @@ This maps each plugin in the union to a property on the app, keyed by the plugin
 
 ## 6. The App Type
 
-### Variant A: Loose getPlugin/require (base)
-
 ```typescript
 type App<
   G extends Record<string, any>,
-  Bus extends Record<string, any>,
+  Events extends Record<string, any>,
   P extends PluginInstance,
 > = {
   /** Global config, frozen */
-  readonly config: Readonly<G> & {
-    get: <K extends keyof G>(key: K) => G[K];
-  };
+  readonly config: Readonly<G>;
 
-  /** Fire typed bus event. Constrained to BusContract. */
-  emit: <K extends string & keyof Bus>(hook: K, payload: Bus[K]) => Promise<void>;
+  /** Per-plugin resolved configs accessor. Frozen. */
+  readonly configs: BuildPluginConfigsAccessor<P>;
 
-  /** Fire untyped signal. Any string, any payload. */
-  signal: (name: string, payload?: any) => Promise<void>;
-
-  /** Get plugin API by name. Returns undefined if not found. */
-  getPlugin: <T = any>(name: string) => T | undefined;
-
-  /** Get plugin API or throw with clear error. */
-  require: <T = any>(name: string) => T;
-
-  /** Check if a plugin is registered. */
-  has: (name: string) => boolean;
-
-  /** Start the app. Idempotent. */
-  start: () => Promise<void>;
-
-  /** Stop the app. Reverse order. Idempotent. */
-  stop: () => Promise<void>;
-
-  /** Destroy. Calls stop() if needed. Idempotent. */
-  destroy: () => Promise<void>;
-} & Prettify<BuildPluginApis<P>>;
-```
-
-In this variant, `getPlugin` and `require` are loosely typed. For typed access, consumers use `app.router.method()` directly -- that's fully typed via `BuildPluginApis`.
-
-### Variant B: Typed getPlugin/require (with SignalRegistry)
-
-```typescript
-type App<
-  G extends Record<string, any>,
-  Bus extends Record<string, any>,
-  Signals extends Record<string, any>,
-  P extends PluginInstance,
-> = {
-  /** Global config, frozen */
-  readonly config: Readonly<G> & {
-    get: <K extends keyof G>(key: K) => G[K];
-  };
-
-  /** Fire typed bus event. Constrained to BusContract. */
-  emit: <K extends string & keyof Bus>(hook: K, payload: Bus[K]) => Promise<void>;
-
-  /** Fire signal. Typed for known names, untyped for unknown names. */
-  signal: {
-    <K extends string & keyof Signals>(name: K, payload: Signals[K]): Promise<void>;
-    (name: string, payload?: any): Promise<void>;
+  /**
+   * Fire an event. Overloaded:
+   *   - Known names (in EventContract): typed required payload.
+   *   - Unknown names: untyped optional payload (escape hatch).
+   */
+  emit: {
+    <K extends string & keyof Events>(name: K, payload: Events[K]): Promise<void>;
+    (name: string, payload?: unknown): Promise<void>;
   };
 
   /**
-   * Get plugin API by name. Typed on App -- constrained to registered plugin names.
+   * Get plugin API by name. Typed -- constrained to registered plugin names.
    * Returns undefined if not found.
    */
   getPlugin: <N extends PluginName<P>>(name: N) => PluginApiByName<P, N> | undefined;
 
   /**
-   * Get plugin API or throw with clear error. Typed on App -- constrained to registered plugin names.
+   * Get plugin API or throw with clear error. Typed -- constrained to registered plugin names.
    */
   require: <N extends PluginName<P>>(name: N) => PluginApiByName<P, N>;
 
@@ -211,10 +169,12 @@ type App<
   /** Stop the app. Reverse order. Idempotent. */
   stop: () => Promise<void>;
 
-  /** Destroy. Calls stop() if needed. Idempotent. */
+  /** Destroy. Calls stop() if needed. Terminal -- second call throws. */
   destroy: () => Promise<void>;
 } & Prettify<BuildPluginApis<P>>;
 ```
+
+**Typed emit on App:** Emit is overloaded with typed known events and untyped fallback. There is no separate method for plugin-to-plugin communication -- everything goes through `emit`.
 
 **Typed getPlugin/require on App:**
 
@@ -231,7 +191,7 @@ const logger = app.require('logger');
 // Inferred: LoggerApi & { config: Readonly<LoggerConfig> }
 ```
 
-**Inside plugin definitions: stays loose.** At plugin definition time, the full plugin union isn't known. `getPlugin` and `require` inside `PluginSpec` remain `<T = any>(name: string)`. Plugin authors cast manually or use the `depends` field. This is the same two-phase pattern: loose at definition, strict at consumption.
+**Inside plugin definitions: stays loose.** At plugin definition time, the full plugin union isn't known. `getPlugin` and `require` inside `PluginSpec` use the three-overload-tier pattern based on the `depends` tuple. Plugin authors get typed access to declared dependencies, and an untyped escape hatch for everything else.
 
 ---
 
@@ -263,17 +223,18 @@ TypeScript recursion depth limit: cap at 4 levels. Sub-plugins beyond level 4 wo
 ## 8. The Full Type Flow
 
 ```
-Layer 1: createCore<BaseConfig, BusContract, SignalRegistry>
+Layer 1: createCore<BaseConfig, EventContract>
   | returns CoreAPI bound to these generics
 Layer 2: const { createConfig, createApp, createPlugin } = createCore(...)
-  | framework exports these -- they carry BaseConfig, BusContract, SignalRegistry
+  | framework exports these -- they carry BaseConfig, EventContract
 Layer 3: createConfig(globalOverrides, [ExtraPlugin])
   | returns AppConfig carrying AllPlugins = DefaultPlugins | ExtraPlugin
 Layer 3: await createApp(config, pluginConfigs)
   | TypeScript infers P from config._allPlugins
   | pluginConfigs typed as BuildPluginConfigs<P> -- knows every plugin
-  | returns Promise<App<BaseConfig, BusContract, SignalRegistry, P>>
+  | returns Promise<App<BaseConfig, EventContract, P>>
   | every API fully typed, getPlugin/require constrained to registered names
+  | emit typed for known events, untyped fallback for ad-hoc
 ```
 
 ---
@@ -283,4 +244,3 @@ Layer 3: await createApp(config, pluginConfigs)
 - Plugin system: [03-PLUGIN-SYSTEM](./03-PLUGIN-SYSTEM.md)
 - Config system: [05-CONFIG-SYSTEM](./05-CONFIG-SYSTEM.md)
 - Context object: [08-CONTEXT](./08-CONTEXT.md)
-

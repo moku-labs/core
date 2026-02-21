@@ -1,169 +1,115 @@
 # 07 - Communication Model
 
-**Domain:** emit, signal, hooks, BusContract, SignalRegistry
+**Domain:** emit, hooks, EventContract
 **Sources:** SPEC_EVOLUTION (v2), SPEC_DEFINITIVE (v1.0.0-rc1), SPEC_IMPROVEMENTS_IDEAS (P3)
 
 ---
 
-## 1. Three Channels
+## 1. Two Channels
 
-The kernel provides exactly three communication mechanisms:
+The kernel provides exactly two communication mechanisms:
 
 **Channel 1: Lifecycle callbacks (typed ctx)**
 
 `onCreate`, `onInit`, `onStart`, `onStop`, `onDestroy` -- each receives a typed `ctx` object. These are the structured, predictable communication points. The kernel calls them in a defined order.
 
-**Channel 2: Bus events -- `emit(name, payload)` (typed)**
+**Channel 2: Events -- `emit(name, payload)` (unified)**
 
-Constrained to event names declared in the framework's `BusContract`. Payload types are checked at compile time. These are the framework's official events.
-
-**Channel 3: Signals -- `signal(name, payload)`**
-
-Signals are for plugin-to-plugin ad-hoc communication. Typing depends on the variant chosen.
+A single `emit` method handles all event communication. Known event names (declared in the framework's `EventContract`) get fully typed payloads. Unknown event names (any string) are allowed as an untyped escape hatch for ad-hoc plugin-to-plugin communication.
 
 ---
 
-## 2. emit -- Typed Bus Events
+## 2. emit -- Unified Events
 
 ```typescript
-emit: <K extends string & keyof Bus>(hook: K, payload: Bus[K]) => Promise<void>;
-```
-
-- Names constrained to `BusContract` keys
-- Payload type checked at compile time
-- Defined by framework author (Layer 2)
-- Use case: framework lifecycle events, known events
-- Convention: `app:*`, `page:*`, `build:*`
-
-**emit is strict:** All emit names must be declared in the BusContract. Unknown names are a compile error. This is appropriate because framework events are a closed set -- the framework author controls all of them.
-
----
-
-## 3. signal -- Plugin-to-Plugin Events
-
-### Variant A: Fully Untyped signal
-
-```typescript
-signal: (name: string, payload?: any) => Promise<void>;
-```
-
-Any string name, any payload. Fire-and-forget pub/sub. Plugin-to-plugin ad-hoc communication that the framework doesn't need to know about.
-
-### Variant B: Optionally Typed signal (with SignalRegistry)
-
-```typescript
-signal: {
-  // Overload 1: known signal name -- typed payload
-  <K extends string & keyof Signals>(name: K, payload: Signals[K]): Promise<void>;
-  // Overload 2: unknown signal name -- untyped escape hatch
-  (name: string, payload?: any): Promise<void>;
+emit: {
+  // Overload 1: known event name -- typed required payload
+  <K extends string & keyof Events>(name: K, payload: Events[K]): Promise<void>;
+  // Overload 2: unknown event name -- untyped optional payload (escape hatch)
+  (name: string, payload?: unknown): Promise<void>;
 };
 ```
 
-Known signal names (declared in `SignalRegistry`) get strict typing. Unknown names fall through to `any`. One method, two behaviors.
+- Known names constrained to `EventContract` keys -- payload type checked at compile time
+- Unknown names allowed as untyped escape hatch -- payload is optional `unknown`
+- Defined by framework author (Layer 2) for known events
+- Plugin authors can emit ad-hoc events via the untyped overload
+- Convention: `app:*` for kernel events, `page:*`, `build:*` for framework events, `pluginName:eventName` for plugin events
 
-When `SignalRegistry` is `{}` (the default): the first overload matches nothing. All signals are untyped. Zero cost for frameworks that don't use it.
+**emit is overloaded:** Known event names (in EventContract) get strict type checking. Unknown names fall through to the untyped overload. One method, two behaviors. This replaces the previous dual `emit`/`signal` model with a single unified approach.
 
----
-
-## 4. emit vs signal Comparison
-
-| | `emit(name, payload)` | `signal(name, payload)` |
-|---|---|---|
-| Names constrained to | BusContract keys | SignalRegistry keys (typed) or any string (untyped) |
-| Payload type checked | Yes, always | Variant A: No / Variant B: Yes for known names, no for unknown |
-| Defined by | Framework author (Layer 2) | Framework + plugin authors (Layer 2 or 3) |
-| Use case | Framework lifecycle, known events | Plugin-to-plugin communication |
-| Convention | `app:*`, `page:*`, `build:*` | `pluginName:eventName` |
-| Unknown names | Compile error | Allowed (untyped) |
-| Escape hatch | None | Built-in (via any string) |
-
-**Rule:** Framework events go through `emit`. Plugin events go through `signal`. Both dispatch to the same `hooks` field on plugins -- a handler registered for `'router:navigate'` fires whether it came via `emit` or `signal`.
-
-**Design rationale:** `emit` is strict because framework events are a closed set -- the framework author controls all of them. `signal` is lenient because plugin signals are an open set -- consumer plugins may define signals the framework doesn't know about.
+When `EventContract` is `{}` (the default): the first overload matches nothing. All events are untyped. Zero cost for frameworks that don't use it.
 
 ---
 
-## 5. BusContract
+## 3. EventContract
 
-The `BusContract` is a type-level declaration of "events this framework declares." Defined at Layer 2 by the framework author.
+The `EventContract` is a type-level declaration of "events this framework declares." Defined at Layer 2 by the framework author.
 
 ```typescript
-type BusContract = {
-  'app:boot':      { config: BaseConfig };
-  'app:ready':     { config: BaseConfig };
-  'app:shutdown':  { config: BaseConfig };
-  'page:render':   { path: string; html: string };
-  'page:error':    { path: string; error: Error };
+type EventContract = {
+  'app:boot':           { config: BaseConfig };
+  'app:ready':          { config: BaseConfig };
+  'app:shutdown':       { config: BaseConfig };
+  'page:render':        { path: string; html: string };
+  'page:error':         { path: string; error: Error };
+  'router:navigate':    { from: string; to: string };
+  'router:notFound':    { path: string; fallback: string };
+  'renderer:render':    { path: string; html: string };
+  'auth:login':         { userId: string };
+  'auth:logout':        {};
 };
 ```
 
 **What it does:**
 
 1. `ctx.emit('page:render', payload)` -- TypeScript checks that `'page:render'` is a valid key and that `payload` matches `{ path: string; html: string }`.
-2. **IDE autocomplete** -- Plugin authors get autocomplete for bus event names and typed payload shapes.
-3. **Documentation** -- The BusContract IS the documentation of the framework's event API. An LLM reads the type and knows every event that can fire.
+2. `ctx.emit('myPlugin:customEvent', data)` -- Unknown name, falls through to untyped overload. No compile error. Payload is optional `unknown`.
+3. **IDE autocomplete** -- Plugin authors get autocomplete for known event names and typed payload shapes.
+4. **Documentation** -- The EventContract IS the documentation of the framework's event API. An LLM reads the type and knows every event that can fire.
 
-**BusContract is Layer 2 only.** `moku_core` (Layer 1) is generic over `BusContract`. It doesn't define any events itself.
-
----
-
-## 6. SignalRegistry
-
-The `SignalRegistry` is an optional type-level declaration of "known plugin-to-plugin signals." Defined at Layer 2 by the framework author.
-
-```typescript
-type SignalRegistry = {
-  'router:navigate':  { from: string; to: string };
-  'router:notFound':  { path: string; fallback: string };
-  'renderer:render':  { path: string; html: string };
-  'auth:login':       { userId: string };
-  'auth:logout':      {};
-};
-```
-
-### BusContract vs SignalRegistry
-
-| | BusContract | SignalRegistry |
-|---|---|---|
-| Controls | `ctx.emit()` | `ctx.signal()` |
-| Scope | Framework lifecycle events | Plugin-to-plugin events |
-| Required? | No (defaults to `{}`) | No (defaults to `{}`) |
-| Unknown names | Compile error | Falls through to untyped |
-| Escape hatch | None -- all emit names must be declared | Built-in via overloads |
+**EventContract is Layer 2.** `moku_core` (Layer 1) is generic over `EventContract`. It doesn't define any events itself.
 
 ### Different Frameworks, Different Vocabularies
 
-Same kernel. Different bus contracts. Different signal registries. Different frameworks.
+Same kernel. Different event contracts. Different frameworks.
 
-- A site builder has `page:render`, `page:error`, `seo:meta`
+- A site builder has `page:render`, `page:error`, `seo:meta`, `router:navigate`
 - A game engine has `loop:tick`, `input:keydown`, `physics:collision`
 - A CLI toolkit has `cli:beforeRun`, `cli:afterRun`, `output:write`
 - A bot SDK has `agent:beforeCall`, `agent:afterCall`, `memory:store`
 
 ---
 
-## 7. Hooks
+## 4. Hooks
 
 Plugins subscribe to events via the `hooks` field on `PluginSpec`:
 
 ```typescript
 hooks: {
   'page:render': (payload) => {
-    // BusContract event -- payload type known from framework
-    const { path, html } = payload as { path: string; html: string };
-    console.log(`Rendered ${path}`);
+    // EventContract event -- payload type is { path: string; html: string }
+    console.log(`Rendered ${payload.path}`);
   },
   'router:navigate': (payload) => {
-    // Signal -- payload typed if using SignalRegistry, otherwise cast manually
-    const { from, to } = payload as { from: string; to: string };
-    console.log(`${from} -> ${to}`);
+    // EventContract event -- payload type is { from: string; to: string }
+    console.log(`${payload.from} -> ${payload.to}`);
   },
   'myPlugin:customEvent': (payload) => {
-    // Unknown signal -- cast payload manually
+    // Unknown event -- payload type is `unknown`, cast manually
     const { data } = payload as { data: number };
   },
 }
+```
+
+**Typed hooks:** When a hook key matches a known event name in EventContract, the handler receives a typed payload. When the key is an unknown event name, the handler receives `unknown`. This is enforced via a mapped conditional type:
+
+```typescript
+hooks?: {
+  [K in string]?: K extends keyof Events
+    ? (payload: Events[K]) => void | Promise<void>
+    : (payload: unknown) => void | Promise<void>;
+};
 ```
 
 **Convention: namespace with the emitting plugin's name.** `router:navigate`, `build:start`, `auth:login`. This prevents collisions. Convention, not enforced.
@@ -172,9 +118,9 @@ hooks: {
 
 ---
 
-## 8. Kernel-Emitted Events
+## 5. Kernel-Emitted Events
 
-Regardless of what the framework puts in `BusContract`, the kernel always emits:
+Regardless of what the framework puts in `EventContract`, the kernel always emits:
 
 | Event | When | Payload |
 |---|---|---|
@@ -182,11 +128,11 @@ Regardless of what the framework puts in `BusContract`, the kernel always emits:
 | `app:stop` | After plugin onStop calls | `{ config }` |
 | `app:destroy` | After plugin onDestroy calls | `{}` |
 
-If the framework's `BusContract` includes these keys, the payload type is enforced. If not, they still fire with the default payload.
+If the framework's `EventContract` includes these keys, the payload type is enforced. If not, they still fire with the default payload via the untyped overload.
 
 ---
 
-## 9. What About Middleware / Pipes?
+## 6. What About Middleware / Pipes?
 
 **Not in the kernel.** If a plugin needs request transformation, build pipeline, or render chain, it implements that internally. The plugin exposes an API method for other plugins to register middleware:
 
@@ -225,4 +171,3 @@ This is more code than a built-in `pipe` primitive. But it's explicit, debuggabl
 - Plugin spec: [03-PLUGIN-SYSTEM](./03-PLUGIN-SYSTEM.md)
 - Type system: [09-TYPE-SYSTEM](./09-TYPE-SYSTEM.md)
 - Invariants: [11-INVARIANTS](./11-INVARIANTS.md)
-

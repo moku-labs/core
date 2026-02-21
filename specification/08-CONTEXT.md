@@ -1,6 +1,6 @@
 # 08 - Context Object
 
-**Domain:** ctx object, BaseCtx, PluginCtx, phase-appropriate context rules
+**Domain:** ctx object, context tiers, phase-appropriate context rules
 **Sources:** SPEC_EVOLUTION (v2), SPEC_DEFINITIVE (v1.0.0-rc1)
 
 ---
@@ -11,128 +11,113 @@
 
 ---
 
-## 2. Base Context
+## 2. Context Tiers
 
-### Variant A: Without SignalRegistry
+The context system uses four tiers, each structurally extending the previous. Context grows through the lifecycle:
+
+```
+TeardownContext (least) -> MinimalContext -> InitContext -> PluginContext (most)
+```
+
+All context types use unified `EventContract` (single generic for all events).
+
+### TeardownContext
 
 ```typescript
-type BaseCtx<
-  G extends Record<string, any>,
-  Bus extends Record<string, any>,
-> = {
+type TeardownContext<G> = {
   /** Global config (BaseConfig merged with consumer overrides). Frozen. */
   readonly global: Readonly<G>;
-
-  /** Fire typed event. Constrained to BusContract keys. Payload type-checked. */
-  emit: <K extends string & keyof Bus>(hook: K, payload: Bus[K]) => Promise<void>;
-
-  /** Fire untyped event. Any string, any payload. Plugin-to-plugin ad-hoc. */
-  signal: (name: string, payload?: any) => Promise<void>;
-
-  /** Get plugin API by name. Returns undefined if not found. */
-  getPlugin: <T = any>(name: string) => T | undefined;
-
-  /** Get plugin API or throw with clear error. */
-  require: <T = any>(name: string) => T;
-
-  /** Check if a plugin is registered. */
-  has: (name: string) => boolean;
 };
 ```
 
-### Variant B: With SignalRegistry
+Used by: `onStop`, `onDestroy`. During teardown, plugins may be partially or fully stopped. Minimal context prevents reliance on other plugins.
+
+### MinimalContext
 
 ```typescript
-type BaseCtx<
-  G extends Record<string, any>,
-  Bus extends Record<string, any>,
-  Signals extends Record<string, any>,
-> = {
-  /** Global config (BaseConfig merged with consumer overrides). Frozen. */
-  readonly global: Readonly<G>;
+type MinimalContext<G, C> = TeardownContext<G> & {
+  /** This plugin's resolved config. Frozen. */
+  readonly config: Readonly<C>;
+};
+```
 
-  /** Fire typed event. Constrained to BusContract keys. Payload type-checked. */
-  emit: <K extends string & keyof Bus>(hook: K, payload: Bus[K]) => Promise<void>;
+Used by: `createState`, `onCreate`. At this stage, not all plugins have been created yet. Communication methods are intentionally unavailable.
 
+### InitContext
+
+```typescript
+type InitContext<
+  G,
+  Events extends Record<string, unknown>,
+  C,
+  Deps extends readonly PluginLikeInstance[] = readonly PluginLikeInstance[]
+> = MinimalContext<G, C> & {
   /**
-   * Fire signal. Overloaded:
-   *   - Known names (in SignalRegistry): typed payload.
-   *   - Unknown names: any payload (escape hatch).
+   * Fire an event. Overloaded:
+   *   - Known names (in EventContract): typed required payload.
+   *   - Unknown names: untyped optional payload (escape hatch).
    */
-  signal: {
-    <K extends string & keyof Signals>(name: K, payload: Signals[K]): Promise<void>;
-    (name: string, payload?: any): Promise<void>;
+  emit: {
+    <K extends string & keyof Events>(name: K, payload: Events[K]): Promise<void>;
+    (name: string, payload?: unknown): Promise<void>;
   };
 
-  /** Get plugin API by name. Returns undefined if not found. */
-  getPlugin: <T = any>(name: string) => T | undefined;
+  /**
+   * Get plugin API by instance or name. Three overload tiers:
+   * 1. Pass instance from depends -> fully typed API | undefined
+   * 2. Pass name string from depends tuple -> typed API | undefined
+   * 3. Pass any string -> unknown (untyped escape hatch)
+   */
+  getPlugin: { ... };
 
-  /** Get plugin API or throw with clear error. */
-  require: <T = any>(name: string) => T;
+  /**
+   * Get plugin API or throw. Three overload tiers (same as getPlugin).
+   */
+  require: { ... };
 
   /** Check if a plugin is registered. */
   has: (name: string) => boolean;
 };
 ```
 
----
+Used by: `onInit`. All plugins are created and APIs are mounted. Dependencies can be checked with `require`/`has`.
 
-## 3. Plugin Context (extends base)
-
-### Variant A: Without SignalRegistry
+### PluginContext
 
 ```typescript
-type PluginCtx<
-  G extends Record<string, any>,
-  Bus extends Record<string, any>,
+type PluginContext<
+  G,
+  Events extends Record<string, unknown>,
   C,
   S,
-> = BaseCtx<G, Bus> & {
-  /** This plugin's resolved config. Frozen. */
-  readonly config: Readonly<C>;
-
+  Deps extends readonly PluginLikeInstance[] = readonly PluginLikeInstance[]
+> = InitContext<G, Events, C, Deps> & {
   /** This plugin's internal mutable state. Mutable by design. */
   state: S;
 };
 ```
 
-### Variant B: With SignalRegistry
-
-```typescript
-type PluginCtx<
-  G extends Record<string, any>,
-  Bus extends Record<string, any>,
-  Signals extends Record<string, any>,
-  C,
-  S,
-> = BaseCtx<G, Bus, Signals> & {
-  /** This plugin's resolved config. Frozen. */
-  readonly config: Readonly<C>;
-
-  /** This plugin's internal mutable state. Mutable by design. */
-  state: S;
-};
-```
+Used by: `api`, `onStart`. Everything is live. The plugin's internal mutable state is available. This is the richest context tier.
 
 ---
 
-## 4. Which Lifecycle Gets What
+## 3. Which Lifecycle Gets What
 
 | Lifecycle | Context received | Rationale |
 |---|---|---|
 | `createState` | `{ global, config }` | State factory. No other plugins exist yet. No emit, no getPlugin. |
 | `onCreate` | `{ global, config }` | Validate config. No other plugins available. |
-| `api` | `PluginCtx` (full) | Build public API. State available. Other plugins accessible. |
-| `onInit` | `BaseCtx & { config }` | All plugins created and APIs mounted. Check deps with `require`/`has`. |
-| `onStart` | `PluginCtx` (full) | App is starting. Everything is live. Async allowed. |
+| `api` | `PluginContext` (full) | Build public API. State available. Other plugins accessible. |
+| `onInit` | `InitContext` (full except state) | All plugins created and APIs mounted. Check deps with `require`/`has`. |
+| `onStart` | `PluginContext` (full) | App is starting. Everything is live. Async allowed. |
 | `onStop` | `{ global }` | Teardown. Minimal context -- don't rely on other plugins. |
 | `onDestroy` | `{ global }` | Final cleanup. Same as onStop. |
 
 ---
 
-## 5. Phase-Appropriate Context Rules
+## 4. Phase-Appropriate Context Rules
 
-**Critical rule: `require`/`has`/`getPlugin`/`emit`/`signal` are NOT available in `createState` or `onCreate`.**
+**Critical rule: `require`/`has`/`getPlugin`/`emit` are NOT available in `createState` or `onCreate`.**
 
 At that point, not all plugins have been created. Providing these methods would be a lie -- they'd return incomplete data.
 
@@ -151,11 +136,11 @@ By restricting context per phase, the kernel prevents an entire class of orderin
 ```
 createState:    { global, config }                            (minimal)
 onCreate:       { global, config }                            (minimal)
-api:            { global, config, state, emit, signal,        (full)
+api:            { global, config, state, emit,                (full)
                   getPlugin, require, has }
-onInit:         { global, config, emit, signal,               (full except state)
+onInit:         { global, config, emit,                       (full except state)
                   getPlugin, require, has }
-onStart:        { global, config, state, emit, signal,        (full)
+onStart:        { global, config, state, emit,                (full)
                   getPlugin, require, has }
 onStop:         { global }                                    (minimal)
 onDestroy:      { global }                                    (minimal)
@@ -167,7 +152,7 @@ During teardown, plugins may be partially or fully stopped. Accessing other plug
 
 ---
 
-## 6. BaseCtx Methods
+## 5. Context Methods
 
 ### `getPlugin(pluginOrName)` -- Three Overload Tiers
 
@@ -258,11 +243,7 @@ if (ctx.has('analytics')) {
 
 ### `emit(name, payload)`
 
-Fire a typed bus event. See [07-COMMUNICATION](./07-COMMUNICATION.md).
-
-### `signal(name, payload)`
-
-Fire a signal (typed or untyped depending on variant). See [07-COMMUNICATION](./07-COMMUNICATION.md).
+Fire an event. Overloaded: known event names (in EventContract) get typed required payload. Unknown names get untyped optional payload. See [07-COMMUNICATION](./07-COMMUNICATION.md).
 
 ---
 
@@ -272,4 +253,3 @@ Fire a signal (typed or untyped depending on variant). See [07-COMMUNICATION](./
 - Lifecycle phases: [06-LIFECYCLE](./06-LIFECYCLE.md)
 - Communication: [07-COMMUNICATION](./07-COMMUNICATION.md)
 - Type system: [09-TYPE-SYSTEM](./09-TYPE-SYSTEM.md)
-

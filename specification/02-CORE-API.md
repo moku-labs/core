@@ -21,42 +21,24 @@ One function at the main entry point. That's the package.
 
 ## 2. createCore Signature
 
-### Variant A: Two Generics (base)
-
 ```typescript
 function createCore<
   BaseConfig extends Record<string, any>,
-  BusContract extends Record<string, any> = {},
+  EventContract extends Record<string, any> = {},
 >(
   name: string,
   defaults: CoreDefaults<BaseConfig>,
-): CoreAPI<BaseConfig, BusContract>;
+): CoreAPI<BaseConfig, EventContract>;
 ```
-
-Signals are fully untyped. `signal()` accepts any string name and any payload.
-
-### Variant B: Three Generics (with SignalRegistry)
-
-```typescript
-function createCore<
-  BaseConfig extends Record<string, any>,
-  BusContract extends Record<string, any> = {},
-  SignalRegistry extends Record<string, any> = {},
->(
-  name: string,
-  defaults: CoreDefaults<BaseConfig>,
-): CoreAPI<BaseConfig, BusContract, SignalRegistry>;
-```
-
-When `SignalRegistry` is `{}` (the default), `signal()` is fully untyped -- identical to Variant A. When populated, `signal()` gains type checking for known signal names via TypeScript overloads, while unknown signal names still work untyped. Zero cost for frameworks that don't use it.
 
 **Generic parameters:**
 
 | Param | Purpose | Set by | Default |
 |---|---|---|---|
 | `BaseConfig` | Shape of global config every app of this framework needs | Framework author (Layer 2) | (required) |
-| `BusContract` | Map of event names to payload types the framework declares | Framework author (Layer 2) | `{}` |
-| `SignalRegistry` | Map of known plugin signal names to payload types | Framework author (Layer 2) | `{}` |
+| `EventContract` | Map of all event names to payload types (framework events + known plugin events) | Framework author (Layer 2) | `{}` |
+
+When `EventContract` is `{}` (the default), `emit()` is fully untyped -- all events use the untyped overload. When populated, `emit()` gains type checking for known event names via TypeScript overloads, while unknown event names still work untyped. Zero cost for frameworks that don't use it.
 
 **`name`:** Human-readable framework name. Used in error messages: `"[moku-site] Duplicate plugin name: router"`
 
@@ -95,41 +77,22 @@ type CoreDefaults<BaseConfig extends Record<string, any>> = {
 
 ## 4. CoreAPI -- What createCore Returns
 
-### Variant A: 6 Functions
-
 ```typescript
 type CoreAPI<
   BaseConfig extends Record<string, any>,
-  BusContract extends Record<string, any>,
+  EventContract extends Record<string, any>,
 > = {
   createConfig: CreateConfigFn<BaseConfig>;
-  createApp: CreateAppFn<BaseConfig, BusContract>;
-  createPlugin: CreatePluginFn<BaseConfig, BusContract>;
-  createComponent: CreateComponentFn<BaseConfig, BusContract>;
+  createApp: CreateAppFn<BaseConfig, EventContract>;
+  createPlugin: CreatePluginFn<BaseConfig, EventContract>;
+  createComponent: CreateComponentFn<BaseConfig, EventContract>;
   createModule: typeof createModule;
   createEventBus: typeof createEventBus;
+  createPluginFactory: CreatePluginFactoryFn<BaseConfig, EventContract>;
 };
 ```
 
-### Variant B: 7 Functions (with createPluginFactory)
-
-```typescript
-type CoreAPI<
-  BaseConfig extends Record<string, any>,
-  BusContract extends Record<string, any>,
-  SignalRegistry extends Record<string, any>,
-> = {
-  createConfig: CreateConfigFn<BaseConfig>;
-  createApp: CreateAppFn<BaseConfig, BusContract, SignalRegistry>;
-  createPlugin: CreatePluginFn<BaseConfig, BusContract, SignalRegistry>;
-  createComponent: CreateComponentFn<BaseConfig, BusContract, SignalRegistry>;
-  createModule: typeof createModule;
-  createEventBus: typeof createEventBus;
-  createPluginFactory: CreatePluginFactoryFn<BaseConfig, BusContract, SignalRegistry>;
-};
-```
-
-All functions are bound to the framework's generic parameters. When the framework exports these, plugin authors and consumers get type safety automatically.
+All 7 functions are bound to the framework's generic parameters. When the framework exports these, plugin authors and consumers get type safety automatically.
 
 **Critical: `createConfig` exists because TypeScript needs to know the full plugin set BEFORE it can type `pluginConfigs` in `createApp`.** Without this binding step, TypeScript cannot infer what config keys are required vs optional -- it doesn't know which plugins exist.
 
@@ -172,7 +135,7 @@ function createApp<
 >(
   config: AppConfig<G, any, any>,
   pluginConfigs: BuildPluginConfigs<P>,
-): App<G, BusContract, P>;
+): App<G, EventContract, P>;
 ```
 
 Phases 0-4 run synchronously. `app.start()`, `app.stop()`, `app.destroy()` return Promises.
@@ -188,7 +151,7 @@ function createApp<
 >(
   config: AppConfig<G, any, any>,
   pluginConfigs: BuildPluginConfigs<P>,
-): Promise<App<G, BusContract, SignalRegistry, P>>;
+): Promise<App<G, EventContract, P>>;
 ```
 
 Phases 0-1 run synchronously. Phases 2-4 are awaited sequentially. The returned app is fully initialized -- all async init is complete. `app.start()`, `app.stop()`, `app.destroy()` also return Promises.
@@ -257,18 +220,15 @@ export type BaseConfig = {
   locale?: string;
 };
 
-export type BusContract = {
-  'app:boot':     { config: BaseConfig };
-  'app:ready':    { config: BaseConfig };
-  'app:shutdown': { config: BaseConfig };
-  'page:render':  { path: string; html: string };
-  'page:error':   { path: string; error: Error };
-};
-
-export type SignalRegistry = {
-  'router:navigate':  { from: string; to: string };
-  'router:notFound':  { path: string; fallback: string };
-  'renderer:render':  { path: string; html: string };
+export type EventContract = {
+  'app:boot':          { config: BaseConfig };
+  'app:ready':         { config: BaseConfig };
+  'app:shutdown':      { config: BaseConfig };
+  'page:render':       { path: string; html: string };
+  'page:error':        { path: string; error: Error };
+  'router:navigate':   { from: string; to: string };
+  'router:notFound':   { path: string; fallback: string };
+  'renderer:render':   { path: string; html: string };
 };
 
 // --- Default plugins ---
@@ -277,7 +237,7 @@ import { RendererPlugin } from './plugins/renderer';
 import { SEOPlugin } from './plugins/seo';
 
 // --- Create the framework ---
-const core = createCore<BaseConfig, BusContract, SignalRegistry>('moku-site', {
+const core = createCore<BaseConfig, EventContract>('moku-site', {
   config: {
     siteName: 'Untitled',
     mode: 'development',
@@ -377,4 +337,3 @@ const app = await createApp(config, {
 - Config resolution: [05-CONFIG-SYSTEM](./05-CONFIG-SYSTEM.md)
 - Lifecycle phases: [06-LIFECYCLE](./06-LIFECYCLE.md)
 - Type system: [09-TYPE-SYSTEM](./09-TYPE-SYSTEM.md)
-
