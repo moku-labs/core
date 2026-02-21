@@ -1,7 +1,7 @@
 # 02 - Core API
 
-**Domain:** createCore, CoreDefaults, CoreAPI, createConfig, createApp
-**Sources:** SPEC_EVOLUTION (v2), SPEC_DEFINITIVE (v1.0.0-rc1), CORE_SPEC (v2-early), SPEC_IMPROVEMENTS_IDEAS
+**Domain:** createCoreConfig, createCore, createApp, createPlugin signatures
+**Architecture:** 3-step factory chain (Layer 1 -> Layer 2 -> Layer 3)
 
 ---
 
@@ -9,324 +9,356 @@
 
 ```typescript
 // This is the ENTIRE public API of moku_core
-export { createCore } from './core';
-
-// Sub-path export for testing utilities (NOT part of main entry point)
-// import { createTestCtx } from 'moku_core/testing';
+export { createCoreConfig } from './core-config';
 ```
 
 One function at the main entry point. That's the package.
 
 ---
 
-## 2. createCore Signature
+## 2. createCoreConfig Signature
 
 ```typescript
-function createCore<
-  BaseConfig extends Record<string, any>,
-  EventContract extends Record<string, any> = {},
+function createCoreConfig<
+  Config extends Record<string, any>,
+  Events extends Record<string, any> = {},
 >(
-  name: string,
-  defaults: CoreDefaults<BaseConfig>,
-): CoreAPI<BaseConfig, EventContract>;
+  id: string,
+  options: { config: Config },
+): {
+  createPlugin: CreatePluginFn<Config, Events>;
+  createCore: CreateCoreFn<Config, Events>;
+};
 ```
 
 **Generic parameters:**
 
 | Param | Purpose | Set by | Default |
 |---|---|---|---|
-| `BaseConfig` | Shape of global config every app of this framework needs | Framework author (Layer 2) | (required) |
-| `EventContract` | Map of all event names to payload types (framework events + known plugin events) | Framework author (Layer 2) | `{}` |
+| `Config` | Shape of global config every app of this framework needs | Framework author (Layer 2) | (required) |
+| `Events` | Map of event names to payload types (framework events + known plugin events) | Framework author (Layer 2) | `{}` |
 
-When `EventContract` is `{}` (the default), `emit()` is fully untyped -- all events use the untyped overload. When populated, `emit()` gains type checking for known event names via TypeScript overloads, while unknown event names still work untyped. Zero cost for frameworks that don't use it.
+When `Events` is `{}` (the default), `emit()` is fully untyped -- all events use the untyped overload. When populated, `emit()` gains type checking for known event names via TypeScript overloads, while unknown event names still work untyped.
 
-**`name`:** Human-readable framework name. Used in error messages: `"[moku-site] Duplicate plugin name: router"`
+**`id`:** Human-readable framework name. Used in error messages: `"[moku-site] Duplicate plugin name: router"`
 
-**`defaults`:** The framework's built-in configuration and plugins.
+**`options.config`:** Default values for the Config type. Consumers can override any field via `createApp`. These defaults are shallow-merged with consumer overrides.
 
----
+**Returns:** An object with two bound functions:
 
-## 3. CoreDefaults
-
-```typescript
-type CoreDefaults<BaseConfig extends Record<string, any>> = {
-  /** Default values for BaseConfig. Consumer overrides via createConfig. */
-  config: BaseConfig;
-
-  /** Plugins that ship with the framework. Always loaded. Consumer cannot remove them. */
-  plugins?: PluginInstance[];
-
-  /** Components that ship with the framework. */
-  components?: ComponentInstance[];
-
-  /** Modules that ship with the framework. */
-  modules?: ModuleInstance[];
-
-  /** Called once when createApp is invoked, before any plugin lifecycle. Sync only. */
-  onBoot?: (ctx: { config: Readonly<BaseConfig> }) => void;
-
-  /** Called after all plugins have completed init (Phase 4). */
-  onReady?: (ctx: { config: Readonly<BaseConfig> }) => void | Promise<void>;
-
-  /** Called after all plugins have stopped. */
-  onShutdown?: (ctx: { config: Readonly<BaseConfig> }) => void | Promise<void>;
-};
-```
-
----
-
-## 4. CoreAPI -- What createCore Returns
+- **`createPlugin`** -- Factory for creating plugins, bound to `Config` and `Events`. Plugin authors import this from the framework's config.ts to get full type inference.
+- **`createCore`** -- Factory for setting up the framework, bound to `Config` and `Events`. Called once in the framework's index.ts.
 
 ```typescript
-type CoreAPI<
-  BaseConfig extends Record<string, any>,
-  EventContract extends Record<string, any>,
-> = {
-  createConfig: CreateConfigFn<BaseConfig>;
-  createApp: CreateAppFn<BaseConfig, EventContract>;
-  createPlugin: CreatePluginFn<BaseConfig, EventContract>;
-  createComponent: CreateComponentFn<BaseConfig, EventContract>;
-  createModule: typeof createModule;
-  createEventBus: typeof createEventBus;
-  createPluginFactory: CreatePluginFactoryFn<BaseConfig, EventContract>;
-};
-```
+// my-framework/src/config.ts
+import { createCoreConfig } from 'moku_core';
 
-All 7 functions are bound to the framework's generic parameters. When the framework exports these, plugin authors and consumers get type safety automatically.
-
-**Critical: `createConfig` exists because TypeScript needs to know the full plugin set BEFORE it can type `pluginConfigs` in `createApp`.** Without this binding step, TypeScript cannot infer what config keys are required vs optional -- it doesn't know which plugins exist.
-
----
-
-## 5. createConfig Signature
-
-```typescript
-function createConfig<
-  const ExtraPlugins extends readonly PluginInstance[] = [],
->(
-  globalConfig: Partial<BaseConfig>,
-  extraPlugins?: ExtraPlugins,
-): AppConfig<BaseConfig, DefaultPlugins, ExtraPlugins>;
-```
-
-**Two arguments:**
-
-1. `globalConfig` -- `Partial<BaseConfig>`. Consumer overrides what they need. Framework defaults cover the rest.
-2. `extraPlugins` -- Optional array of additional plugins. These are appended after framework defaults.
-
-**Returns:** An `AppConfig` object that carries the full type information. This object is opaque to the consumer -- its only purpose is to be passed to `createApp`.
-
-### Why Two Steps Instead of One?
-
-A three-arg `createApp(globalConfig, pluginConfigs, extraPlugins)` doesn't work. TypeScript resolves generic parameters left-to-right. The type of `pluginConfigs` (arg 2) depends on `extraPlugins` (arg 3), but arg 3 hasn't been evaluated yet when TypeScript types arg 2. The result: custom plugin config keys aren't enforced, missing required configs aren't caught, and the entire type safety story breaks.
-
-`createConfig` as a separate step solves this cleanly. It's a proven pattern, simple, and TypeScript-friendly.
-
----
-
-## 6. createApp Signature
-
-### Variant A: Sync createApp
-
-```typescript
-function createApp<
-  G extends Record<string, any>,
-  P extends PluginInstance,
->(
-  config: AppConfig<G, any, any>,
-  pluginConfigs: BuildPluginConfigs<P>,
-): App<G, EventContract, P>;
-```
-
-Phases 0-4 run synchronously. `app.start()`, `app.stop()`, `app.destroy()` return Promises.
-
-If a plugin needs async initialization (database connection, file loading), it does so in `onStart`. The API factory returns methods that work with whatever state is available after sync init. If the API genuinely requires async-initialized state, the plugin manages a ready promise or defers to `onStart`.
-
-### Variant B: Async createApp
-
-```typescript
-function createApp<
-  G extends Record<string, any>,
-  P extends PluginInstance,
->(
-  config: AppConfig<G, any, any>,
-  pluginConfigs: BuildPluginConfigs<P>,
-): Promise<App<G, EventContract, P>>;
-```
-
-Phases 0-1 run synchronously. Phases 2-4 are awaited sequentially. The returned app is fully initialized -- all async init is complete. `app.start()`, `app.stop()`, `app.destroy()` also return Promises.
-
-This enables plugins to perform real I/O during initialization:
-
-- Connect to databases in `createState`
-- Load config files from disk in `onCreate`
-- Fetch remote schemas in `onInit`
-- Initialize SDK clients that require async handshakes
-
-Without async `createApp`, plugins are forced into awkward "check readiness" patterns where the API factory runs before async state is ready. That is a type-level lie -- the API looks ready but isn't. Async `createApp` eliminates this entire class of bugs.
-
-**For sync-only setups:** The framework (Layer 2) can provide a `createAppSync` convenience wrapper that throws if any plugin uses async lifecycle methods.
-
-```typescript
-// Framework-provided convenience (NOT a core export)
-export function createAppSync<...>(...args): App<...> {
-  const result = createApp(...args);
-  if (result instanceof Promise) {
-    throw new Error('[my-framework] createAppSync cannot be used with async plugins.');
-  }
-  return result;
-}
-```
-
-**Two arguments for both variants:**
-
-1. `config` -- The bound config from `createConfig`. Carries global config overrides AND the full plugin union type.
-2. `pluginConfigs` -- Config for all plugins (framework defaults + consumer extras). TypeScript enforces required keys and validates types.
-
-**The final plugin list is: `[...frameworkDefaults, ...consumerExtras]`**
-
-Order: framework defaults first (in the order the framework defined them), then consumer extras (in the order the consumer listed them). The consumer cannot reorder framework defaults.
-
----
-
-## 7. createEventBus
-
-Standalone pub/sub utility. Independent of the kernel -- can be used anywhere.
-
-```typescript
-function createEventBus<Events extends Record<string, any> = Record<string, any>>(): {
-  emit: <K extends keyof Events>(event: K, payload: Events[K]) => Promise<void>;
-  on: <K extends keyof Events>(event: K, handler: (payload: Events[K]) => void | Promise<void>) => () => void;
-  off: <K extends keyof Events>(event: K, handler: Function) => void;
-  clear: () => void;
-};
-```
-
-Provided as a utility for plugins that need their own internal pub/sub. Not required for core functionality.
-
----
-
-## 8. Framework Example (Layer 2)
-
-```typescript
-// my-framework/src/index.ts
-import { createCore } from 'moku_core';
-
-// --- Types ---
-export type BaseConfig = {
+type Config = {
   siteName: string;
-  description?: string;
   mode: 'development' | 'production';
-  locale?: string;
 };
 
-export type EventContract = {
-  'app:boot':          { config: BaseConfig };
-  'app:ready':         { config: BaseConfig };
-  'app:shutdown':      { config: BaseConfig };
-  'page:render':       { path: string; html: string };
-  'page:error':        { path: string; error: Error };
-  'router:navigate':   { from: string; to: string };
-  'router:notFound':   { path: string; fallback: string };
-  'renderer:render':   { path: string; html: string };
+type Events = {
+  'page:render': { path: string; html: string };
+  'router:navigate': { from: string; to: string };
 };
 
-// --- Default plugins ---
-import { RouterPlugin } from './plugins/router';
-import { RendererPlugin } from './plugins/renderer';
-import { SEOPlugin } from './plugins/seo';
-
-// --- Create the framework ---
-const core = createCore<BaseConfig, EventContract>('moku-site', {
+export const coreConfig = createCoreConfig<Config, Events>('moku-site', {
   config: {
     siteName: 'Untitled',
     mode: 'development',
   },
-  plugins: [RouterPlugin, RendererPlugin, SEOPlugin],
-  onBoot: ({ config }) => {
-    if (config.mode === 'development') {
-      console.log(`[moku-site] Starting ${config.siteName} in dev mode`);
-    }
-  },
 });
 
-// --- Export to consumers ---
-export const {
-  createConfig,
-  createApp,
-  createPlugin,
-  createComponent,
-  createModule,
-  createPluginFactory,
-} = core;
-
-// --- Export optional plugins consumers can add ---
-export { AnalyticsPlugin } from './plugins/analytics';
-export { I18nPlugin } from './plugins/i18n';
-export { AuthPlugin } from './plugins/auth';
-export { BlogPlugin } from './plugins/blog';
+export const { createPlugin, createCore } = coreConfig;
 ```
 
 ---
 
-## 9. Consumer Example (Layer 3)
+## 3. createCore Signature
+
+```typescript
+function createCore(
+  coreConfig: CoreConfig<Config, Events>,
+  options: {
+    plugins: PluginInstance[];
+    pluginConfigs?: Record<string, any>;
+    onReady?: (ctx: { config: Readonly<Config> }) => void | Promise<void>;
+    onError?: (error: Error) => void;
+  },
+): {
+  createApp: CreateAppFn<Config, Events, DefaultPlugins>;
+  createPlugin: CreatePluginFn<Config, Events>;
+};
+```
+
+**Parameters:**
+
+- **`coreConfig`** -- The object returned by `createCoreConfig`. Carries the framework ID, Config defaults, and bound types.
+- **`options.plugins`** -- Default plugins that ship with the framework. Always loaded. Consumer cannot remove them.
+- **`options.pluginConfigs`** -- Default config overrides for framework plugins. Merged with consumer overrides.
+- **`options.onReady`** -- Optional callback fired after all plugins have completed init.
+- **`options.onError`** -- Optional error handler for observability.
+
+**Returns:** An object with two functions:
+
+- **`createApp`** -- The consumer-facing app creation function. Bound to framework defaults, types, and plugins.
+- **`createPlugin`** -- Re-exported for consumer convenience. Same binding as the createPlugin from config.ts.
+
+```typescript
+// my-framework/src/index.ts
+import { createCore, coreConfig } from './config';
+import { routerPlugin } from './plugins/router';
+import { rendererPlugin } from './plugins/renderer';
+
+const framework = createCore(coreConfig, {
+  plugins: [routerPlugin, rendererPlugin],
+  pluginConfigs: {
+    router: { basePath: '/app' },
+  },
+});
+
+export const { createApp, createPlugin } = framework;
+```
+
+---
+
+## 4. createApp Signature
+
+```typescript
+function createApp(
+  options?: {
+    plugins?: PluginInstance[];
+    // ...Partial<Config> keys (global config overrides)
+    // ...BuildPluginConfigs<AllPlugins> keys (per-plugin configs)
+  },
+): Promise<App<Config, Events, AllPlugins>>;
+```
+
+**Single flat object.** The `options` parameter is a flat object that combines three kinds of keys:
+
+| Key type | How identified | Example |
+|---|---|---|
+| Reserved keys | `plugins` | `plugins: [blogPlugin]` |
+| Config keys | Matches a key in `Config` type | `siteName: 'My Blog'` |
+| Plugin config keys | Matches a registered plugin name | `router: { basePath: '/' }` |
+
+The runtime separates these at startup: reserved keys are extracted first, then plugin config keys (matching registered plugin names), and remaining keys are treated as config overrides.
+
+**Returns:** `Promise<App>`. The app is fully initialized -- all plugins have completed their `onInit` phase. Consumers call `app.start()` and `app.stop()` to control the running lifecycle.
+
+**The final plugin list is:** `[...frameworkDefaults, ...consumerExtras]`
+
+Order: framework defaults first (in the order the framework defined them), then consumer extras (in the order the consumer listed them). The consumer cannot reorder framework defaults.
 
 ```typescript
 // my-blog/src/main.ts
-import { createConfig, createApp } from 'my-framework';
-import { AnalyticsPlugin, BlogPlugin } from 'my-framework/plugins';
-import { ContactFormPlugin } from './plugins/contact-form';
-import { HomePage, AboutPage, BlogPage } from './pages';
+import { createApp } from 'my-framework';
+import { blogPlugin } from './plugins/blog';
 
-// Step 1: Declare what this app is made of
-const config = createConfig(
-  {
-    siteName: 'My Personal Blog',
-    description: 'Thoughts on code and life',
-    mode: 'production',
-  },
-  [AnalyticsPlugin, BlogPlugin, ContactFormPlugin],
-);
+const app = await createApp({
+  plugins: [blogPlugin],
+  // Config overrides (typed from Config)
+  siteName: 'My Blog',
+  mode: 'production',
+  // Plugin configs (typed by plugin name)
+  router: { basePath: '/' },
+  blog: { postsPerPage: 5 },
+});
+```
 
-// Step 2: Provide plugin configs -- TypeScript enforces everything
-const app = await createApp(config, {
-  router: {
-    default: 'home',
-    pages: { home: HomePage, about: AboutPage, blog: BlogPage },
+### Without Extra Plugins
+
+```typescript
+// Minimal: framework defaults only, just config overrides
+const app = await createApp({
+  siteName: 'Simple Site',
+  mode: 'production',
+});
+```
+
+### Without Any Options
+
+```typescript
+// Framework defaults for everything
+const app = await createApp();
+```
+
+---
+
+## 5. createPlugin Signature
+
+```typescript
+function createPlugin<
+  PluginEvents extends Record<string, any> = {},
+>(
+  name: string,
+  spec: PluginSpec,
+): PluginInstance;
+```
+
+**0-1 generic parameters:**
+
+| Param | Purpose | Required? |
+|---|---|---|
+| `PluginEvents` | Per-plugin typed events this plugin declares | No (defaults to `{}`) |
+
+All other types -- config shape (`C`), state shape (`S`), API shape (`A`) -- are inferred from the `spec` object. The framework's `Config` and `Events` types are pre-bound from `createCoreConfig`.
+
+Brief here -- see [03-PLUGIN-SYSTEM](./03-PLUGIN-SYSTEM.md) for full plugin spec details.
+
+---
+
+## 6. The App Type
+
+What `createApp` returns after all plugins are initialized:
+
+```typescript
+type App<Config, Events, Plugins> = Readonly<{
+  /** Start all plugins (forward order). Returns when all onStart complete. */
+  start: () => Promise<void>;
+
+  /** Stop all plugins (reverse order). Returns when all onStop complete. */
+  stop: () => Promise<void>;
+
+  /** Emit a typed event. Known events enforce payload types. */
+  emit: EmitFn<Events>;
+
+  /** Get a plugin by name or instance. Returns undefined if not found. */
+  getPlugin: <N extends string>(nameOrInstance: N | PluginInstance) => PluginApi | undefined;
+
+  /** Get a plugin or throw. For required dependencies. */
+  require: <N extends string>(nameOrInstance: N | PluginInstance) => PluginApi;
+
+  /** Check if a plugin is registered. */
+  has: (nameOrInstance: string | PluginInstance) => boolean;
+
+  /** Plugin APIs mounted directly. app.router.navigate() is typed. */
+  [pluginName: string]: PluginApi;
+}>;
+```
+
+**Key properties:**
+
+- The entire app object is frozen (`Object.freeze`) after creation.
+- Plugin APIs are mounted directly on the app: `app.router`, `app.blog`, etc.
+- All methods throw after `stop()` is called (terminal state enforcement).
+- `start()` and `stop()` are idempotent -- calling them multiple times is safe.
+
+---
+
+## 7. Complete Three-Layer Example
+
+### Layer 2: Framework config.ts (Step 1)
+
+```typescript
+// my-framework/src/config.ts
+import { createCoreConfig } from 'moku_core';
+
+type Config = {
+  siteName: string;
+  description?: string;
+  mode: 'development' | 'production';
+};
+
+type Events = {
+  'page:render':     { path: string; html: string };
+  'page:error':      { path: string; error: Error };
+  'router:navigate': { from: string; to: string };
+};
+
+export const coreConfig = createCoreConfig<Config, Events>('moku-site', {
+  config: {
+    siteName: 'Untitled',
+    mode: 'development',
   },
+});
+
+// Framework plugins import createPlugin from here
+export const { createPlugin, createCore } = coreConfig;
+```
+
+### Layer 2: Framework plugins
+
+```typescript
+// my-framework/src/plugins/router/index.ts
+import { createPlugin } from '../../config';
+
+export const routerPlugin = createPlugin('router', {
+  defaultConfig: {
+    basePath: '/',
+  },
+  createState: () => ({
+    currentPath: '/',
+  }),
+  api: (ctx) => ({
+    navigate: (path: string) => {
+      ctx.state.currentPath = path;
+      void ctx.emit('router:navigate', { from: '/', to: path });
+    },
+    current: () => ctx.state.currentPath,
+  }),
+  onInit: (ctx) => {
+    // All plugins registered, can validate dependencies
+  },
+});
+```
+
+### Layer 2: Framework index.ts (Step 2)
+
+```typescript
+// my-framework/src/index.ts
+import { createCore, coreConfig } from './config';
+import { routerPlugin } from './plugins/router';
+import { rendererPlugin } from './plugins/renderer';
+import { seoPlugin } from './plugins/seo';
+
+const framework = createCore(coreConfig, {
+  plugins: [routerPlugin, rendererPlugin, seoPlugin],
+  pluginConfigs: {
+    renderer: { template: 'default' },
+  },
+});
+
+export const { createApp, createPlugin } = framework;
+
+// Optional plugins consumers can add
+export { analyticsPlugin } from './plugins/analytics';
+export { authPlugin } from './plugins/auth';
+```
+
+### Layer 3: Consumer (Step 3)
+
+```typescript
+// my-blog/src/main.ts
+import { createApp, createPlugin, analyticsPlugin } from 'my-framework';
+
+// Consumer custom plugin
+const blogPlugin = createPlugin('blog', {
+  defaultConfig: { postsPerPage: 10 },
+  api: (ctx) => ({
+    listPosts: () => ['post1', 'post2'],
+  }),
+});
+
+// Single call -- flat object with everything
+const app = await createApp({
+  plugins: [analyticsPlugin, blogPlugin],
+  // Config overrides
+  siteName: 'My Personal Blog',
+  description: 'Thoughts on code and life',
+  mode: 'production',
+  // Plugin configs
   analytics: { trackingId: 'G-XXXXX' },
-  blog: { postsDir: './content/posts', postsPerPage: 10 },
-  contactForm: { recipient: 'me@example.com' },
-  // renderer: omitted -- has defaultConfig, optional
-  // seo: omitted -- has defaultConfig, optional
+  blog: { postsPerPage: 5 },
 });
 
 // App is fully initialized. All async init complete.
 await app.start();
 
-app.config.siteName;             // 'My Personal Blog' -- typed
-app.router.navigate('about');    // typed, framework default
-app.blog.listPosts();            // typed, consumer extra
-app.contactForm.submit({         // typed, consumer custom plugin
-  name: 'Alice', email: 'alice@example.com', message: 'Hello!',
-});
-
-await app.destroy();
-```
-
-### App Without Extra Plugins
-
-```typescript
-// Minimal: framework defaults only
-const config = createConfig({
-  siteName: 'Simple Site',
-  mode: 'production',
-});
-
-const app = await createApp(config, {
-  router: { default: 'home', pages: { home: HomePage } },
-  // Only framework default plugin configs needed
-});
+app.router.navigate('/about');    // typed -- framework default plugin
+app.blog.listPosts();             // typed -- consumer plugin
+await app.stop();
 ```
 
 ---
@@ -334,6 +366,7 @@ const app = await createApp(config, {
 ## Cross-References
 
 - Plugin system: [03-PLUGIN-SYSTEM](./03-PLUGIN-SYSTEM.md)
+- Factory chain details: [04-FACTORY-CHAIN](./04-FACTORY-CHAIN.md)
 - Config resolution: [05-CONFIG-SYSTEM](./05-CONFIG-SYSTEM.md)
 - Lifecycle phases: [06-LIFECYCLE](./06-LIFECYCLE.md)
 - Type system: [09-TYPE-SYSTEM](./09-TYPE-SYSTEM.md)
