@@ -63,7 +63,7 @@ type PhantomDefaults<HasDefaults extends boolean> = {
 // growth through the lifecycle:
 //   TeardownContext (least) -> MinimalContext -> InitContext -> PluginContext (most)
 //
-// All context types use Variant B (3 generics: G, Bus, Signals).
+// All context types use unified EventContract (single generic for all events).
 // =============================================================================
 
 /**
@@ -84,7 +84,7 @@ type TeardownContext<G> = {
  * Used by: createState, onCreate
  *
  * At this stage, not all plugins have been created yet. Communication methods
- * (emit, signal, getPlugin, require, has) are intentionally unavailable to
+ * (emit, getPlugin, require, has) are intentionally unavailable to
  * prevent access to incomplete data.
  */
 type MinimalContext<G, C> = TeardownContext<G> & {
@@ -99,28 +99,23 @@ type MinimalContext<G, C> = TeardownContext<G> & {
  * All plugins are created and APIs are mounted. Dependencies can be checked
  * with require/has. State is not yet available (created separately).
  * @template G - Global config type
- * @template Bus - Bus contract type
- * @template Signals - Signal registry type
+ * @template Events - EventContract type (unified event name -> payload mapping)
  * @template C - Plugin config type
  * @template Deps - Depends tuple carrying declared plugin dependencies
  */
 type InitContext<
   G,
-  Bus extends Record<string, unknown>,
-  Signals extends Record<string, unknown>,
+  Events extends Record<string, unknown>,
   C,
   Deps extends readonly PluginLikeInstance[] = readonly PluginLikeInstance[]
 > = MinimalContext<G, C> & {
-  /** Fire typed bus event. Constrained to BusContract keys. */
-  emit: <K extends string & keyof Bus>(hook: K, payload: Bus[K]) => Promise<void>;
-
   /**
-   * Fire signal. Overloaded:
-   *   - Known names (in SignalRegistry): typed payload.
-   *   - Unknown names: untyped payload (escape hatch).
+   * Fire an event. Overloaded:
+   *   - Known names (in EventContract): typed required payload.
+   *   - Unknown names: untyped optional payload (escape hatch).
    */
-  signal: {
-    <K extends string & keyof Signals>(name: K, payload: Signals[K]): Promise<void>;
+  emit: {
+    <K extends string & keyof Events>(name: K, payload: Events[K]): Promise<void>;
     (name: string, payload?: unknown): Promise<void>;
   };
 
@@ -159,20 +154,18 @@ type InitContext<
  * Everything is live. The plugin's internal mutable state is available.
  * This is the richest context tier.
  * @template G - Global config type
- * @template Bus - Bus contract type
- * @template Signals - Signal registry type
+ * @template Events - EventContract type (unified event name -> payload mapping)
  * @template C - Plugin config type
  * @template S - Plugin state type
  * @template Deps - Depends tuple carrying declared plugin dependencies
  */
 type PluginContext<
   G,
-  Bus extends Record<string, unknown>,
-  Signals extends Record<string, unknown>,
+  Events extends Record<string, unknown>,
   C,
   S,
   Deps extends readonly PluginLikeInstance[] = readonly PluginLikeInstance[]
-> = InitContext<G, Bus, Signals, C, Deps> & {
+> = InitContext<G, Events, C, Deps> & {
   /** This plugin's internal mutable state. Mutable by design. */
   state: S;
 };
@@ -180,7 +173,7 @@ type PluginContext<
 // =============================================================================
 // Section 4: Spec Interfaces (exported)
 // =============================================================================
-// All spec interfaces use Variant B (async-compatible lifecycle).
+// All spec interfaces use unified EventContract (single generic for all events).
 // Generic constraints use `any` where TypeScript requires it for assignability
 // in generic constraint positions. Values use `unknown`.
 // =============================================================================
@@ -192,8 +185,7 @@ type PluginContext<
  * @template A - Plugin API type (Record of methods/properties)
  * @template S - Plugin internal state type (void = no state)
  * @template G - Global config type (BaseConfig from framework)
- * @template Bus - Bus contract type (event name -> payload mapping)
- * @template Signals - Signal registry type (signal name -> payload mapping)
+ * @template Events - EventContract type (unified event name -> payload mapping)
  * @template Deps - Depends tuple carrying declared plugin dependencies
  */
 interface PluginSpec<
@@ -205,9 +197,7 @@ interface PluginSpec<
   // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability in TypeScript
   G extends Record<string, any> = Record<string, unknown>,
   // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability in TypeScript
-  Bus extends Record<string, any> = Record<string, unknown>,
-  // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability in TypeScript
-  Signals extends Record<string, any> = Record<string, unknown>,
+  Events extends Record<string, any> = Record<string, unknown>,
   Deps extends readonly PluginLikeInstance[] = readonly PluginLikeInstance[]
 > {
   /** Complete default config. Presence makes config OPTIONAL for consumer. Full C, not Partial<C>. */
@@ -223,13 +213,13 @@ interface PluginSpec<
   onCreate?: (context: MinimalContext<G, C>) => void | Promise<void>;
 
   /** Build the public API mounted on app.<pluginName>. Full context. Async-compatible. */
-  api?: (context: PluginContext<G, Bus, Signals, C, S, Deps>) => A | Promise<A>;
+  api?: (context: PluginContext<G, Events, C, S, Deps>) => A | Promise<A>;
 
   /** All plugins created and APIs mounted. Check dependencies here. Async-compatible. */
-  onInit?: (context: InitContext<G, Bus, Signals, C, Deps>) => void | Promise<void>;
+  onInit?: (context: InitContext<G, Events, C, Deps>) => void | Promise<void>;
 
   /** App is starting. Async allowed. Full context. */
-  onStart?: (context: PluginContext<G, Bus, Signals, C, S, Deps>) => void | Promise<void>;
+  onStart?: (context: PluginContext<G, Events, C, S, Deps>) => void | Promise<void>;
 
   /** Teardown. Reverse order. Minimal context. */
   onStop?: (context: TeardownContext<G>) => void | Promise<void>;
@@ -239,10 +229,15 @@ interface PluginSpec<
 
   /**
    * Event subscriptions. Keys are event names, values are handlers.
-   * Handles BOTH bus events (typed at BusContract level) and signals.
+   * Known events (in EventContract) get typed payloads.
+   * Unknown/ad-hoc event names get `unknown` payload.
    * Handlers execute in plugin registration order, sequentially.
    */
-  hooks?: Record<string, (...arguments_: unknown[]) => void | Promise<void>>;
+  hooks?: {
+    [K in string]?: K extends keyof Events
+      ? (payload: Events[K]) => void | Promise<void>
+      : (payload: unknown) => void | Promise<void>;
+  };
 
   /** Sub-plugins. Flattened depth-first, children before parent. */
   // biome-ignore lint/suspicious/noExplicitAny: Widened for assignability -- concrete instances use void/never defaults that conflict with unknown in contravariant positions
@@ -258,8 +253,7 @@ interface PluginSpec<
  * @template A - Component API type (Record of methods/properties)
  * @template S - Component internal state type (void = no state)
  * @template G - Global config type (BaseConfig from framework)
- * @template Bus - Bus contract type (event name -> payload mapping)
- * @template Signals - Signal registry type (signal name -> payload mapping)
+ * @template Events - EventContract type (unified event name -> payload mapping)
  * @template Deps - Depends tuple carrying declared plugin dependencies
  */
 interface ComponentSpec<
@@ -271,9 +265,7 @@ interface ComponentSpec<
   // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability in TypeScript
   G extends Record<string, any> = Record<string, unknown>,
   // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability in TypeScript
-  Bus extends Record<string, any> = Record<string, unknown>,
-  // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability in TypeScript
-  Signals extends Record<string, any> = Record<string, unknown>,
+  Events extends Record<string, any> = Record<string, unknown>,
   Deps extends readonly PluginLikeInstance[] = readonly PluginLikeInstance[]
 > {
   /** Complete default config. Presence makes config OPTIONAL for consumer. */
@@ -286,16 +278,22 @@ interface ComponentSpec<
   createState?: (context: MinimalContext<G, C>) => S | Promise<S>;
 
   /** Component mounted. Maps to onStart at runtime. Full context. */
-  onMount?: (context: PluginContext<G, Bus, Signals, C, S, Deps>) => void | Promise<void>;
+  onMount?: (context: PluginContext<G, Events, C, S, Deps>) => void | Promise<void>;
 
   /** Component unmounted. Maps to onStop at runtime. Minimal context. */
   onUnmount?: (context: TeardownContext<G>) => void | Promise<void>;
 
-  /** Event subscriptions. */
-  hooks?: Record<string, (...arguments_: unknown[]) => void | Promise<void>>;
+  /**
+   * Event subscriptions. Known events get typed payloads, unknown events get `unknown`.
+   */
+  hooks?: {
+    [K in string]?: K extends keyof Events
+      ? (payload: Events[K]) => void | Promise<void>
+      : (payload: unknown) => void | Promise<void>;
+  };
 
   /** Build the public API. Full context. Async-compatible. */
-  api?: (context: PluginContext<G, Bus, Signals, C, S, Deps>) => A | Promise<A>;
+  api?: (context: PluginContext<G, Events, C, S, Deps>) => A | Promise<A>;
 }
 
 /**
@@ -363,7 +361,7 @@ interface PluginInstance<
 
   /** The plugin specification containing lifecycle methods and config. */
   // biome-ignore lint/suspicious/noExplicitAny: Spec uses any for framework generics since instances are decoupled from specific framework generics
-  readonly spec: PluginSpec<N, C, A, S, any, any, any, any>;
+  readonly spec: PluginSpec<N, C, A, S, any, any, any>;
 }
 
 /**
@@ -395,7 +393,7 @@ interface ComponentInstance<
 
   /** The component specification containing lifecycle methods and config. */
   // biome-ignore lint/suspicious/noExplicitAny: Spec uses any for framework generics since instances are decoupled from specific framework generics
-  readonly spec: ComponentSpec<N, C, A, S, any, any, any, any> & {
+  readonly spec: ComponentSpec<N, C, A, S, any, any, any> & {
     /** Present at runtime after createComponent maps onMount -> onStart. */
     // biome-ignore lint/suspicious/noExplicitAny: Widened to reflect runtime shape after lifecycle mapping
     readonly onStart?: ((...arguments_: any[]) => any) | undefined;
@@ -610,21 +608,19 @@ type PluginNotRegistered<N extends string> =
   `Plugin '${N}' is not registered. Check your plugin list in createConfig.`;
 
 /**
- * The full app type returned by createApp. Variant B with SignalRegistry.
- * Provides typed emit, overloaded signal, typed getPlugin/require constrained
+ * The full app type returned by createApp. Uses unified EventContract.
+ * Provides typed emit with overloaded signatures (typed for known events,
+ * untyped for ad-hoc events), typed getPlugin/require constrained
  * to registered plugin names, lifecycle methods, and plugin API surface.
  * @template G - Global config type
- * @template Bus - Bus contract type
- * @template Signals - Signal registry type
+ * @template Events - EventContract type (unified event name -> payload mapping)
  * @template P - Plugin union type
  */
 type App<
   // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability in TypeScript
   G extends Record<string, any>,
   // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability in TypeScript
-  Bus extends Record<string, any>,
-  // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability in TypeScript
-  Signals extends Record<string, any>,
+  Events extends Record<string, any>,
   P extends PluginLikeInstance = PluginLikeInstance
 > = Prettify<
   {
@@ -634,12 +630,13 @@ type App<
     /** Per-plugin resolved configs accessor. Frozen. */
     readonly configs: Prettify<BuildPluginConfigsAccessor<P>>;
 
-    /** Fire typed bus event. Constrained to BusContract. */
-    emit: <K extends string & keyof Bus>(hook: K, payload: Bus[K]) => Promise<void>;
-
-    /** Fire signal. Typed for known names, untyped for unknown names. */
-    signal: {
-      <K extends string & keyof Signals>(name: K, payload: Signals[K]): Promise<void>;
+    /**
+     * Fire an event. Overloaded:
+     *   - Known names (in EventContract): typed required payload.
+     *   - Unknown names: untyped optional payload (escape hatch).
+     */
+    emit: {
+      <K extends string & keyof Events>(name: K, payload: Events[K]): Promise<void>;
       (name: string, payload?: unknown): Promise<void>;
     };
 
@@ -669,7 +666,7 @@ type App<
 >;
 
 // -----------------------------------------------------------------------------
-// CoreAPI Function Type Aliases (stubs -- refined in later phases)
+// CoreAPI Function Type Aliases
 // -----------------------------------------------------------------------------
 
 /**
@@ -708,15 +705,13 @@ type CreateAppFunction<
   // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability in TypeScript
   BaseConfig extends Record<string, any>,
   // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability in TypeScript
-  BusContract extends Record<string, any>,
-  // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability in TypeScript
-  SignalRegistry extends Record<string, any>
+  EventContract extends Record<string, any>
 > = <
   DefaultP extends PluginLikeInstance = never,
   ExtraPlugins extends readonly PluginLikeInstance[] = []
 >(
   config: AppConfig<BaseConfig, DefaultP, ExtraPlugins>
-) => Promise<App<BaseConfig, BusContract, SignalRegistry, DefaultP | ExtraPlugins[number]>>;
+) => Promise<App<BaseConfig, EventContract, DefaultP | ExtraPlugins[number]>>;
 
 /**
  * Type alias for the createPlugin function returned by createCore.
@@ -726,9 +721,7 @@ type CreatePluginFunction<
   // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability in TypeScript
   BaseConfig extends Record<string, any>,
   // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability in TypeScript
-  BusContract extends Record<string, any>,
-  // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability in TypeScript
-  SignalRegistry extends Record<string, any>
+  EventContract extends Record<string, any>
 > = <
   N extends string,
   C = void,
@@ -738,7 +731,7 @@ type CreatePluginFunction<
   Deps extends readonly PluginLikeInstance[] = readonly PluginLikeInstance[]
 >(
   name: N,
-  spec: PluginSpec<N, C, A, S, BaseConfig, BusContract, SignalRegistry, Deps>
+  spec: PluginSpec<N, C, A, S, BaseConfig, EventContract, Deps>
 ) => PluginInstance<N, C, A, S>;
 
 /**
@@ -748,9 +741,7 @@ type CreateComponentFunction<
   // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability in TypeScript
   BaseConfig extends Record<string, any>,
   // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability in TypeScript
-  BusContract extends Record<string, any>,
-  // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability in TypeScript
-  SignalRegistry extends Record<string, any>
+  EventContract extends Record<string, any>
 > = <
   N extends string,
   C = void,
@@ -760,7 +751,7 @@ type CreateComponentFunction<
   Deps extends readonly PluginLikeInstance[] = readonly PluginLikeInstance[]
 >(
   name: N,
-  spec: ComponentSpec<N, C, A, S, BaseConfig, BusContract, SignalRegistry, Deps>
+  spec: ComponentSpec<N, C, A, S, BaseConfig, EventContract, Deps>
 ) => ComponentInstance<N, C, A, S>;
 
 /**
@@ -819,9 +810,7 @@ type CreatePluginFactoryFunction<
   // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability in TypeScript
   BaseConfig extends Record<string, any>,
   // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability in TypeScript
-  BusContract extends Record<string, any>,
-  // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability in TypeScript
-  SignalRegistry extends Record<string, any>
+  EventContract extends Record<string, any>
 > = <
   C = void,
   // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability in TypeScript
@@ -829,31 +818,28 @@ type CreatePluginFactoryFunction<
   S = void,
   Deps extends readonly PluginLikeInstance[] = readonly PluginLikeInstance[]
 >(
-  spec: Omit<PluginSpec<string, C, A, S, BaseConfig, BusContract, SignalRegistry, Deps>, "plugins">
+  spec: Omit<PluginSpec<string, C, A, S, BaseConfig, EventContract, Deps>, "plugins">
 ) => <N extends string>(name: N) => PluginInstance<N, C, A, S>;
 
 /**
  * What createCore returns. All 7 functions typed against framework generics.
- * Variant B: 3 generics (BaseConfig, BusContract, SignalRegistry) + 7 functions.
+ * Uses unified EventContract (2 generics: BaseConfig, EventContract).
  * @template BaseConfig - The framework's global config shape
- * @template BusContract - Map of event names to payload types
- * @template SignalRegistry - Map of signal names to payload types
+ * @template EventContract - Map of all event names to payload types (unified bus + signals)
  */
 type CoreAPI<
   // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability in TypeScript
   BaseConfig extends Record<string, any>,
   // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability in TypeScript
-  BusContract extends Record<string, any>,
-  // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability in TypeScript
-  SignalRegistry extends Record<string, any>
+  EventContract extends Record<string, any>
 > = {
   createConfig: CreateConfigFunction<BaseConfig>;
-  createApp: CreateAppFunction<BaseConfig, BusContract, SignalRegistry>;
-  createPlugin: CreatePluginFunction<BaseConfig, BusContract, SignalRegistry>;
-  createComponent: CreateComponentFunction<BaseConfig, BusContract, SignalRegistry>;
+  createApp: CreateAppFunction<BaseConfig, EventContract>;
+  createPlugin: CreatePluginFunction<BaseConfig, EventContract>;
+  createComponent: CreateComponentFunction<BaseConfig, EventContract>;
   createModule: CreateModuleFunction;
   createEventBus: CreateEventBusFunction;
-  createPluginFactory: CreatePluginFactoryFunction<BaseConfig, BusContract, SignalRegistry>;
+  createPluginFactory: CreatePluginFactoryFunction<BaseConfig, EventContract>;
 };
 
 // =============================================================================
