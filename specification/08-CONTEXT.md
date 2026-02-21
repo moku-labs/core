@@ -1,214 +1,185 @@
 # 08 - Context Object
 
 **Domain:** ctx object, context tiers, phase-appropriate context rules
-**Sources:** SPEC_EVOLUTION (v2), SPEC_DEFINITIVE (v1.0.0-rc1)
+**Version:** v3 (3-step architecture)
 
 ---
 
-## 1. Overview
+## 1. What is ctx
 
-`ctx` is the real API. Every lifecycle method and API factory receives it. This is the "syscall interface" of Moku.
+`ctx` is the context object passed to every plugin method. Its shape depends on which method receives it -- this is the **context tier** system.
+
+The context is the plugin's window into the kernel. It provides access to configuration, state, event dispatch, and inter-plugin communication. What is available depends on what is safe to access at that point in the lifecycle.
 
 ---
 
 ## 2. Context Tiers
 
-The context system uses four tiers, each structurally extending the previous. Context grows through the lifecycle:
-
-```
-TeardownContext (least) -> MinimalContext -> InitContext -> PluginContext (most)
-```
-
-All context types use unified `EventContract` (single generic for all events).
-
-### TeardownContext
-
-```typescript
-type TeardownContext<G> = {
-  /** Global config (BaseConfig merged with consumer overrides). Frozen. */
-  readonly global: Readonly<G>;
-};
-```
-
-Used by: `onStop`, `onDestroy`. During teardown, plugins may be partially or fully stopped. Minimal context prevents reliance on other plugins.
+v3 has three context tiers, each providing progressively more functionality:
 
 ### MinimalContext
 
 ```typescript
-type MinimalContext<G, C> = TeardownContext<G> & {
+type MinimalContext<Config, C> = {
+  /** Global config (from createCoreConfig, merged with consumer overrides). Frozen. */
+  readonly global: Readonly<Config>;
   /** This plugin's resolved config. Frozen. */
   readonly config: Readonly<C>;
 };
 ```
 
-Used by: `createState`, `onCreate`. At this stage, not all plugins have been created yet. Communication methods are intentionally unavailable.
+Used by: `createState`. At this stage, the plugin's state does not exist yet (it is being created). Other plugins may not be fully created. Only configuration is available.
 
-### InitContext
+### PluginContext
 
 ```typescript
-type InitContext<
-  G,
-  Events extends Record<string, unknown>,
-  C,
-  Deps extends readonly PluginLikeInstance[] = readonly PluginLikeInstance[]
-> = MinimalContext<G, C> & {
+type PluginContext<Config, Events, C, S, Deps> = {
+  /** Global config. Frozen. */
+  readonly global: Readonly<Config>;
+  /** This plugin's resolved config. Frozen. */
+  readonly config: Readonly<C>;
+  /** This plugin's internal mutable state. Mutable by design. */
+  state: S;
   /**
    * Fire an event. Overloaded:
-   *   - Known names (in EventContract): typed required payload.
+   *   - Known names (in Events + PluginEvents + DepsEvents): typed required payload.
    *   - Unknown names: untyped optional payload (escape hatch).
    */
-  emit: {
-    <K extends string & keyof Events>(name: K, payload: Events[K]): Promise<void>;
-    (name: string, payload?: unknown): Promise<void>;
-  };
-
+  emit: EmitFunction;
   /**
    * Get plugin API by instance or name. Three overload tiers:
    * 1. Pass instance from depends -> fully typed API | undefined
    * 2. Pass name string from depends tuple -> typed API | undefined
    * 3. Pass any string -> unknown (untyped escape hatch)
    */
-  getPlugin: { ... };
-
+  getPlugin: GetPluginFunction;
   /**
    * Get plugin API or throw. Three overload tiers (same as getPlugin).
    */
-  require: { ... };
-
+  require: RequireFunction;
   /** Check if a plugin is registered. */
   has: (name: string) => boolean;
 };
 ```
 
-Used by: `onInit`. All plugins are created and APIs are mounted. Dependencies can be checked with `require`/`has`.
+Used by: `api`, `onInit`, `onStart`. Everything is live. The plugin's mutable state is available. Other plugins' APIs are accessible via `getPlugin`/`require`. Events can be emitted.
 
-### PluginContext
+### TeardownContext
 
 ```typescript
-type PluginContext<
-  G,
-  Events extends Record<string, unknown>,
-  C,
-  S,
-  Deps extends readonly PluginLikeInstance[] = readonly PluginLikeInstance[]
-> = InitContext<G, Events, C, Deps> & {
-  /** This plugin's internal mutable state. Mutable by design. */
-  state: S;
+type TeardownContext<Config> = {
+  /** Global config. Frozen. Minimal context for safe teardown. */
+  readonly global: Readonly<Config>;
 };
 ```
 
-Used by: `api`, `onStart`. Everything is live. The plugin's internal mutable state is available. This is the richest context tier.
+Used by: `onStop`. During teardown, plugins are being stopped in reverse order. Other plugins may already be stopped. The minimal context prevents reliance on other plugins' state or APIs during cleanup.
 
 ---
 
-## 3. Which Lifecycle Gets What
+## 3. Which Method Gets What
 
-| Lifecycle | Context received | Rationale |
-|---|---|---|
-| `createState` | `{ global, config }` | State factory. No other plugins exist yet. No emit, no getPlugin. |
-| `onCreate` | `{ global, config }` | Validate config. No other plugins available. |
-| `api` | `PluginContext` (full) | Build public API. State available. Other plugins accessible. |
-| `onInit` | `InitContext` (full except state) | All plugins created and APIs mounted. Check deps with `require`/`has`. |
-| `onStart` | `PluginContext` (full) | App is starting. Everything is live. Async allowed. |
-| `onStop` | `{ global }` | Teardown. Minimal context -- don't rely on other plugins. |
-| `onDestroy` | `{ global }` | Final cleanup. Same as onStop. |
+| Method | Context Tier | Why |
+|--------|-------------|------|
+| `createState` | MinimalContext | State not yet created, only config available |
+| `api` | PluginContext | Full context needed to build API methods |
+| `onInit` | PluginContext | Plugin fully initialized, can interact with deps |
+| `onStart` | PluginContext | App is starting, full context |
+| `onStop` | TeardownContext | Minimal context, teardown should not depend on other plugins' state |
+
+### Context Growth Through Lifecycle
+
+```
+createState:    { global, config }                            (minimal)
+api:            { global, config, state, emit,                (full)
+                  getPlugin, require, has }
+onInit:         { global, config, state, emit,                (full)
+                  getPlugin, require, has }
+onStart:        { global, config, state, emit,                (full)
+                  getPlugin, require, has }
+onStop:         { global }                                    (minimal)
+```
 
 ---
 
 ## 4. Phase-Appropriate Context Rules
 
-**Critical rule: `require`/`has`/`getPlugin`/`emit` are NOT available in `createState` or `onCreate`.**
+**Critical rule: `require`/`has`/`getPlugin`/`emit`/`state` are NOT available in `createState`.**
 
-At that point, not all plugins have been created. Providing these methods would be a lie -- they'd return incomplete data.
+At that point, not all plugins have been created. Providing these methods would be a lie -- they would return incomplete data.
 
 ### Why the Context Varies
 
 This is a conscious design decision. The alternative -- providing the same full ctx everywhere -- would mean:
 
 - `createState` could call `getPlugin('other')` before `other` exists.
-- `onCreate` could call `emit('event')` when not all hooks are registered.
+- Early lifecycle methods could call `emit('event')` when not all hooks are registered.
 - Errors would be mysterious and timing-dependent.
 
 By restricting context per phase, the kernel prevents an entire class of ordering bugs. The consumer never has to think about "is this plugin ready yet?" -- the type system tells them what's available.
 
-### Context Growth Through Lifecycle
-
-```
-createState:    { global, config }                            (minimal)
-onCreate:       { global, config }                            (minimal)
-api:            { global, config, state, emit,                (full)
-                  getPlugin, require, has }
-onInit:         { global, config, emit,                       (full except state)
-                  getPlugin, require, has }
-onStart:        { global, config, state, emit,                (full)
-                  getPlugin, require, has }
-onStop:         { global }                                    (minimal)
-onDestroy:      { global }                                    (minimal)
-```
-
-### onStop/onDestroy Minimal Context
+### onStop Minimal Context
 
 During teardown, plugins may be partially or fully stopped. Accessing other plugins' APIs during teardown is unreliable -- the plugin you depend on might have already been stopped (since teardown is in reverse order). The minimal context `{ global }` forces plugins to handle their own cleanup independently.
 
 ---
 
-## 5. Context Methods
+## 5. ctx.global
 
-### `getPlugin(pluginOrName)` -- Three Overload Tiers
-
-Returns the plugin's public API object or `undefined` if not found. Never throws.
-
-When the plugin declares `depends`, `getPlugin` is scoped to the declared dependencies. Accessing a plugin not in `depends` returns `undefined`.
-
-**Tier 1: Instance overload** -- Pass a plugin instance from the `depends` tuple. Returns fully typed `API | undefined`.
+`ctx.global` is `Readonly<Config>` -- the frozen global configuration. All plugins see the same global config. It is set once during `createApp` and never changes.
 
 ```typescript
-// In a plugin with depends: [routerPlugin]
-const router = ctx.getPlugin(routerPlugin);
-//    ^? RouterApi | undefined -- fully typed from instance phantom types
-if (router) {
-  router.resolve('/about'); // full autocomplete
-}
+onInit: (ctx) => {
+  console.log(ctx.global.siteName);  // typed, frozen
+  ctx.global.siteName = 'new';       // compile error: readonly
+},
 ```
 
-**Tier 2: Typed string overload** -- Pass a name string that matches a plugin in `depends`. Returns typed `API | undefined`.
+`ctx.global` contains only the global configuration. There is no `state` field on `ctx.global`.
+
+---
+
+## 6. ctx.state
+
+Plugin-local mutable state. Created by `createState()`, private to the owning plugin. Other plugins cannot access it -- it is not exposed on the app object or through `getPlugin`/`require`.
 
 ```typescript
-// In a plugin with depends: [routerPlugin]
-const router = ctx.getPlugin('router');
-//    ^? RouterApi | undefined -- typed via name extracted from depends tuple
+const counterPlugin = createPlugin('counter', {
+  createState: () => ({ count: 0 }),
+  api: (ctx) => ({
+    increment: () => { ctx.state.count += 1; },
+    getCount: () => ctx.state.count,
+  }),
+});
 ```
 
-**Tier 3: Untyped string overload** -- Pass any string. Returns `unknown`. Escape hatch for dynamic cases.
+`ctx.state` is the ONLY mutable thing in the system. Configs are frozen. The app is frozen. State is the deliberate escape hatch for runtime mutation.
 
-```typescript
-const plugin = ctx.getPlugin('some-dynamic-name');
-//    ^? unknown
-```
+---
+
+## 7. ctx.require and ctx.getPlugin
 
 ### `require(pluginOrName)` -- Three Overload Tiers
 
 Returns the plugin's public API object or throws with a clear error message.
 
-When the plugin declares `depends`, `require` is scoped to the declared dependencies. Accessing a plugin not in `depends` throws.
-
-**Tier 1: Instance overload** -- Pass a plugin instance from the `depends` tuple. Returns fully typed `API`.
+**Tier 1: Instance overload** -- Pass a plugin instance from the `depends` tuple. Returns fully typed API.
 
 ```typescript
-// In a plugin with depends: [routerPlugin, authPlugin]
+// In a plugin with depends: [routerPlugin]
 const router = ctx.require(routerPlugin);
 //    ^? RouterApi -- fully typed, no cast needed
-router.resolve('/about'); // full autocomplete
+router.navigate('/about');  // full autocomplete
 ```
 
-**Tier 2: Typed string overload** -- Pass a name string that matches a plugin in `depends`. Returns typed `API`.
+**Tier 2: Typed string overload** -- Pass a name string that matches a plugin in `depends`. Returns typed API.
 
 ```typescript
 const router = ctx.require('router');
 //    ^? RouterApi -- typed via name extracted from depends tuple
 ```
 
-**Tier 3: Untyped string overload** -- Pass any string. Returns `unknown`. Escape hatch for dynamic cases.
+**Tier 3: Untyped string overload** -- Pass any string. Returns `unknown`. Escape hatch.
 
 ```typescript
 const plugin = ctx.require('some-dynamic-name');
@@ -218,13 +189,20 @@ const plugin = ctx.require('some-dynamic-name');
 **Error messages:**
 
 ```
-// Plugin not in depends:
-Error: [moku-site] Plugin "auth" not in depends for "dashboard".
-  Add the plugin to your depends array.
-
-// Plugin not registered at all:
 Error: [moku-site] Plugin "dashboard" requires "auth", but "auth" is not registered.
   Add "auth" to your plugin list.
+```
+
+### `getPlugin(pluginOrName)` -- Three Overload Tiers
+
+Same three tiers as `require`, but returns `API | undefined` instead of throwing. Never throws.
+
+```typescript
+const router = ctx.getPlugin(routerPlugin);
+//    ^? RouterApi | undefined
+if (router) {
+  router.navigate('/about');  // typed after narrowing
+}
 ```
 
 ### `has(name)`
@@ -235,15 +213,24 @@ Returns `boolean`. Never throws. Use for optional dependencies.
 
 ```typescript
 if (ctx.has('analytics')) {
-  // Only require if registered (analytics is optional)
   const analytics = ctx.require('analytics');
-  analytics.track('page:view', { path });
+  // analytics is `unknown` (not in depends), cast as needed
 }
 ```
 
-### `emit(name, payload)`
+---
 
-Fire an event. Overloaded: known event names (in EventContract) get typed required payload. Unknown names get untyped optional payload. See [07-COMMUNICATION](./07-COMMUNICATION.md).
+## 8. ctx.emit
+
+Dispatches typed events. See [07-COMMUNICATION](./07-COMMUNICATION.md) for the full event system documentation.
+
+```typescript
+// Known event -- typed payload
+ctx.emit('page:render', { path: '/about', html: '<h1>About</h1>' });
+
+// Unknown event -- untyped escape hatch
+ctx.emit('my:custom:event', { anything: true });
+```
 
 ---
 

@@ -1,11 +1,26 @@
 # 09 - Type System
 
-**Domain:** Phantom types, type helpers, BuildPluginApis, App type, typed getPlugin, EventContract
-**Sources:** SPEC_EVOLUTION (v2), SPEC_DEFINITIVE (v1.0.0-rc1), SPEC_IMPROVEMENTS_IDEAS (P2, P5)
+**Domain:** Plugin instance types, type helpers, BuildPluginApis, App type, type flow
+**Version:** v3 (3-step architecture)
 
 ---
 
-## 1. Plugin Instance (Phantom Types)
+## 1. Design Philosophy
+
+Types flow through closures, not explicit generics. The v3 architecture captures types at each step of the factory chain:
+
+- `createCoreConfig<Config, Events>` captures the global type contract
+- `createPlugin(name, spec)` infers everything from the spec object -- config, state, API types
+- `createCore(coreConfig, { plugins })` captures all plugin instances
+- `createApp(options)` returns `App<Config, AllPlugins>` with full type inference
+
+Plugin authors never write generic parameters (except the optional `PluginEvents`). The type system does the heavy lifting at compile time.
+
+---
+
+## 2. Plugin Instance Type
+
+The internal type created by `createPlugin`:
 
 ```typescript
 interface PluginInstance<
@@ -13,38 +28,25 @@ interface PluginInstance<
   C = void,
   A extends Record<string, any> = {},
   S = void,
+  Events extends Record<string, unknown> = {},
+  PluginEvents extends Record<string, unknown> = {},
 > {
   readonly kind: 'plugin';
   readonly name: N;
-  readonly _types: { config: C; api: A; state: S };  // phantom, never read at runtime
-  readonly _hasDefaults: boolean;                      // phantom, set by createPlugin
+  readonly _types: { config: C; api: A; state: S };       // phantom, never read at runtime
+  readonly _events: PluginEvents;                           // phantom, per-plugin events
+  readonly _hasDefaults: boolean;                            // phantom, set by createPlugin
   readonly spec: PluginSpec<N, C, A, S>;
 }
 ```
 
-The `_types` field carries generic parameters through the type system. It is never accessed at runtime. `_hasDefaults` is set to `true` when `defaultConfig` is provided, enabling the config optionality logic.
+`N` = name literal, `C` = config, `S` = state, `A` = api, `Events` = global events (from closure), `PluginEvents` = per-plugin events.
 
-### ComponentInstance and ModuleInstance
-
-```typescript
-interface ComponentInstance<N extends string = string, C = void, A extends Record<string, any> = {}, S = void> {
-  readonly kind: 'component';
-  readonly name: N;
-  readonly _types: { config: C; api: A; state: S };
-  readonly _hasDefaults: boolean;
-  readonly spec: ComponentSpec<N, C, A, S>;
-}
-
-interface ModuleInstance<N extends string = string, C = void> {
-  readonly kind: 'module';
-  readonly name: N;
-  readonly spec: ModuleSpec<N, C>;
-}
-```
+All inferred -- plugin authors never write this type. The `_types` and `_events` fields carry generic parameters through the type system and are never accessed at runtime.
 
 ---
 
-## 2. Type-Level Helpers
+## 3. Type-Level Helpers
 
 ```typescript
 /** Extract name literal from a plugin */
@@ -73,40 +75,19 @@ type PluginApiByName<P, N extends string> =
     : never;
 ```
 
----
-
-## 3. AppConfig Type
-
-```typescript
-/**
- * Opaque config object produced by createConfig.
- * Carries the full plugin union for createApp to type pluginConfigs against.
- */
-type AppConfig<
-  G extends Record<string, any>,
-  DefaultP extends PluginInstance,
-  ExtraPlugins extends readonly PluginInstance[],
-> = {
-  readonly _brand: 'AppConfig';
-  readonly global: Partial<G>;
-  readonly extras: ExtraPlugins;
-  /** Phantom: union of all plugins (defaults + extras). Used by createApp for typing. */
-  readonly _allPlugins: DefaultP | ExtraPlugins[number];
-};
-```
-
-**The type relationship:**
-```
-createConfig(global, extras) -> AppConfig<G, DefaultP, Extras>
-createApp(config, pluginConfigs) infers P = config._allPlugins
-pluginConfigs: BuildPluginConfigs<P> -- now TypeScript knows ALL plugins
-```
+These helpers extract type information from plugin instances for use in mapped types like `BuildPluginApis` and `BuildPluginConfigs`.
 
 ---
 
 ## 4. BuildPluginConfigs
 
-See [05-CONFIG-SYSTEM](./05-CONFIG-SYSTEM.md) for the full definition and explanation.
+Maps over the plugin union to build the config portion of the `createApp` options object. For each plugin:
+
+- If `IsEmptyConfig`, the plugin has no config key (excluded)
+- If `HasDefaults`, the config key is optional (`Partial<C>`)
+- Otherwise, the config key is required (full `C`)
+
+See [05-CONFIG-SYSTEM](./05-CONFIG-SYSTEM.md) for the full type definition and explanation.
 
 ---
 
@@ -123,25 +104,34 @@ type BuildPluginApis<P extends PluginInstance> = {
 
 This maps each plugin in the union to a property on the app, keyed by the plugin's name literal. The plugin's API type is augmented with a `config` property for accessing the resolved plugin config.
 
+```typescript
+// Given: routerPlugin ('router', RouterApi), loggerPlugin ('logger', LoggerApi)
+// BuildPluginApis produces:
+{
+  router: RouterApi & { readonly config: Readonly<RouterConfig> };
+  logger: LoggerApi & { readonly config: Readonly<LoggerConfig> };
+}
+```
+
 ---
 
 ## 6. The App Type
 
 ```typescript
 type App<
-  G extends Record<string, any>,
+  Config extends Record<string, any>,
   Events extends Record<string, any>,
   P extends PluginInstance,
 > = {
-  /** Global config, frozen */
-  readonly config: Readonly<G>;
+  /** Start the app. Forward order. Idempotent. */
+  start: () => Promise<void>;
 
-  /** Per-plugin resolved configs accessor. Frozen. */
-  readonly configs: BuildPluginConfigsAccessor<P>;
+  /** Stop the app. Reverse order. Idempotent. */
+  stop: () => Promise<void>;
 
   /**
    * Fire an event. Overloaded:
-   *   - Known names (in EventContract): typed required payload.
+   *   - Known names (in Events): typed required payload.
    *   - Unknown names: untyped optional payload (escape hatch).
    */
   emit: {
@@ -162,79 +152,119 @@ type App<
 
   /** Check if a plugin is registered. */
   has: (name: string) => boolean;
-
-  /** Start the app. Idempotent. */
-  start: () => Promise<void>;
-
-  /** Stop the app. Reverse order. Idempotent. */
-  stop: () => Promise<void>;
-
-  /** Destroy. Calls stop() if needed. Terminal -- second call throws. */
-  destroy: () => Promise<void>;
 } & Prettify<BuildPluginApis<P>>;
 ```
 
-**Typed emit on App:** Emit is overloaded with typed known events and untyped fallback. There is no separate method for plugin-to-plugin communication -- everything goes through `emit`.
-
-**Typed getPlugin/require on App:**
+Plugin APIs are intersected onto the app object via `BuildPluginApis`. This means `app.router.navigate()` is fully typed:
 
 ```typescript
-const router = app.getPlugin('router');
-// Inferred: RouterApi & { config: Readonly<RouterConfig> } | undefined
+const app = await createApp({ ... });
 
-router?.navigate('/about');  // OK
-router?.fly();               // compile error
+// Plugin APIs available directly on app
+app.router.navigate('/about');           // typed: (path: string) => void
+app.logger.info('message');              // typed: (msg: string) => void
 
-app.getPlugin('nonexistent');  // compile error: not a registered name
+// getPlugin/require also work
+const router = app.require('router');    // typed: RouterApi
+app.getPlugin('nonexistent');            // compile error: not a registered name
 
-const logger = app.require('logger');
-// Inferred: LoggerApi & { config: Readonly<LoggerConfig> }
+// Lifecycle
+await app.start();
+await app.stop();
 ```
-
-**Inside plugin definitions: stays loose.** At plugin definition time, the full plugin union isn't known. `getPlugin` and `require` inside `PluginSpec` use the three-overload-tier pattern based on the `depends` tuple. Plugin authors get typed access to declared dependencies, and an untyped escape hatch for everything else.
 
 ---
 
-## 7. Sub-Plugin Type Visibility
+## 7. The Full Type Flow
 
-**Sub-plugin types are NOT propagated to the App type in v1.** If `AuthPlugin` declares `plugins: [SessionPlugin]`, the consumer must also list `SessionPlugin` in their extra plugins to get `app.session.*` typed. At runtime, sub-plugins are registered regardless -- they work. But the type system only sees what's in the plugin lists.
+Trace types from `createCoreConfig` through to app usage:
 
-### Planned Future: Recursive Type Flattening
+```
+Step 1: createCoreConfig<Config, Events>('framework-id', { config })
+  | Captures Config + Events in closure
+  | Returns: { createPlugin, createCore }
+  | createPlugin is bound to Config + Events
 
-```typescript
-// Recursively collect plugins including sub-plugins
-type FlattenPlugins<P> =
-  | P
-  | (P extends PluginInstance<any, any, any, any> & { _sub: infer Sub }
-      ? Sub extends PluginInstance ? FlattenPlugins<Sub> : never
-      : never);
+Step 2: createPlugin(name, spec)
+  | Infers N (name literal), C (config), S (state), A (api) from spec
+  | Config + Events already bound from Step 1 closure
+  | PluginEvents optionally provided as generic: createPlugin<PluginEvents>(name, spec)
+  | Returns: PluginInstance<N, C, A, S, Events, PluginEvents>
 
-// PluginInstance gains _sub phantom
-interface PluginInstance<N, C, A, S> {
-  readonly _sub: SubPluginUnion;  // phantom: union of sub-plugin instances
-  // ...
-}
+Step 3: createCore(coreConfig, { plugins: [routerPlugin, loggerPlugin] })
+  | Captures all plugin instances as a union type
+  | Returns: { createApp, createPlugin }
+
+Step 4: createApp({ plugins?, ...configOverrides, ...pluginConfigs })
+  | AllPlugins = framework plugins + consumer plugins
+  | Options typed as: { plugins?: [...] } & Partial<Config> & BuildPluginConfigs<AllPlugins>
+  | Returns: Promise<App<Config, Events, AllPlugins>>
+
+Result: app.router.navigate('/about')
+  | 'router' -> PluginName matches RouterPlugin
+  | RouterPlugin -> PluginApiType -> { navigate: (path: string) => void }
+  | Fully typed, zero casts, zero manual annotations
 ```
 
-TypeScript recursion depth limit: cap at 4 levels. Sub-plugins beyond level 4 work at runtime but are invisible to types.
+### Concrete Example
+
+```typescript
+// Step 1: Framework config.ts
+type Config = { siteName: string; mode: 'dev' | 'prod' };
+type Events = { 'page:render': { path: string; html: string } };
+
+const coreConfig = createCoreConfig<Config, Events>('my-site', {
+  config: { siteName: 'Untitled', mode: 'dev' },
+});
+
+const { createPlugin, createCore } = coreConfig;
+
+// Step 2: Framework plugins
+const routerPlugin = createPlugin('router', {
+  defaultConfig: { basePath: '/' },
+  createState: () => ({ currentPath: '/' }),
+  api: (ctx) => ({
+    navigate: (path: string) => { ctx.state.currentPath = path; },
+    current: () => ctx.state.currentPath,
+  }),
+});
+
+// Step 3: Framework index.ts
+const { createApp, createPlugin: frameworkCreatePlugin } = createCore(coreConfig, {
+  plugins: [routerPlugin],
+});
+
+// Step 4: Consumer
+const app = await createApp({
+  siteName: 'My Blog',
+  mode: 'prod',
+  router: { basePath: '/blog' },
+});
+
+// Result: fully typed
+app.router.navigate('/about');  // (path: string) => void
+app.router.current();           // () => string
+```
 
 ---
 
-## 8. The Full Type Flow
+## 8. Sub-Plugin Type Visibility
 
-```
-Layer 1: createCore<BaseConfig, EventContract>
-  | returns CoreAPI bound to these generics
-Layer 2: const { createConfig, createApp, createPlugin } = createCore(...)
-  | framework exports these -- they carry BaseConfig, EventContract
-Layer 3: createConfig(globalOverrides, [ExtraPlugin])
-  | returns AppConfig carrying AllPlugins = DefaultPlugins | ExtraPlugin
-Layer 3: await createApp(config, pluginConfigs)
-  | TypeScript infers P from config._allPlugins
-  | pluginConfigs typed as BuildPluginConfigs<P> -- knows every plugin
-  | returns Promise<App<BaseConfig, EventContract, P>>
-  | every API fully typed, getPlugin/require constrained to registered names
-  | emit typed for known events, untyped fallback for ad-hoc
+Sub-plugin types (from the `plugins` field on PluginSpec) are propagated via the flattening algorithm. When a plugin declares sub-plugins, those sub-plugins are inserted before the parent during flattening. Their APIs appear on the app object.
+
+```typescript
+const sessionPlugin = createPlugin('session', {
+  api: (ctx) => ({ getSession: () => ({}) }),
+});
+
+const authPlugin = createPlugin('auth', {
+  plugins: [sessionPlugin],  // sub-plugin
+  api: (ctx) => ({ login: () => {} }),
+});
+
+// After flattening: [sessionPlugin, authPlugin]
+// app.session.getSession() -- typed
+// app.auth.login() -- typed
 ```
 
 ---
