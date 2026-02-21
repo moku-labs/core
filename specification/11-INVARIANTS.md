@@ -1,7 +1,7 @@
 # 11 - Invariants and Anti-Patterns
 
 **Domain:** Guarantees, error messages, anti-patterns
-**Sources:** SPEC_EVOLUTION (v2), SPEC_DEFINITIVE (v1.0.0-rc1), SPEC_INITIAL (v0.1)
+**Architecture:** v3 3-step (createCoreConfig -> createCore -> createApp)
 
 ---
 
@@ -11,18 +11,18 @@ These properties always hold. Breaking any of these is a kernel bug.
 
 ### 1.1 Name Uniqueness
 
-**Duplicate plugin names throw at Phase 0.**
+**Duplicate plugin names throw during init.**
 
 ```
 Error: [moku-site] Duplicate plugin name "router". Each plugin must have a unique name.
-  Found at positions 2 and 5 in the flattened plugin list.
+  Found at positions 2 and 5 in the plugin list.
 ```
 
 No silent overwrite. No merge. No "last wins." If you want to replace a plugin, remove the old one from your plugin list and add the new one.
 
 ### 1.2 Dependency Validation
 
-If a plugin declares `depends: ['logger']`, Phase 0 validates:
+If a plugin declares `depends: ['logger']`, init validates:
 
 ```
 Error: [moku-site] Plugin "router" depends on "logger", but "logger" is not registered.
@@ -40,7 +40,15 @@ If a plugin requires config (no `defaultConfig`, non-void `C`), TypeScript rejec
 
 ### 1.4 Lifecycle Order
 
-Plugins initialize in array order. Always. Teardown in reverse. Always. No topological sort. No automatic reordering. No `@before` / `@after` annotations.
+Plugins execute lifecycle methods in array order. Always. Teardown in reverse. Always. No topological sort. No automatic reordering. No `@before` / `@after` annotations.
+
+**3 phases:**
+
+| Phase | Method | Direction | When |
+|-------|--------|-----------|------|
+| init | `onInit` | Forward (array order) | During `createApp` |
+| start | `onStart` | Forward (array order) | During `app.start()` |
+| stop | `onStop` | **Reverse** (array order) | During `app.stop()` |
 
 **Ordering is the consumer's responsibility.** If plugin B depends on plugin A, put A before B. `depends` validates this but does not fix it.
 
@@ -52,16 +60,16 @@ When an event fires (via `emit`), handlers execute in plugin registration order,
 
 After `createApp` resolves:
 - `app` is `Object.freeze()`'d
-- `app.config` (global) is `Object.freeze()`'d
-- `app.<plugin>.config` is `Object.freeze()`'d
+- Global config is `Object.freeze()`'d
+- Each plugin's config is `Object.freeze()`'d
 
-Plugin internal state (`S`) is mutable -- that's the point of state. But configs and the app structure are frozen.
+Plugin internal state (`ctx.state`) is mutable -- that's the point of state. But configs and the app structure are frozen.
 
 ### 1.7 Idempotency
 
-- `app.start()` called twice: second call is a no-op.
-- `app.stop()` called twice: second call is a no-op.
-- `app.destroy()` calls `stop()` first if needed. Calling `destroy()` twice is safe.
+- `app.start()` callable once. Second call throws.
+- `app.stop()` callable once. Second call throws.
+- After `app.stop()`, all methods throw. The app is in a terminal state.
 
 ### 1.8 require() Contract
 
@@ -82,11 +90,23 @@ Consumers cannot remove framework default plugins. They can only configure them.
 
 ### 1.10 Phase-Appropriate Context
 
-`createState` and `onCreate` do NOT have access to `getPlugin`, `require`, `has`, or `emit`. At that point, not all plugins have been created. Providing these methods would return incomplete data.
+Context is restricted based on what is safe to access at each point:
+
+| Method | Context Tier | Available |
+|--------|-------------|-----------|
+| `createState` | MinimalContext | `global`, `config` |
+| `api` | PluginContext | `global`, `config`, `state`, `emit`, `getPlugin`, `require`, `has` |
+| `onInit` | PluginContext | `global`, `config`, `state`, `emit`, `getPlugin`, `require`, `has` |
+| `onStart` | PluginContext | `global`, `config`, `state`, `emit`, `getPlugin`, `require`, `has` |
+| `onStop` | TeardownContext | `global` |
+
+`createState` does NOT have access to `getPlugin`, `require`, `has`, or `emit`. At that point, not all plugins have been created. Providing these methods would return incomplete data.
+
+`onStop` receives a minimal teardown context -- only `global` is available. Plugins should clean up their own resources without depending on other plugins (which may have already stopped in reverse order).
 
 ### 1.11 Async Sequential Execution
 
-All async lifecycle methods within a phase execute sequentially, one plugin at a time. Plugin A's `createState` resolves before Plugin B's `createState` begins. No parallelism within or across phases.
+All async lifecycle methods within a phase execute sequentially, one plugin at a time. Plugin A's `onInit` resolves before Plugin B's `onInit` begins. No parallelism within or across phases.
 
 ### 1.12 Error Propagation
 
@@ -111,26 +131,29 @@ Lifecycle methods can throw (or reject). When they do:
 
 ```typescript
 // BAD: Consumer reaches past the framework
-import { createCore } from 'moku_core';
+import { createCoreConfig } from 'moku_core';
 
 // GOOD: Consumer uses the framework
-import { createConfig, createApp } from 'my-framework';
+import { createApp, createPlugin } from 'my-framework';
 ```
 
 The consumer should never see Layer 1. If they need to, the framework is missing something.
 
-### 2.3 Skipping createConfig
+### 2.3 Bypassing createApp Options Typing
 
 ```typescript
-// BAD: Trying to pass plugins directly to createApp -- types can't be inferred
-const app = await createApp({ siteName: 'Blog' }, { ... }, [BlogPlugin]);
+// BAD: Using `as any` to bypass the flat object type system
+const app = await createApp({ siteName: 'Blog', blog: { x: 1 } } as any);
 
-// GOOD: Two-step: declare plugins first, then provide configs
-const config = createConfig({ siteName: 'Blog' }, [BlogPlugin]);
-const app = await createApp(config, { blog: { ... } });
+// GOOD: Let TypeScript enforce the shape -- every key is typed
+const app = await createApp({
+  plugins: [blogPlugin],
+  siteName: 'Blog',
+  blog: { postsPerPage: 5 },
+});
 ```
 
-`createConfig` exists because TypeScript needs the full plugin set known before it types `pluginConfigs`. Skipping it means custom plugin configs won't be type-checked.
+The flat object passed to `createApp` is fully typed: config keys come from the Config type, plugin config keys come from registered plugin names. Casting to `any` defeats the entire type system.
 
 ### 2.4 Leaking State
 
@@ -177,7 +200,7 @@ Shallow merge means nested objects are replaced wholesale. If you use nested con
 ctx.emit('auth:getToken');  // returns Promise<void>, not the token
 
 // GOOD: use require for request/response
-const auth = ctx.require<{ getToken: () => string }>('auth');
+const auth = ctx.require('auth');
 const token = auth.getToken();
 ```
 
@@ -191,20 +214,20 @@ class AuthService { ... }
 app.registerService(AuthService);
 
 // GOOD: LLM uses what the framework gives
-const AuthPlugin = createPlugin('auth', { ... });
+const authPlugin = createPlugin('auth', { ... });
 ```
 
-**If the LLM needs something the framework doesn't have, it builds a plugin. Not a new abstraction.**
+**The v3 primitives are:** `createCoreConfig`, `createCore`, `createApp`, `createPlugin`. If you need something the framework does not have, you build a plugin. Not a new abstraction.
 
-### 2.9 Forgetting await on createApp (Variant B only)
+### 2.9 Forgetting await on createApp
 
 ```typescript
 // BAD: missing await -- app is a Promise, not an App
-const app = createApp(config, { ... });
+const app = createApp({ siteName: 'Blog' });
 app.router.navigate('home');  // runtime error: app.router is undefined
 
 // GOOD: await the Promise
-const app = await createApp(config, { ... });
+const app = await createApp({ siteName: 'Blog' });
 app.router.navigate('home');  // works
 ```
 
@@ -223,7 +246,7 @@ Examples:
 
 ```
 Error: [moku-site] Duplicate plugin name "router". Each plugin must have a unique name.
-  Found at positions 2 and 5 in the flattened plugin list.
+  Found at positions 2 and 5 in the plugin list.
 
 Error: [moku-site] Plugin "router" depends on "auth", but "auth" is not registered.
   Add the auth plugin to your plugin list before "router".
@@ -235,7 +258,13 @@ Error: [moku-site] Plugin "router" requires "renderer", but "renderer" is not re
   Add the renderer plugin to your plugin list, before "router".
 
 Error: [moku-site] Plugin "analytics" requires config but none was provided.
-  Add an "analytics" key to your pluginConfigs object.
+  Add an "analytics" key to your createApp options object.
+
+Error: [moku-site] app.start() has already been called.
+  start() can only be called once per app instance.
+
+Error: [moku-site] Cannot call start() after stop(). The app is in a terminal state.
+  Create a new app instance with createApp() to restart.
 ```
 
 ---
@@ -245,4 +274,3 @@ Error: [moku-site] Plugin "analytics" requires config but none was provided.
 - Lifecycle: [06-LIFECYCLE](./06-LIFECYCLE.md)
 - Config system: [05-CONFIG-SYSTEM](./05-CONFIG-SYSTEM.md)
 - Plugin patterns: [12-PLUGIN-PATTERNS](./12-PLUGIN-PATTERNS.md)
-
