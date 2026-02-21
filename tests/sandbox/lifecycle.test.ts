@@ -61,7 +61,9 @@ describe("3-layer flow (SAND-04)", () => {
 
     const app = await createApp({ siteName: "Test Blog" });
 
-    expectTypeOf(app.router).not.toBeUndefined();
+    // Verify specific API methods are typed (would FAIL on `any`)
+    expectTypeOf(app.router.navigate).toBeFunction();
+    expectTypeOf(app.router.current).toBeFunction();
     expectTypeOf(app.start).toBeFunction();
     expectTypeOf(app.stop).toBeFunction();
   });

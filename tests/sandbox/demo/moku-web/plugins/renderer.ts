@@ -5,7 +5,8 @@ export type RendererEvents = {
   "renderer:complete": { path: string; duration: number };
 };
 
-export const rendererPlugin = createPlugin<RendererEvents>("renderer", {
+export const rendererPlugin = createPlugin("renderer", {
+  events: {} as RendererEvents,
   defaultConfig: {
     template: "default"
   },

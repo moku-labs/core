@@ -227,14 +227,84 @@ type DepsEvents<
 // =============================================================================
 
 /**
+ * Detect if a string type is a literal (e.g. "router") vs the general `string` type.
+ * Used by BuildPluginApis to exclude plugins created via overload 2 (which have
+ * name type `string` instead of a literal) from polluting the mapped type
+ * with a string index signature.
+ */
+type IsLiteralString<S extends string> = string extends S ? false : true;
+
+/**
  * Map a plugin tuple to `{ [Name]: Api }` for the app surface.
  * Plugins with empty API (Record<string, never>) are excluded.
+ * Plugins with non-literal name type (string) are excluded to prevent
+ * index signature pollution from overload 2 of createPlugin.
  */
 type BuildPluginApis<
   // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability
   P extends PluginInstance<string, any, any, any, any>
 > = {
-  [K in P as ExtractApi<K> extends Record<string, never> ? never : ExtractName<K>]: ExtractApi<K>;
+  [K in P as ExtractApi<K> extends Record<string, never>
+    ? never
+    : IsLiteralString<ExtractName<K>> extends true
+      ? ExtractName<K>
+      : never]: ExtractApi<K>;
+};
+
+/** Extract the config phantom type from a PluginInstance. */
+type ExtractConfig<P> =
+  P extends PluginInstance<
+    string,
+    infer C,
+    // biome-ignore lint/suspicious/noExplicitAny: Required for conditional type matching
+    any,
+    // biome-ignore lint/suspicious/noExplicitAny: Required for conditional type matching
+    any,
+    // biome-ignore lint/suspicious/noExplicitAny: Required for conditional type matching
+    any
+  >
+    ? C
+    : never;
+
+/**
+ * Typed App object returned by createApp.
+ * Combines base methods (start, stop, emit, etc.) with plugin APIs
+ * mapped by name via BuildPluginApis.
+ */
+type App<
+  _Config extends Record<string, unknown>,
+  Events extends Record<string, unknown>,
+  // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability
+  P extends PluginInstance<string, any, any, any, any>
+> = {
+  readonly start: () => Promise<void>;
+  readonly stop: () => Promise<void>;
+  readonly emit: EmitFunction<Events>;
+  readonly getPlugin: GetPluginFunction;
+  readonly require: RequireFunction;
+  readonly has: HasFunction;
+} & BuildPluginApis<P>;
+
+/**
+ * Options for createApp (Step 3), typed to accept only valid keys:
+ * global config keys, plugin name keys (for plugin config overrides),
+ * and 'plugins' for extra plugins.
+ *
+ * Uses a mapped type over Config keys plus plugin names to get excess
+ * property checking from TypeScript.
+ */
+type CreateAppOptions<
+  Config extends Record<string, unknown>,
+  // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability
+  P extends PluginInstance<string, any, any, any, any>,
+  // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability
+  ExtraPlugins extends readonly PluginInstance<string, any, any, any, any>[]
+> = {
+  [K in keyof Config]?: Config[K];
+} & {
+  [K in ExtractName<P> as IsLiteralString<K> extends true ? K : never]?: unknown;
+} & {
+  plugins?: ExtraPlugins;
 };
 
 // =============================================================================
@@ -259,7 +329,10 @@ export type {
   ExtractApi,
   ExtractEvents,
   ExtractName,
+  ExtractConfig,
   DepsEvents,
   // Aggregate types
-  BuildPluginApis
+  BuildPluginApis,
+  App,
+  CreateAppOptions
 };

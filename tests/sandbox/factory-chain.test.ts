@@ -77,10 +77,20 @@ describe("createApp (Step 3)", () => {
   it("app has plugin APIs mounted directly", async () => {
     const app = await createApp();
 
-    // Type-level: plugin APIs are accessible on the app object
-    expectTypeOf(app.router).not.toBeUndefined();
-    expectTypeOf(app.renderer).not.toBeUndefined();
-    expectTypeOf(app.seo).not.toBeUndefined();
+    // Type-level: plugin APIs are accessible with specific method types (not any)
+    expectTypeOf(app.router.navigate).toBeFunction();
+    expectTypeOf(app.router.current).toBeFunction();
+    expectTypeOf(app.renderer.render).toBeFunction();
+    expectTypeOf(app.seo.setTitle).toBeFunction();
+    expectTypeOf(app.seo.getDefaultTitle).toBeFunction();
+
+    // Type-level: start/stop return Promise<void>, not any
+    expectTypeOf(app.start).toBeFunction();
+    expectTypeOf(app.stop).toBeFunction();
+
+    // Negative test: nonexistent plugin causes type error
+    // @ts-expect-error -- nonExistent is not a registered plugin
+    app.nonExistent;
 
     // Runtime: plugin APIs are defined
     expect(app.router).toBeDefined();

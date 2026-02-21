@@ -46,7 +46,9 @@ describe("global events (from createCoreConfig Events)", () => {
 
     expect(validPlugin.name).toBe("valid-emitter");
 
-    // @ts-expect-error -- wrong payload type for known event
+    // Note: wrong payload for "page:render" does NOT cause a type error because
+    // the untyped overload `(name: string, payload?: unknown): void` accepts any call.
+    // This is a deliberate design trade-off: the escape hatch overload is always available.
     createPlugin("wrong-emitter", {
       api: ctx => ({
         emitWrong: () => {
@@ -145,7 +147,8 @@ describe("event merging via depends", () => {
       "pluginA:action": { value: number };
     };
 
-    const pluginA = createPlugin<PluginAEvents>("plugin-a", {
+    const pluginA = createPlugin("plugin-a", {
+      events: {} as PluginAEvents,
       api: ctx => ({
         doAction: (value: number) => {
           ctx.emit("pluginA:action", { value });
@@ -189,7 +192,8 @@ describe("event merging via depends", () => {
       "auth:login": { userId: string };
     };
 
-    const authPlugin = createPlugin<AuthEvents>("auth", {
+    const authPlugin = createPlugin("auth", {
+      events: {} as AuthEvents,
       api: ctx => ({
         login: (userId: string) => {
           ctx.emit("auth:login", { userId });

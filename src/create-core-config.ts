@@ -15,7 +15,7 @@
 import { kernel } from "./create-app";
 import { type BoundCreatePluginFunction, createPluginFactory } from "./create-plugin";
 import { flattenPlugins, validatePlugins } from "./flatten";
-import type { PluginInstance } from "./types";
+import type { App, CreateAppOptions, PluginInstance } from "./types";
 
 /** Widened PluginInstance type for generic constraints on arrays. */
 // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint on PluginInstance arrays
@@ -58,6 +58,7 @@ interface CreateCoreOptions<Config> {
 
 /**
  * Return type of createCore (Step 2).
+ * Carries the Plugins type parameter to thread type information through createApp.
  * @example
  * ```ts
  * const { createApp, createPlugin } = createCore(coreConfig, { plugins: [...] });
@@ -65,21 +66,25 @@ interface CreateCoreOptions<Config> {
  */
 interface CreateCoreResult<
   Config extends Record<string, unknown>,
-  Events extends Record<string, unknown>
+  Events extends Record<string, unknown>,
+  Plugins extends readonly AnyPluginInstance[] = readonly AnyPluginInstance[]
 > {
   /**
    * Step 3: Creates and initializes the application.
+   * Generic over ExtraPlugins to merge consumer plugins into the return type.
    * @param options - Consumer-level config overrides, plugin configs, extra plugins.
-   * @returns A promise that resolves to the frozen App object.
+   * @returns A promise that resolves to the frozen, fully typed App object.
    */
-  // biome-ignore lint/suspicious/noExplicitAny: createApp options are dynamically typed based on registered plugins
-  readonly createApp: (options?: any) => Promise<any>;
+  readonly createApp: <const ExtraPlugins extends readonly AnyPluginInstance[] = readonly []>(
+    options?: CreateAppOptions<Config, Plugins[number] | ExtraPlugins[number], [...ExtraPlugins]>
+  ) => Promise<App<Config, Events, Plugins[number] | ExtraPlugins[number]>>;
   /** Re-exported createPlugin for consumer convenience. */
   readonly createPlugin: BoundCreatePluginFunction<Config, Events>;
 }
 
 /**
- * Bound createCore function type.
+ * Bound createCore function type. Generic method captures the Plugins tuple
+ * from options.plugins to thread type information into CreateCoreResult.
  * @example
  * ```ts
  * const framework = coreConfig.createCore(coreConfig, { plugins: [routerPlugin] });
@@ -88,10 +93,10 @@ interface CreateCoreResult<
 type BoundCreateCoreFunction<
   Config extends Record<string, unknown>,
   Events extends Record<string, unknown>
-> = (
+> = <const Plugins extends readonly AnyPluginInstance[]>(
   coreConfig: CoreConfigResult<Config, Events>,
-  options: CreateCoreOptions<Config>
-) => CreateCoreResult<Config, Events>;
+  options: CreateCoreOptions<Config> & { readonly plugins: [...Plugins] }
+) => CreateCoreResult<Config, Events, Plugins>;
 
 /**
  * Step 1 of the 3-step factory chain. Captures Config and Events generics
@@ -142,9 +147,10 @@ function createCoreConfig<
    * ```
    */
   const createCore: BoundCreateCoreFunction<Config, Events> = (
-    _coreConfig,
-    coreOptions
-  ): CreateCoreResult<Config, Events> => {
+    _coreConfig: CoreConfigResult<Config, Events>,
+    coreOptions: CreateCoreOptions<Config> & { readonly plugins: readonly AnyPluginInstance[] }
+    // biome-ignore lint/suspicious/noExplicitAny: Generic method implementation requires flexible types; type safety enforced by BoundCreateCoreFunction signature
+  ): CreateCoreResult<Config, Events, any> => {
     // Capture framework-level context for use by createApp
     const defaultPlugins = coreOptions.plugins;
     const frameworkPluginConfigs = coreOptions.pluginConfigs ?? {};
@@ -162,7 +168,7 @@ function createCoreConfig<
      * const app = await createApp({ siteName: "Blog", router: { basePath: "/blog" } });
      * ```
      */
-    // biome-ignore lint/suspicious/noExplicitAny: createApp options and return are dynamically typed based on registered plugins
+    // biome-ignore lint/suspicious/noExplicitAny: createApp options and return are dynamically typed; type safety at boundary via CreateCoreResult
     const createApp = async (consumerOptions?: any): Promise<any> => {
       // Extract extra plugins from consumer options
       const { plugins: extraPlugins, ...rest } = consumerOptions ?? {};

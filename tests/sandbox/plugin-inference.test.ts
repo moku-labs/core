@@ -83,21 +83,20 @@ describe("createPlugin infers all types from spec (SAND-02)", () => {
 // createPlugin<PluginEvents> preserves inference (SAND-03)
 // ---------------------------------------------------------------------------
 
-describe("createPlugin<PluginEvents> preserves inference (SAND-03)", () => {
+describe("createPlugin with events phantom field preserves inference (SAND-03)", () => {
   it("adds typed events without breaking config/state/API inference", () => {
-    // Renderer uses createPlugin<RendererEvents>('renderer', ...) with PluginEvents.
-    // Despite the explicit generic for events, all other types should be inferred.
+    // Renderer uses `events: {} as RendererEvents` in the spec to declare plugin events.
+    // This approach preserves the literal name type and full API inference.
     expectTypeOf(rendererPlugin.name).toEqualTypeOf<"renderer">();
 
     // Runtime: name is still correctly inferred
     expect(rendererPlugin.name).toBe("renderer");
   });
 
-  it("PluginEvents is the only explicit generic needed", () => {
-    // This is a documentation test: the renderer plugin in the demo uses
-    // createPlugin<RendererEvents>(...) with ONLY PluginEvents as the generic.
-    // Config (C), state (S), and API (A) are all inferred from the spec object.
-    // If this test compiles and runs, inference works with PluginEvents.
+  it("events phantom field preserves full type inference", () => {
+    // The renderer plugin uses `events: {} as RendererEvents` instead of
+    // `createPlugin<RendererEvents>(...)`. This allows full type inference:
+    // name (N), config (C), state (S), and API (A) are all inferred from spec.
     expect(rendererPlugin.name).toBe("renderer");
 
     // Verify renderer has the expected structure from its spec

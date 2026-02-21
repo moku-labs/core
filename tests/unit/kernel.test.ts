@@ -377,7 +377,9 @@ describe("app object shape", () => {
 
     // Plugin is registered (has returns true) but has no mounted API
     expect(app.has("no-api")).toBe(true);
-    expect(app["no-api"]).toBeUndefined();
+    // Plugin without api is excluded from App type surface (BuildPluginApis filters it out).
+    // Use runtime check via getPlugin since bracket access is not typed for no-api plugins.
+    expect(app.getPlugin("no-api")).toBeUndefined();
   });
 });
 
@@ -541,7 +543,8 @@ describe("getPlugin, require, has", () => {
 
     const api = app.getPlugin("router");
     expect(api).toBeDefined();
-    expect(api.current()).toBe("/");
+    // String-based getPlugin returns unknown; use runtime assertion
+    expect((api as { current: () => string }).current()).toBe("/");
   });
 
   it("getPlugin returns undefined for unregistered plugin", async () => {
@@ -564,7 +567,8 @@ describe("getPlugin, require, has", () => {
     const app = await createApp();
 
     const api = app.require("router");
-    expect(api.current()).toBe("/");
+    // String-based require returns unknown; use runtime assertion
+    expect((api as { current: () => string }).current()).toBe("/");
   });
 
   it("require throws for unregistered plugin", async () => {

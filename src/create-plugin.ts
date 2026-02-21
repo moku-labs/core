@@ -46,16 +46,16 @@ type FullPluginContext<
     (name: string, payload?: unknown): void;
   };
   getPlugin: {
-    // biome-ignore lint/suspicious/noExplicitAny: Required for conditional type matching on PluginInstance
     <P extends AnyPluginInstance>(
       plugin: P
+      // biome-ignore lint/suspicious/noExplicitAny: Required for conditional type matching on PluginInstance
     ): P extends PluginInstance<string, any, any, infer PA, any> ? PA | undefined : never;
     (name: string): unknown;
   };
   require: {
-    // biome-ignore lint/suspicious/noExplicitAny: Required for conditional type matching on PluginInstance
     <P extends AnyPluginInstance>(
       plugin: P
+      // biome-ignore lint/suspicious/noExplicitAny: Required for conditional type matching on PluginInstance
     ): P extends PluginInstance<string, any, any, infer PA, any> ? PA : never;
     (name: string): unknown;
   };
@@ -80,6 +80,14 @@ type CreatePluginSpec<
   A extends Record<string, any>,
   Deps extends AnyDeps
 > = {
+  /**
+   * Phantom field to declare plugin-specific events for type inference.
+   * Use: `events: {} as MyPluginEvents` -- the value is never read at runtime.
+   * This enables full type inference without explicit type arguments:
+   * `createPlugin("renderer", { events: {} as RendererEvents, ... })`
+   * instead of `createPlugin<RendererEvents>("renderer", { ... })`.
+   */
+  events?: PluginEvents;
   defaultConfig?: C;
   depends?: Deps;
   plugins?: AnyPluginInstance[];
@@ -137,9 +145,14 @@ type BoundCreatePluginFunction<
   // Overload 2: One explicit generic (PluginEvents). Rest inferred from spec.
   // Used as: createPlugin<RendererEvents>("renderer", { ... })
   // Falls back to this when overload 1 fails with explicit type arg.
+  // Name type is `string` (not literal) due to TypeScript partial inference
+  // limitation. BuildPluginApis filters out non-literal names to prevent
+  // string index signature pollution on the App type.
   <PluginEvents extends Record<string, unknown>>(
     name: string,
+    // biome-ignore lint/suspicious/noExplicitAny: Overload uses any for non-PluginEvents generics; inference happens at call site
     spec: CreatePluginSpec<Config, Events, PluginEvents, any, any, any, any>
+    // biome-ignore lint/suspicious/noExplicitAny: Overload uses any for non-PluginEvents generics; type narrowing happens at call site
   ): PluginInstance<string, any, any, any, PluginEvents>;
 };
 

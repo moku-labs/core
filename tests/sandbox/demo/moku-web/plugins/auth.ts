@@ -6,7 +6,8 @@ export type AuthEvents = {
   "auth:logout": { userId: string };
 };
 
-export const authPlugin = createPlugin<AuthEvents>("auth", {
+export const authPlugin = createPlugin("auth", {
+  events: {} as AuthEvents,
   depends: [routerPlugin] as const,
   defaultConfig: {
     loginPath: "/login",

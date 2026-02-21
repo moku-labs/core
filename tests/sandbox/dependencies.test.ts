@@ -58,8 +58,8 @@ describe("ctx.require returns typed API (SAND-05)", () => {
     const consumer = cc.createPlugin("consumer", {
       depends: [router] as const,
       api: ctx => {
-        // Tier 2: string-based require with name from depends tuple
-        const routerApi = ctx.require("router");
+        // Tier 2: string-based require returns unknown (use instance-based for typed access)
+        const routerApi = ctx.require("router") as { current: () => string };
         capturedResult = routerApi.current();
         return { check: () => capturedResult };
       }
@@ -410,7 +410,8 @@ describe("cross-plugin API access via app object", () => {
 
     const app = await createApp();
 
-    const routerApi = app.require("router");
+    // String-based require returns unknown; use type assertion for runtime check
+    const routerApi = app.require("router") as { current: () => string };
     expect(routerApi).toBeDefined();
     expect(routerApi.current()).toBeDefined();
   });
