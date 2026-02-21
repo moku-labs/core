@@ -1,7 +1,7 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 
-import { coreConfig, createPlugin } from "./fixture/config";
-import { createApp, createPlugin as frameworkCreatePlugin } from "./fixture/index";
+import { coreConfig, createPlugin } from "./demo/moku-web/config";
+import { createApp, createPlugin as frameworkCreatePlugin } from "./demo/moku-web/index";
 
 // ---------------------------------------------------------------------------
 // createCoreConfig (Step 1)
@@ -80,12 +80,12 @@ describe("createApp (Step 3)", () => {
     // Type-level: plugin APIs are accessible on the app object
     expectTypeOf(app.router).not.toBeUndefined();
     expectTypeOf(app.renderer).not.toBeUndefined();
-    expectTypeOf(app.logger).not.toBeUndefined();
+    expectTypeOf(app.seo).not.toBeUndefined();
 
     // Runtime: plugin APIs are defined
     expect(app.router).toBeDefined();
     expect(app.renderer).toBeDefined();
-    expect(app.logger).toBeDefined();
+    expect(app.seo).toBeDefined();
   });
 
   it("app object is frozen", async () => {

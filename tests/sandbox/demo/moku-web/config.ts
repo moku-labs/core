@@ -1,4 +1,4 @@
-import { createCoreConfig } from "../../../src";
+import { createCoreConfig } from "../../../../src";
 
 export type SiteConfig = {
   siteName: string;

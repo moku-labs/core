@@ -389,7 +389,7 @@ describe("sub-plugin flattening and dependencies", () => {
 
 describe("cross-plugin API access via app object", () => {
   it("app.pluginName returns the API object (not the full plugin)", async () => {
-    const { createApp } = await import("./fixture/index");
+    const { createApp } = await import("./demo/moku-web/index");
 
     const app = await createApp();
 
@@ -406,7 +406,7 @@ describe("cross-plugin API access via app object", () => {
   });
 
   it("app.require works the same as ctx.require at app level", async () => {
-    const { createApp } = await import("./fixture/index");
+    const { createApp } = await import("./demo/moku-web/index");
 
     const app = await createApp();
 

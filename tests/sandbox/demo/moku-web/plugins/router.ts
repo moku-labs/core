@@ -18,13 +18,13 @@ export const routerPlugin = createPlugin("router", {
     },
     current: () => ctx.state.currentPath
   }),
-  onInit: () => {
+  onInit: _ctx => {
     // All plugins registered, can validate dependencies
   },
-  onStart: () => {
+  onStart: _ctx => {
     // App is starting, begin routing
   },
-  onStop: () => {
+  onStop: _ctx => {
     // Cleanup
   }
 });

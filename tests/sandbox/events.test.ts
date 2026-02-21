@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { createCoreConfig } from "../../src";
-import { createPlugin } from "./fixture/config";
-import { createApp, routerPlugin } from "./fixture/index";
+import { createPlugin } from "./demo/moku-web/config";
+import { createApp, routerPlugin } from "./demo/moku-web/index";
 
 // ---------------------------------------------------------------------------
 // Global events (from createCoreConfig Events)
@@ -102,7 +102,7 @@ describe("per-plugin events (PluginEvents)", () => {
   it("renderer hooks can listen to global events", () => {
     // The renderer plugin can listen to global SiteEvents like "page:render"
     // because global Events are available to all plugins through the closure.
-    // This is verified by the fixture code itself -- renderer emits page:render.
+    // This is verified by the demo code itself -- renderer emits page:render.
     expect(routerPlugin.name).toBe("router");
   });
 });
@@ -115,8 +115,8 @@ describe("event merging via depends", () => {
   it("dependent plugin sees dependency events in hooks", async () => {
     const navigations: Array<{ from: string; to: string }> = [];
 
-    // Logger depends on router. Logger hooks on "router:navigate" (global event).
-    // When router emits "router:navigate", logger's hook fires with typed payload.
+    // Dependent plugin hooks on "router:navigate" (global event).
+    // When router emits "router:navigate", the hook fires with typed payload.
     const navListenerPlugin = createPlugin("nav-listener", {
       depends: [routerPlugin] as const,
       hooks: {

@@ -33,18 +33,18 @@ function createTrackingPlugin(
 
 describe("3-layer flow (SAND-04)", () => {
   it("framework config.ts -> framework index.ts -> consumer main.ts", async () => {
-    const { createApp } = await import("./fixture/index");
+    const { createApp } = await import("./demo/moku-web/index");
 
     const app = await createApp();
 
     expect(app).toBeDefined();
     expect(app.router).toBeDefined();
     expect(app.renderer).toBeDefined();
-    expect(app.logger).toBeDefined();
+    expect(app.seo).toBeDefined();
   });
 
   it("consumer can add extra plugins via createApp", async () => {
-    const { createApp, createPlugin } = await import("./fixture/index");
+    const { createApp, createPlugin } = await import("./demo/moku-web/index");
 
     const blogPlugin = createPlugin("blog", {
       api: () => ({ list: () => [] })
@@ -57,7 +57,7 @@ describe("3-layer flow (SAND-04)", () => {
   });
 
   it("cross-file import chain preserves types", async () => {
-    const { createApp } = await import("./fixture/index");
+    const { createApp } = await import("./demo/moku-web/index");
 
     const app = await createApp({ siteName: "Test Blog" });
 

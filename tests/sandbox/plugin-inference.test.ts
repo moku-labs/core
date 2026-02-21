@@ -1,10 +1,10 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 
-import { createPlugin } from "./fixture/config";
-import { createApp } from "./fixture/index";
-import { rendererPlugin } from "./fixture/plugins/renderer";
-import { routerPlugin } from "./fixture/plugins/router";
-import { templateEnginePlugin } from "./fixture/plugins/template-engine";
+import { createPlugin } from "./demo/moku-web/config";
+import { createApp } from "./demo/moku-web/index";
+import { rendererPlugin } from "./demo/moku-web/plugins/renderer";
+import { routerPlugin } from "./demo/moku-web/plugins/router";
+import { templateEnginePlugin } from "./demo/moku-web/plugins/template-engine";
 
 // ---------------------------------------------------------------------------
 // createPlugin infers all types from spec (SAND-02)
@@ -59,7 +59,7 @@ describe("createPlugin infers all types from spec (SAND-02)", () => {
   });
 
   it("works with zero generics -- most common case", () => {
-    // Router plugin from fixture has zero explicit generics on createPlugin.
+    // Router plugin from demo has zero explicit generics on createPlugin.
     // All types are inferred: name, config, state, API.
     expectTypeOf(routerPlugin.name).toEqualTypeOf<"router">();
 
@@ -94,7 +94,7 @@ describe("createPlugin<PluginEvents> preserves inference (SAND-03)", () => {
   });
 
   it("PluginEvents is the only explicit generic needed", () => {
-    // This is a documentation test: the renderer plugin in the fixture uses
+    // This is a documentation test: the renderer plugin in the demo uses
     // createPlugin<RendererEvents>(...) with ONLY PluginEvents as the generic.
     // Config (C), state (S), and API (A) are all inferred from the spec object.
     // If this test compiles and runs, inference works with PluginEvents.
