@@ -46,9 +46,7 @@ type EventContract = {
  * API: { resolve: (path: string) => string; routes: () => string[] }
  * State: { registeredRoutes: string[] }
  */
-function createRouterPlugin(
-  core: ReturnType<typeof createCore<BaseConfig, EventContract>>
-) {
+function createRouterPlugin(core: ReturnType<typeof createCore<BaseConfig, EventContract>>) {
   return core.createPlugin("router", {
     defaultConfig: { basePath: "/", trailingSlash: false },
     createState: (): { registeredRoutes: string[] } => ({ registeredRoutes: [] }),
@@ -139,9 +137,7 @@ function createBuildPlugin(
  * State: { isMounted: boolean }
  * Maps onMount -> onStart, onUnmount -> onStop at runtime.
  */
-function createSpaComponent(
-  core: ReturnType<typeof createCore<BaseConfig, EventContract>>
-) {
+function createSpaComponent(core: ReturnType<typeof createCore<BaseConfig, EventContract>>) {
   return core.createComponent("spa", {
     defaultConfig: { mountPoint: "#app" },
     createState: () => ({ isMounted: false }),
@@ -162,9 +158,7 @@ function createSpaComponent(
  * Config: { locale: string; fallback: string }
  * API: { t: (key: string) => string; locale: () => string }
  */
-function createI18nPlugin(
-  core: ReturnType<typeof createCore<BaseConfig, EventContract>>
-) {
+function createI18nPlugin(core: ReturnType<typeof createCore<BaseConfig, EventContract>>) {
   return core.createPlugin("i18n", {
     defaultConfig: { locale: "en", fallback: "en" },
     api: ctx => ({
@@ -638,77 +632,5 @@ describe("end-to-end three-layer type flow", () => {
 
     // Event bus is synchronous-first; the handler fired immediately
     expect(received).toEqual([42]);
-  });
-
-  it("plugin factory produces multiple named instances", async () => {
-    const core = createCore<BaseConfig, EventContract>("moku", {
-      config: {
-        site: { title: "Test", url: "https://test.com" },
-        build: { outDir: "./out", minify: false }
-      }
-    });
-
-    const cardFactory = core.createPluginFactory({
-      defaultConfig: { title: "Untitled" },
-      api: (ctx: { config: { title: string } }) => ({
-        getTitle: () => ctx.config.title
-      })
-    });
-
-    const { createPlugin } = core;
-
-    type PlaginConfig = {
-      property: string[];
-    };
-
-    type PlaginState = {
-      stateProp: string[];
-    };
-
-    type PlaginApi = {
-      test: (data: string[]) => number;
-    };
-
-    const heroCard = cardFactory("hero");
-    const sideCard = cardFactory("side");
-
-    const testPlugin = createPlugin<"test2", PlaginConfig, PlaginApi, PlaginState>("test2", {
-      depends: [heroCard],
-      defaultConfig: {
-        property: ["prop"]
-      },
-      createState: () => ({
-        stateProp: ["test"]
-      }),
-      api: ctx => ({
-        test: data => {
-          ctx.require(heroCard).getTitle();
-          return ctx.state.stateProp.length + data.length;
-        }
-      })
-    });
-
-    const config = core.createConfig({
-      plugins: [heroCard, sideCard, testPlugin],
-      pluginConfigs: {
-        hero: { title: "Welcome" },
-        test2: {
-          property: ["overridden"]
-        }
-      }
-    });
-
-    const app = await core.createApp(config);
-
-    expect(app.hero.getTitle()).toBe("Welcome"); // Consumer override
-    expect(app.side.getTitle()).toBe("Untitled"); // Default
-
-    expect(app.has("hero")).toBe(true);
-    expect(app.has("side")).toBe(true);
-
-    expect(app.test2.test(["a", "b"])).toBe(3); // stateProp.length(1) + data.length(2)
-    expect(app.configs.test2.property).toEqual(["overridden"]);
-
-    await app.destroy();
   });
 });

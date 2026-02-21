@@ -8,10 +8,9 @@
 //   1. Zero-plugin app
 //   2. Single-plugin app
 //   3. Component-only app
-//   4. Factory-produced plugins
-//   5. Config override chains
-//   6. Destroy contract enforcement
-//   7. Event round-trip (emit -> hook -> API -> side effect)
+//   4. Config override chains
+//   5. Destroy contract enforcement
+//   6. Event round-trip (emit -> hook -> API -> side effect)
 // =============================================================================
 
 import { describe, expect, it } from "vitest";
@@ -201,58 +200,7 @@ describe("component-only app", () => {
 });
 
 // =============================================================================
-// 4. Factory-produced plugins
-// =============================================================================
-
-describe("factory-produced plugins", () => {
-  it("factory produces two named instances in same app", async () => {
-    const core = createMinimalCore();
-
-    const widgetFactory = core.createPluginFactory({
-      defaultConfig: { label: "default" },
-      createState: () => ({ clicks: 0 }),
-      api: (ctx: { config: { label: string }; state: { clicks: number } }) => ({
-        getLabel: () => ctx.config.label,
-        click: () => {
-          ctx.state.clicks += 1;
-        },
-        getClicks: () => ctx.state.clicks
-      })
-    });
-
-    const widgetA = widgetFactory("widget-a");
-    const widgetB = widgetFactory("widget-b");
-
-    const config = core.createConfig({
-      plugins: [widgetA, widgetB],
-      pluginConfigs: {
-        "widget-a": { label: "Alpha" }
-      }
-    });
-
-    const app = await core.createApp(config);
-
-    // Instance A has consumer-overridden label
-    expect(app["widget-a"].getLabel()).toBe("Alpha");
-    // Instance B uses default
-    expect(app["widget-b"].getLabel()).toBe("default");
-
-    // State is independent per instance
-    app["widget-a"].click();
-    app["widget-a"].click();
-    app["widget-b"].click();
-    expect(app["widget-a"].getClicks()).toBe(2);
-    expect(app["widget-b"].getClicks()).toBe(1);
-
-    expect(app.has("widget-a")).toBe(true);
-    expect(app.has("widget-b")).toBe(true);
-
-    await app.destroy();
-  });
-});
-
-// =============================================================================
-// 5. Config override chains
+// 4. Config override chains
 // =============================================================================
 
 describe("config override chains", () => {
@@ -309,7 +257,7 @@ describe("config override chains", () => {
 });
 
 // =============================================================================
-// 6. Destroy contract enforcement
+// 5. Destroy contract enforcement
 // =============================================================================
 
 describe("destroy contract enforcement", () => {
@@ -354,7 +302,7 @@ describe("destroy contract enforcement", () => {
 });
 
 // =============================================================================
-// 7. Event round-trip
+// 6. Event round-trip
 // =============================================================================
 
 describe("event round-trip", () => {
@@ -410,7 +358,7 @@ describe("event round-trip", () => {
 });
 
 // =============================================================================
-// 8. Global config merging
+// 7. Global config merging
 // =============================================================================
 
 describe("global config merging", () => {
@@ -428,7 +376,7 @@ describe("global config merging", () => {
 });
 
 // =============================================================================
-// 9. Plugin with dependencies validated
+// 8. Plugin with dependencies validated
 // =============================================================================
 
 describe("plugin dependency validation", () => {

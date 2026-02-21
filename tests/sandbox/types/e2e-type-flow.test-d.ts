@@ -27,7 +27,6 @@ import type {
   CreateConfigFunction,
   CreateEventBusFunction,
   CreateModuleFunction,
-  CreatePluginFactoryFunction,
   CreatePluginFunction,
   EventBus,
   PluginApiByName,
@@ -118,12 +117,6 @@ describe("CoreAPI carries framework generics", () => {
 
   it("createEventBus is CreateEventBusFunction", () => {
     expectTypeOf<TestCore["createEventBus"]>().toEqualTypeOf<CreateEventBusFunction>();
-  });
-
-  it("createPluginFactory is CreatePluginFactoryFunction with correct generics", () => {
-    expectTypeOf<TestCore["createPluginFactory"]>().toEqualTypeOf<
-      CreatePluginFactoryFunction<BaseConfig, EventContract>
-    >();
   });
 });
 

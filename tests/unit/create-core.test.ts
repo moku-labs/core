@@ -7,8 +7,7 @@ const CORE_API_FUNCTIONS = [
   "createPlugin",
   "createComponent",
   "createModule",
-  "createEventBus",
-  "createPluginFactory"
+  "createEventBus"
 ] as const;
 
 describe("createCore", () => {
@@ -18,7 +17,7 @@ describe("createCore", () => {
     expect(typeof createCore).toBe("function");
   });
 
-  it("returns an object with all 7 CoreAPI functions", () => {
+  it("returns an object with all 6 CoreAPI functions", () => {
     const core = createCore("test", { config: {} });
 
     for (const functionName of CORE_API_FUNCTIONS) {
@@ -81,12 +80,6 @@ describe("createCore", () => {
     expect(typeof bus.once).toBe("function");
     expect(typeof bus.clear).toBe("function");
     expect(Object.isFrozen(bus)).toBe(true);
-  });
-
-  it("createPluginFactory returns a function when called with valid arguments", () => {
-    const core = createCore("test", { config: {} });
-    const factory = core.createPluginFactory({});
-    expect(typeof factory).toBe("function");
   });
 
   // Error format test (permanent)

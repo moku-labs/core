@@ -10,11 +10,10 @@
 //   2. All void-config plugins
 //   3. All void-API plugins
 //   4. Mixed defaults and required configs
-//   5. Factory-produced plugin types
-//   6. Component instance in plugin union
-//   7-11. Negative cases (@ts-expect-error)
-//   12. Single-plugin app
-//   13. Plugin with complex nested state
+//   5. Component instance in plugin union
+//   6-10. Negative cases (@ts-expect-error)
+//   11. Single-plugin app
+//   12. Plugin with complex nested state
 // =============================================================================
 
 import { describe, expectTypeOf, it } from "vitest";
@@ -169,42 +168,7 @@ describe("Mixed defaults and required configs", () => {
 });
 
 // =============================================================================
-// 5. Factory-produced plugin type
-// =============================================================================
-
-describe("Factory-produced plugin type", () => {
-  // createPluginFactory produces a function: (name: N) => PluginInstance<N, C, A, S>
-  // The return type should carry correct phantom types.
-
-  it("factory return type carries correct config/api phantom types", () => {
-    // Simulate factory usage: factory("card") -> PluginInstance<"card", C, A, S>
-    type CardConfig = { title: string };
-    type CardApi = { getTitle: () => string };
-    type CardPlugin = PluginInstance<"card", CardConfig, CardApi, void>;
-
-    expectTypeOf<CardPlugin["name"]>().toEqualTypeOf<"card">();
-    expectTypeOf<CardPlugin["_types"]["config"]>().toEqualTypeOf<CardConfig>();
-    expectTypeOf<CardPlugin["_types"]["api"]>().toEqualTypeOf<CardApi>();
-  });
-
-  it("two factory instances with different names are distinct in union", () => {
-    type Card1 = PluginInstance<"hero-card", { title: string }, { getTitle: () => string }, void>;
-    type Card2 = PluginInstance<"side-card", { title: string }, { getTitle: () => string }, void>;
-    type Names = PluginName<Card1 | Card2>;
-    expectTypeOf<Names>().toEqualTypeOf<"hero-card" | "side-card">();
-  });
-
-  it("factory instances are valid in BuildPluginApis", () => {
-    type Card1 = PluginInstance<"hero-card", { title: string }, { getTitle: () => string }, void>;
-    type Card2 = PluginInstance<"side-card", { title: string }, { getTitle: () => string }, void>;
-    type Apis = BuildPluginApis<Card1 | Card2>;
-    expectTypeOf<Apis>().toHaveProperty("hero-card");
-    expectTypeOf<Apis>().toHaveProperty("side-card");
-  });
-});
-
-// =============================================================================
-// 6. Component instance in plugin union
+// 5. Component instance in plugin union
 // =============================================================================
 
 describe("Component instance in plugin union", () => {
@@ -237,7 +201,7 @@ describe("Component instance in plugin union", () => {
 });
 
 // =============================================================================
-// 7. Negative: wrong config shape
+// 6. Negative: wrong config shape
 // =============================================================================
 
 describe("Negative: wrong config shape", () => {
@@ -268,7 +232,7 @@ describe("Negative: wrong config shape", () => {
 });
 
 // =============================================================================
-// 8. Negative: accessing non-existent plugin
+// 7. Negative: accessing non-existent plugin
 // =============================================================================
 
 describe("Negative: accessing non-existent plugin", () => {
@@ -299,7 +263,7 @@ describe("Negative: accessing non-existent plugin", () => {
 });
 
 // =============================================================================
-// 9. Negative: wrong event type in emit
+// 8. Negative: wrong event type in emit
 // =============================================================================
 
 describe("Negative: wrong event type in emit", () => {
@@ -321,7 +285,7 @@ describe("Negative: wrong event type in emit", () => {
 });
 
 // =============================================================================
-// 10. Negative: wrong payload for typed emit event
+// 9. Negative: wrong payload for typed emit event
 // =============================================================================
 
 describe("Negative: wrong payload for typed emit event", () => {
@@ -341,7 +305,7 @@ describe("Negative: wrong payload for typed emit event", () => {
 });
 
 // =============================================================================
-// 11. Negative: require with unregistered name
+// 10. Negative: require with unregistered name
 // =============================================================================
 
 describe("Negative: require with unregistered name", () => {
@@ -365,7 +329,7 @@ describe("Negative: require with unregistered name", () => {
 });
 
 // =============================================================================
-// 12. Single-plugin app
+// 11. Single-plugin app
 // =============================================================================
 
 describe("Single-plugin app", () => {
@@ -410,7 +374,7 @@ describe("Single-plugin app", () => {
 });
 
 // =============================================================================
-// 13. Plugin with complex nested state
+// 12. Plugin with complex nested state
 // =============================================================================
 
 describe("Plugin with complex nested state", () => {
@@ -455,7 +419,7 @@ describe("Plugin with complex nested state", () => {
 });
 
 // =============================================================================
-// 14. EventBus edge cases
+// 13. EventBus edge cases
 // =============================================================================
 
 describe("EventBus edge cases", () => {
@@ -482,7 +446,7 @@ describe("EventBus edge cases", () => {
 });
 
 // =============================================================================
-// 15. Multiple plugins with identical API shapes but different names
+// 14. Multiple plugins with identical API shapes but different names
 // =============================================================================
 
 describe("Identically-shaped plugins with different names", () => {
