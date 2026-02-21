@@ -7,9 +7,14 @@
 //
 // The consumer never imports this file directly. They receive createPlugin
 // from createCoreConfig's return value.
+//
+// TYPE DESIGN: Two overloads handle the partial inference problem.
+// Overload 1 (1 type param): for createPlugin<PluginEvents>(name, spec)
+// Overload 2 (6 type params): for createPlugin(name, spec) -- zero explicit generics
+// This works because TypeScript selects overloads by number of type arguments.
 // =============================================================================
 
-import type { DepsEvents, PluginInstance, PluginSpec } from "./types";
+import type { DepsEvents, PluginInstance } from "./types";
 
 /** Widened PluginInstance type for generic constraints on arrays. */
 // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint on PluginInstance arrays
@@ -20,117 +25,123 @@ type AnyPluginInstance = PluginInstance<string, any, any, any, any>;
 type AnyDeps = ReadonlyArray<PluginInstance<string, any, any, any, any>>;
 
 /**
+ * Plugin context type used in api, onInit, and onStart callbacks.
+ * Merged events includes global Events, plugin PluginEvents, and dependency events.
+ * @example
+ * ```ts
+ * type Ctx = FullPluginContext<SiteConfig, SiteEvents, { basePath: string }, { currentPath: string }>;
+ * ```
+ */
+type FullPluginContext<
+  Config extends Record<string, unknown>,
+  MergedEvents extends Record<string, unknown>,
+  C,
+  S
+> = {
+  readonly global: Readonly<Config>;
+  readonly config: Readonly<C>;
+  state: S;
+  emit: {
+    <K extends string & keyof MergedEvents>(name: K, payload: MergedEvents[K]): void;
+    (name: string, payload?: unknown): void;
+  };
+  getPlugin: {
+    // biome-ignore lint/suspicious/noExplicitAny: Required for conditional type matching on PluginInstance
+    <P extends AnyPluginInstance>(
+      plugin: P
+    ): P extends PluginInstance<string, any, any, infer PA, any> ? PA | undefined : never;
+    (name: string): unknown;
+  };
+  require: {
+    // biome-ignore lint/suspicious/noExplicitAny: Required for conditional type matching on PluginInstance
+    <P extends AnyPluginInstance>(
+      plugin: P
+    ): P extends PluginInstance<string, any, any, infer PA, any> ? PA : never;
+    (name: string): unknown;
+  };
+  has: (name: string) => boolean;
+};
+
+/**
+ * The spec shape passed to createPlugin. Separate named type to reduce duplication
+ * between overloads.
+ * @example
+ * ```ts
+ * type Spec = CreatePluginSpec<SiteConfig, SiteEvents, Record<string, never>, { basePath: string }, { currentPath: string }, { navigate: (p: string) => void }, readonly []>;
+ * ```
+ */
+type CreatePluginSpec<
+  Config extends Record<string, unknown>,
+  Events extends Record<string, unknown>,
+  PluginEvents extends Record<string, unknown>,
+  C,
+  S,
+  // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability
+  A extends Record<string, any>,
+  Deps extends AnyDeps
+> = {
+  defaultConfig?: C;
+  depends?: Deps;
+  plugins?: AnyPluginInstance[];
+  createState?: (context: { readonly global: Readonly<Config>; readonly config: Readonly<C> }) => S;
+  api?: (context: FullPluginContext<Config, Events & PluginEvents & DepsEvents<Deps>, C, S>) => A;
+  onInit?: (
+    context: FullPluginContext<Config, Events & PluginEvents & DepsEvents<Deps>, C, S>
+  ) => void | Promise<void>;
+  onStart?: (
+    context: FullPluginContext<Config, Events & PluginEvents & DepsEvents<Deps>, C, S>
+  ) => void | Promise<void>;
+  onStop?: (context: { readonly global: Readonly<Config> }) => void | Promise<void>;
+  hooks?: {
+    [K in string]?: K extends keyof (Events & PluginEvents & DepsEvents<Deps>)
+      ? (payload: (Events & PluginEvents & DepsEvents<Deps>)[K]) => void | Promise<void>
+      : (payload: unknown) => void | Promise<void>;
+  };
+};
+
+/**
  * Bound createPlugin function type, parameterized by the framework's Config and Events.
+ *
+ * Two overloads handle the partial inference problem:
+ * - Overload 1 (1 type param): `createPlugin<PluginEvents>(name, spec)` -- PluginEvents explicit, rest inferred
+ * - Overload 2 (0 or 6 type params): `createPlugin(name, spec)` -- all inferred
+ *
+ * TypeScript selects overloads by matching number of explicit type arguments.
  * @example
  * ```ts
  * const { createPlugin } = createCoreConfig<MyConfig, MyEvents>("my-app", { config: defaults });
  * const router = createPlugin("router", { defaultConfig: { basePath: "/" } });
+ * const renderer = createPlugin<RendererEvents>("renderer", { api: ctx => ({ ... }) });
  * ```
  */
 type BoundCreatePluginFunction<
   Config extends Record<string, unknown>,
   Events extends Record<string, unknown>
-> = <
-  PluginEvents extends Record<string, unknown> = Record<string, never>,
-  const N extends string = string,
-  C = Record<string, never>,
-  S = Record<string, never>,
-  // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability
-  A extends Record<string, any> = Record<string, never>,
-  Deps extends AnyDeps = readonly []
->(
-  name: N,
-  spec: PluginSpec<Config, Events, PluginEvents, C, S, A, Deps> & {
-    defaultConfig?: C;
-    depends?: Deps;
-    plugins?: AnyPluginInstance[];
-    createState?: (context: {
-      readonly global: Readonly<Config>;
-      readonly config: Readonly<C>;
-    }) => S;
-    api?: (context: {
-      readonly global: Readonly<Config>;
-      readonly config: Readonly<C>;
-      state: S;
-      emit: {
-        <K extends string & keyof (Events & PluginEvents & DepsEvents<Deps>)>(
-          name: K,
-          payload: (Events & PluginEvents & DepsEvents<Deps>)[K]
-        ): void;
-        (name: string, payload?: unknown): void;
-      };
-      getPlugin: {
-        <P extends AnyPluginInstance>(
-          plugin: P
-        ): P extends PluginInstance<string, any, any, infer PA, any> ? PA | undefined : never;
-        (name: string): unknown;
-      };
-      require: {
-        <P extends AnyPluginInstance>(
-          plugin: P
-        ): P extends PluginInstance<string, any, any, infer PA, any> ? PA : never;
-        (name: string): unknown;
-      };
-      has: (name: string) => boolean;
-    }) => A;
-    onInit?: (context: {
-      readonly global: Readonly<Config>;
-      readonly config: Readonly<C>;
-      state: S;
-      emit: {
-        <K extends string & keyof (Events & PluginEvents & DepsEvents<Deps>)>(
-          name: K,
-          payload: (Events & PluginEvents & DepsEvents<Deps>)[K]
-        ): void;
-        (name: string, payload?: unknown): void;
-      };
-      getPlugin: {
-        <P extends AnyPluginInstance>(
-          plugin: P
-        ): P extends PluginInstance<string, any, any, infer PA, any> ? PA | undefined : never;
-        (name: string): unknown;
-      };
-      require: {
-        <P extends AnyPluginInstance>(
-          plugin: P
-        ): P extends PluginInstance<string, any, any, infer PA, any> ? PA : never;
-        (name: string): unknown;
-      };
-      has: (name: string) => boolean;
-    }) => void | Promise<void>;
-    onStart?: (context: {
-      readonly global: Readonly<Config>;
-      readonly config: Readonly<C>;
-      state: S;
-      emit: {
-        <K extends string & keyof (Events & PluginEvents & DepsEvents<Deps>)>(
-          name: K,
-          payload: (Events & PluginEvents & DepsEvents<Deps>)[K]
-        ): void;
-        (name: string, payload?: unknown): void;
-      };
-      getPlugin: {
-        <P extends AnyPluginInstance>(
-          plugin: P
-        ): P extends PluginInstance<string, any, any, infer PA, any> ? PA | undefined : never;
-        (name: string): unknown;
-      };
-      require: {
-        <P extends AnyPluginInstance>(
-          plugin: P
-        ): P extends PluginInstance<string, any, any, infer PA, any> ? PA : never;
-        (name: string): unknown;
-      };
-      has: (name: string) => boolean;
-    }) => void | Promise<void>;
-    onStop?: (context: { readonly global: Readonly<Config> }) => void | Promise<void>;
-    hooks?: {
-      [K in string]?: K extends keyof (Events & PluginEvents & DepsEvents<Deps>)
-        ? (payload: (Events & PluginEvents & DepsEvents<Deps>)[K]) => void | Promise<void>
-        : (payload: unknown) => void | Promise<void>;
-    };
-  }
-) => PluginInstance<N, C, S, A, PluginEvents>;
+> = {
+  // Overload 1: Zero explicit generics. Everything inferred from spec.
+  // Used as: createPlugin("router", { ... })
+  // Must be first so TypeScript tries it before the less-specific overload.
+  <
+    const N extends string = string,
+    C = Record<string, never>,
+    S = Record<string, never>,
+    // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability
+    A extends Record<string, any> = Record<string, never>,
+    Deps extends AnyDeps = readonly [],
+    PluginEvents extends Record<string, unknown> = Record<string, never>
+  >(
+    name: N,
+    spec: CreatePluginSpec<Config, Events, PluginEvents, C, S, A, Deps>
+  ): PluginInstance<N, C, S, A, PluginEvents>;
+
+  // Overload 2: One explicit generic (PluginEvents). Rest inferred from spec.
+  // Used as: createPlugin<RendererEvents>("renderer", { ... })
+  // Falls back to this when overload 1 fails with explicit type arg.
+  <PluginEvents extends Record<string, unknown>>(
+    name: string,
+    spec: CreatePluginSpec<Config, Events, PluginEvents, any, any, any, any>
+  ): PluginInstance<string, any, any, any, PluginEvents>;
+};
 
 /**
  * Creates a bound createPlugin function that captures Config, Events, and frameworkId in a closure.
