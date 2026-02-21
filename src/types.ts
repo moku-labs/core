@@ -803,26 +803,7 @@ type CreateEventBusFunction = <
 }) => EventBus<Events>;
 
 /**
- * Type alias for the createPluginFactory function returned by createCore.
- * Creates a factory for making named instances of the same plugin shape.
- */
-type CreatePluginFactoryFunction<
-  // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability in TypeScript
-  BaseConfig extends Record<string, any>,
-  // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability in TypeScript
-  EventContract extends Record<string, any>
-> = <
-  C = void,
-  // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability in TypeScript
-  A extends Record<string, any> = Record<string, never>,
-  S = void,
-  Deps extends readonly PluginLikeInstance[] = readonly PluginLikeInstance[]
->(
-  spec: Omit<PluginSpec<string, C, A, S, BaseConfig, EventContract, Deps>, "plugins">
-) => <N extends string>(name: N) => PluginInstance<N, C, A, S>;
-
-/**
- * What createCore returns. All 7 functions typed against framework generics.
+ * What createCore returns. All 6 functions typed against framework generics.
  * Uses unified EventContract (2 generics: BaseConfig, EventContract).
  * @template BaseConfig - The framework's global config shape
  * @template EventContract - Map of all event names to payload types (unified bus + signals)
@@ -839,7 +820,6 @@ type CoreAPI<
   createComponent: CreateComponentFunction<BaseConfig, EventContract>;
   createModule: CreateModuleFunction;
   createEventBus: CreateEventBusFunction;
-  createPluginFactory: CreatePluginFactoryFunction<BaseConfig, EventContract>;
 };
 
 // =============================================================================
@@ -891,6 +871,5 @@ export type {
   CreateComponentFunction,
   CreateModuleFunction,
   CreateEventBusFunction,
-  CreatePluginFactoryFunction,
   EventBus
 };

@@ -21,11 +21,11 @@ import { createAppImpl } from "./kernel.js";
 
 /**
  * Creates a micro-kernel core instance with the given name and defaults.
- * Returns an object with all 7 CoreAPI functions typed against the framework's
+ * Returns an object with all 6 CoreAPI functions typed against the framework's
  * BaseConfig and EventContract generics.
  * @param name - The framework name used in error messages.
  * @param defaults - Default configuration, built-in plugins, and optional lifecycle callbacks.
- * @returns The core API object with all 7 framework functions.
+ * @returns The core API object with all 6 framework functions.
  * @example
  * ```ts
  * const core = createCore("myFramework", { config: { debug: false } });
@@ -38,10 +38,7 @@ export function createCore<
   BaseConfig extends Record<string, any> = Record<string, unknown>,
   // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability in TypeScript
   EventContract extends Record<string, any> = Record<string, unknown>
->(
-  name: string,
-  defaults: CoreDefaults<BaseConfig>
-): CoreAPI<BaseConfig, EventContract> {
+>(name: string, defaults: CoreDefaults<BaseConfig>): CoreAPI<BaseConfig, EventContract> {
   // ---------------------------------------------------------------------------
   // Shared validation helpers (internal to createCore)
   // ---------------------------------------------------------------------------
@@ -89,10 +86,7 @@ export function createCore<
   ): void {
     for (const field of fields) {
       if (field in spec && typeof spec[field] !== "function") {
-        const label =
-          specType === "factory"
-            ? `Factory spec`
-            : `${specType.charAt(0).toUpperCase()}${specType.slice(1)} "${pluginName}"`;
+        const label = `${specType.charAt(0).toUpperCase()}${specType.slice(1)} "${pluginName}"`;
         throw new Error(
           `[${name}] ${label}: ${field} must be a function, got ${typeof spec[field]}.\n  Provide a function or remove the ${field} property.`
         );
@@ -115,10 +109,7 @@ export function createCore<
     if ("hooks" in spec) {
       const hooks = spec.hooks;
       if (typeof hooks !== "object" || hooks === null || Array.isArray(hooks)) {
-        const label =
-          specType === "factory"
-            ? `Factory spec`
-            : `${specType.charAt(0).toUpperCase()}${specType.slice(1)} "${pluginName}"`;
+        const label = `${specType.charAt(0).toUpperCase()}${specType.slice(1)} "${pluginName}"`;
         throw new Error(
           `[${name}] ${label}: hooks must be a plain object, got ${Array.isArray(hooks) ? "array" : typeof hooks}.\n  Provide a plain object with event handler functions or remove the hooks property.`
         );
@@ -236,37 +227,6 @@ export function createCore<
     };
   }
 
-  /**
-   * Creates a factory function that produces named PluginInstances sharing the same spec.
-   * Validates the spec once at factory creation time.
-   * @param spec - Plugin specification shared by all factory-produced instances.
-   * @returns A function that takes a name and returns a PluginInstance.
-   * @example
-   * ```ts
-   * const factory = createPluginFactory({ api: (ctx) => ({ greet: () => "hi" }) });
-   * const instance = factory("greeter");
-   * ```
-   */
-  // biome-ignore lint/suspicious/noExplicitAny: Runtime function; full generic typing handled by type-level signature
-  function createPluginFactory(spec: any) {
-    // Validate spec at factory creation time
-    validateLifecycleMethods("factory", spec, "factory", PLUGIN_LIFECYCLE_FIELDS);
-    validateHooks("factory", spec, "factory");
-    const hasDefaults = "defaultConfig" in spec;
-
-    // biome-ignore lint/suspicious/noExplicitAny: Factory name parameter is validated at runtime
-    return (factoryName: any) => {
-      validateName(factoryName);
-      return {
-        kind: "plugin" as const,
-        name: factoryName,
-        spec,
-        _types: {},
-        _hasDefaults: hasDefaults
-      };
-    };
-  }
-
   // ---------------------------------------------------------------------------
   // Return CoreAPI
   // ---------------------------------------------------------------------------
@@ -323,7 +283,6 @@ export function createCore<
      * ```
      */
     createEventBus: (busConfig?: { maxListeners?: number; onError?: (error: unknown) => void }) =>
-      createEventBusImpl(busConfig),
-    createPluginFactory
+      createEventBusImpl(busConfig)
   } as unknown as CoreAPI<BaseConfig, EventContract>;
 }
