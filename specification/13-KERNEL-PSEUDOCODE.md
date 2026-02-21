@@ -1,364 +1,599 @@
-# 13 - Kernel Runtime (Pseudocode)
+# 13 - Kernel Pseudocode (Reference Implementation)
 
-**Domain:** Reference implementation pseudocode, design decisions log
-**Sources:** SPEC_EVOLUTION (v2), SPEC_DEFINITIVE (v1.0.0-rc1)
+**Domain:** Complete v3 reference implementation in pseudo-TypeScript, design decisions log
+**Version:** v3 (3-step factory chain)
 
 ---
 
-## 1. Async Kernel (Variant B)
+## 1. Design Decisions Log
 
-This is the complete kernel pseudocode with async createApp.
+Every significant "why" in the v3 architecture:
 
-```typescript
-function createCore(name, defaults) {
+| # | Decision | Alternative Considered | Why This Choice |
+|---|----------|----------------------|-----------------|
+| 1 | 3-step factory chain (createCoreConfig -> createCore -> createApp) | Single createCore with all generics | Breaks the circular dependency between config.ts (where generics live) and plugin files (which need those generics). Each step captures its context in a closure. |
+| 2 | 2 generics on createCoreConfig (Config, Events) | 3 generics (adding State) | State is deferred. 2 generics keep the surface minimal. The signature can expand to 3 later without breaking existing code. |
+| 3 | 0-1 generics on createPlugin | 4-7 explicit generics (N, C, S, A, Events, Deps) | All types inferred from the spec object. PluginEvents is the only explicit generic because it defines new events that have no existing value to infer from. Config and Events flow in from the closure. |
+| 4 | 3 lifecycle phases (init, start, stop) | Many phases with pre/after hooks | Covers all real use cases. Pre/after hooks add complexity for marginal benefit. Plugins that need cross-cutting notification use the event system. |
+| 5 | Flat createApp object | Separate createConfig + createApp two-step | Single-call consumer API. The type system discriminates config keys from plugin config keys from reserved keys. Simpler for consumers. |
+| 6 | Sequential async execution | Parallel execution within phases | Deterministic, easy to reason about. No parallel footgun. Plugin A's onInit resolves before Plugin B's begins. |
+| 7 | Shallow merge only | Deep merge with library | One rule: `{ ...defaults, ...overrides }`. Predictable. No surprises with nested objects. |
+| 8 | Instance-based depends | String-based depends | Importing a plugin instance gives TypeScript the phantom types. Enables fully typed ctx.require(pluginInstance). |
+| 9 | ctx.global = Readonly\<Config\> | ctx.global = { config, state } | Global state is deferred. ctx.global is just the frozen config for now. Will expand to include state when that feature is implemented. |
+| 10 | No topological sort | Auto-sort by depends | Explicit ordering is simpler, more predictable, more debuggable. depends is validation-only. |
+| 11 | Configs frozen, state mutable | Everything mutable or everything frozen | Configs are the contract -- they must not change. State is the deliberate escape hatch for runtime mutation. |
+| 12 | Sub-plugins flattened depth-first, children before parent | No sub-plugins in v3 | Simple and useful for organizing related plugins. Trivial flattening without modules. |
+| 13 | start/stop callable once, terminal after stop | Idempotent no-ops on repeat calls | Throws on second call catches misuse. Terminal state prevents zombie apps. |
+| 14 | Stop is best-effort | Stop aborts on first error | One plugin's cleanup failure should not orphan other plugins' resources. All plugins get their onStop called. |
 
-  // --- createConfig: binds global overrides + extras, returns opaque AppConfig ---
-  function createConfigFn(consumerGlobal, extraPlugins = []) {
-    return {
-      _brand: 'AppConfig',
-      global: consumerGlobal,
-      extras: extraPlugins,
-      _defaults: defaults,
-    };
-  }
+---
 
-  // --- createApp: wires everything, returns frozen app ---
-  async function createAppFn(appConfig, pluginConfigs) {
-    const consumerGlobal = appConfig.global;
-    const extraPlugins = appConfig.extras;
+## 2. createCoreConfig (Step 1 of Factory Chain)
 
-    // === Phase 0: Flatten + Validate (sync) ===
-    const allInputs = [...(defaults.plugins ?? []), ...extraPlugins];
-    const items = flatten(allInputs);
-    const names = items.map(i => i.name);
+```pseudo-typescript
+function createCoreConfig<
+  Config extends Record<string, any>,
+  Events extends Record<string, any> = {},
+>(
+  id: string,
+  options: { config: Config },
+): {
+  createPlugin: BoundCreatePlugin<Config, Events>;
+  createCore: BoundCreateCore<Config, Events>;
+} {
+  // RATIONALE: This is the key trick of the 3-step chain.
+  // Config and Events generics are captured in this closure.
+  // Everything returned from here -- createPlugin, createCore --
+  // carries these types without the caller needing to repeat them.
+  //
+  // Framework plugins import createPlugin from config.ts and automatically
+  // get typed ctx.global, ctx.emit, hooks without any explicit generics.
 
-    // Duplicate check
-    const dupes = findDuplicates(names);
-    if (dupes.length > 0) {
-      throw new Error(`[${name}] Duplicate plugin names: ${dupes.join(', ')}`);
-    }
+  const configDefaults: Config = options.config;
 
-    // Dependency validation
-    for (const item of items) {
-      if (!item.spec.depends) continue;
-      const idx = items.indexOf(item);
-      for (const dep of item.spec.depends) {
-        const depIdx = names.indexOf(dep);
-        if (depIdx === -1) {
-          throw new Error(
-            `[${name}] Plugin "${item.name}" depends on "${dep}", but "${dep}" is not registered.`
-          );
-        }
-        if (depIdx >= idx) {
-          throw new Error(
-            `[${name}] Plugin "${item.name}" depends on "${dep}", but "${dep}" appears after "${item.name}".`
-          );
-        }
-      }
-    }
+  function createPlugin<PluginEvents = {}>(...) { /* see Section 3 */ }
+  function createCore(...) { /* see Section 4 */ }
 
-    // === Resolve global config (sync) ===
-    const globalConfig = Object.freeze({ ...defaults.config, ...consumerGlobal });
+  return { createPlugin, createCore };
+}
+```
 
-    // === Internal registries ===
-    const configs = new Map();
-    const states = new Map();
-    const apis = new Map();
-    const hookMap = new Map();
-    let started = false;
+**What this captures:** The framework ID (`id`), the default config values (`configDefaults`), and the generic types `Config` and `Events` in a closure. All downstream functions inherit these.
 
-    // === Shared helpers ===
-    async function dispatch(hookName, payload) {
-      const handlers = hookMap.get(hookName) ?? [];
-      for (const h of handlers) { await h(payload); }
-    }
-    const emit = (n, p) => dispatch(n, p);
-    const getPlugin = (n) => apis.get(n);
-    const requirePlugin = (n, requester) => {
-      const api = apis.get(n);
-      if (!api) throw new Error(
-        `[${name}] Plugin "${requester}" requires "${n}", but "${n}" is not registered.`
-      );
-      return api;
-    };
-    const has = (n) => apis.has(n);
+**File location:** This function lives in the framework's `config.ts`. Plugin files import `createPlugin` from this module.
 
-    // === Framework onBoot (sync) ===
-    if (defaults.onBoot) defaults.onBoot({ config: globalConfig });
+---
 
-    // === Phase 1: Resolve Config (sync) ===
-    for (const item of items) {
-      const userConf = pluginConfigs[item.name];
-      configs.set(item.name, Object.freeze({ ...item.spec.defaultConfig, ...userConf }));
-    }
+## 3. createPlugin (Bound to Framework Types)
 
-    // === Phase 2: Create (async, sequential) ===
-    for (const item of items) {
-      const conf = configs.get(item.name);
-      if (item.spec.createState) {
-        const state = await item.spec.createState({ global: globalConfig, config: conf });
-        states.set(item.name, state);
-      }
-      if (item.spec.hooks) {
-        for (const [h, fn] of Object.entries(item.spec.hooks)) {
-          const list = hookMap.get(h) ?? [];
-          list.push(fn);
-          hookMap.set(h, list);
-        }
-      }
-      if (item.spec.onCreate) {
-        await item.spec.onCreate({ global: globalConfig, config: conf });
-      }
-    }
+```pseudo-typescript
+function createPlugin<PluginEvents extends Record<string, any> = {}>(
+  name: N,  // N is a literal string type, inferred from the argument
+  spec: {
+    defaultConfig?: C,                                    // C inferred from value
+    depends?: readonly [...PluginInstance[]],              // tuple of instances
+    plugins?: PluginInstance[],                            // sub-plugins
+    createState?: (ctx: MinimalContext<Config, C>) => S,   // S inferred from return
+    api?: (ctx: PluginContext<Config, Events & PluginEvents & DepsEvents, C, S>) => A,  // A inferred
+    onInit?: (ctx: PluginContext<...>) => void | Promise<void>,
+    onStart?: (ctx: PluginContext<...>) => void | Promise<void>,
+    onStop?: (ctx: TeardownContext<Config>) => void | Promise<void>,
+    hooks?: Partial<EventHandlers<Events & PluginEvents & DepsEvents>>,
+  },
+): PluginInstance<N, C, S, A, Events, PluginEvents> {
+  // RATIONALE: All generics (N, C, S, A) are inferred from the spec object.
+  // The framework doesn't pass them. The plugin author doesn't write them.
+  // TypeScript infers N from the name string literal, C from defaultConfig,
+  // S from createState return, A from api return.
+  //
+  // PluginEvents is the ONLY explicit generic because it defines new events
+  // that don't exist anywhere to infer from.
+  //
+  // Config and Events come from the closure -- captured when createCoreConfig
+  // returned this createPlugin function. The plugin author never sees them.
 
-    // === Phase 3: Build APIs (async, sequential) ===
-    for (const item of items) {
-      const conf = configs.get(item.name);
-      const state = states.get(item.name);
-      let api = {};
-      if (item.spec.api) {
-        api = await item.spec.api({
-          global: globalConfig, config: conf, state,
-          emit, getPlugin,
-          require: (n) => requirePlugin(n, item.name), has,
-        });
-      }
-      api.config = conf;
-      apis.set(item.name, api);
-    }
-
-    // === Phase 4: Init (async, sequential) ===
-    for (const item of items) {
-      if (item.spec.onInit) {
-        await item.spec.onInit({
-          global: globalConfig, config: configs.get(item.name),
-          emit, getPlugin,
-          require: (n) => requirePlugin(n, item.name), has,
-        });
-      }
-    }
-
-    // === Build app ===
-    const app = {
-      config: Object.freeze({ ...globalConfig, get: (k) => globalConfig[k] }),
-      emit, getPlugin, require: (n) => requirePlugin(n, 'app'), has,
-
-      start: async () => {
-        if (started) return;
-        started = true;
-        if (defaults.onReady) await defaults.onReady({ config: globalConfig });
-        await dispatch('app:start', { config: globalConfig });
-        for (const item of items) {
-          if (item.spec.onStart) {
-            await item.spec.onStart({
-              global: globalConfig, config: configs.get(item.name),
-              state: states.get(item.name),
-              emit, getPlugin,
-              require: (n) => requirePlugin(n, item.name), has,
-            });
-          }
-        }
-      },
-
-      stop: async () => {
-        if (!started) return;
-        started = false;
-        for (const item of [...items].reverse()) {
-          if (item.spec.onStop) await item.spec.onStop({ global: globalConfig });
-        }
-        await dispatch('app:stop', { config: globalConfig });
-        if (defaults.onShutdown) await defaults.onShutdown({ config: globalConfig });
-      },
-
-      destroy: async () => {
-        await app.stop();
-        for (const item of [...items].reverse()) {
-          if (item.spec.onDestroy) await item.spec.onDestroy({ global: globalConfig });
-        }
-        await dispatch('app:destroy', {});
-        configs.clear(); states.clear(); apis.clear(); hookMap.clear();
-      },
-    };
-
-    // Mount plugin APIs on app
-    for (const [n, api] of apis) app[n] = api;
-    return Object.freeze(app);
-  }
-
-  // --- createPlugin ---
-  function createPluginFn(pluginName, spec) {
-    return {
-      kind: 'plugin', name: pluginName, spec,
-      _hasDefaults: 'defaultConfig' in spec,
-      _types: {},
-    };
-  }
-
-  // --- createComponent ---
-  function createComponentFn(compName, spec) {
-    const mappedSpec = {
-      ...spec,
-      onStart: spec.onMount,
-      onStop: spec.onUnmount,
-    };
-    return {
-      kind: 'component', name: compName, spec: mappedSpec,
-      _hasDefaults: 'defaultConfig' in spec,
-      _types: {},
-    };
-  }
-
-  // --- createModule ---
-  function createModuleFn(modName, spec) {
-    return { kind: 'module', name: modName, spec };
-  }
-
-  // --- createPluginFactory ---
-  function createPluginFactoryFn(spec) {
-    return (factoryName) => createPluginFn(factoryName, spec);
-  }
+  // DepsEvents is the union of PluginEvents from all plugins in depends.
+  // TypeScript computes this from the phantom types on the PluginInstance objects.
 
   return {
-    createConfig: createConfigFn,
-    createApp: createAppFn,
-    createPlugin: createPluginFn,
-    createComponent: createComponentFn,
-    createModule: createModuleFn,
-    createEventBus: () => { /* standalone pub/sub utility */ },
-    createPluginFactory: createPluginFactoryFn,
+    name,
+    spec,
+    // Phantom types for type-level inference (erased at runtime)
+    _phantom: {} as {
+      config: C;
+      state: S;
+      api: A;
+      events: PluginEvents;
+    },
   };
 }
 ```
 
+**Type flow:**
+- `Config` and `Events` -- from createCoreConfig closure (invisible to plugin author)
+- `N` -- inferred from `name` argument (literal string type)
+- `C` -- inferred from `defaultConfig` value
+- `S` -- inferred from `createState` return type
+- `A` -- inferred from `api` return type
+- `PluginEvents` -- explicit generic (only if plugin declares new events)
+- `DepsEvents` -- computed from `depends` tuple phantom types
+
 ---
 
-## 2. Sync Kernel Differences (Variant A)
+## 4. createCore (Step 2 of Factory Chain)
 
-For the sync createApp variant, the only differences are:
+```pseudo-typescript
+function createCore(
+  coreConfig: { id: string; configDefaults: Config },
+  options: {
+    plugins: PluginInstance[],          // framework default plugins
+    pluginConfigs?: Record<string, any>, // framework-level plugin config overrides
+    onReady?: (ctx: { config: Readonly<Config> }) => void | Promise<void>,
+    onError?: (error: Error) => void,
+  },
+): {
+  createApp: BoundCreateApp<Config, Events, DefaultPlugins>;
+  createPlugin: BoundCreatePlugin<Config, Events>;
+} {
+  // RATIONALE: createCore captures the framework's default plugins, their configs,
+  // and the framework callbacks. It returns createApp which already "knows" about
+  // the defaults. It also re-exports createPlugin for consumer convenience --
+  // consumers import { createApp, createPlugin } from 'my-framework'.
 
-1. `createAppFn` is not `async`
-2. `createState`, `onCreate`, `api`, `onInit` calls are not `await`ed
-3. `createApp` returns `App` directly instead of `Promise<App>`
+  const { id, configDefaults } = coreConfig;
+  const defaultPlugins = options.plugins;
+  const frameworkPluginConfigs = options.pluginConfigs ?? {};
 
-```typescript
-// Key difference: no async, no await on Phases 2-4
-function createAppFn(appConfig, pluginConfigs) {
-  // ... Phase 0 & 1 identical ...
+  async function createApp(consumerOptions?) { /* see Section 5 */ }
 
-  // Phase 2: Create (sync)
-  for (const item of items) {
-    const conf = configs.get(item.name);
-    if (item.spec.createState) {
-      states.set(item.name, item.spec.createState({ global: globalConfig, config: conf }));
+  return { createApp, createPlugin };
+}
+```
+
+**What this captures:** Default plugins, framework-level plugin configs, callbacks. The consumer's `createApp` is now fully bound to the framework's choices.
+
+**File location:** Called once in the framework's `index.ts`. The returned `createApp` and `createPlugin` are exported to consumers.
+
+---
+
+## 5. createApp (Step 3 -- The Main Body)
+
+This is the longest section. It covers the entire init phase.
+
+```pseudo-typescript
+async function createApp(consumerOptions?: {
+  plugins?: PluginInstance[];
+  // ...Partial<Config>           -- config overrides (matching Config keys)
+  // ...BuildPluginConfigs<All>   -- plugin configs (matching plugin names)
+}): Promise<App<Config, Events, AllPlugins>> {
+
+  // =========================================================================
+  // Step 1: Parse flat options
+  // =========================================================================
+  // RATIONALE: Single flat object is ergonomic for consumers.
+  // Runtime separates: reserved keys (plugins), plugin config keys
+  // (matching registered plugin names), and remaining keys (config overrides).
+  const { plugins: extraPlugins, ...rest } = consumerOptions ?? {};
+  // Deferred: actual key separation happens after we know all plugin names (Step 3)
+
+  // =========================================================================
+  // Step 2: Merge plugin lists
+  // =========================================================================
+  // RATIONALE: Framework defaults come first, consumer extras second.
+  // Consumer cannot reorder or remove framework defaults.
+  const allPlugins = [...defaultPlugins, ...(extraPlugins ?? [])];
+
+  // =========================================================================
+  // Step 3: Flatten sub-plugins
+  // =========================================================================
+  // RATIONALE: Depth-first, children before parent.
+  // A plugin with plugins: [subA, subB] becomes [subA, subB, parent].
+  // This ensures sub-plugins are registered before their parent.
+  const flatPlugins = flatten(allPlugins);
+
+  // =========================================================================
+  // Step 4: Validate names
+  // =========================================================================
+  // RATIONALE: No duplicate names. Duplicates are always a bug.
+  // Error format: [frameworkId] description.\n  actionable suggestion.
+  const names = flatPlugins.map(p => p.name);
+  const seen = new Set<string>();
+  for (const name of names) {
+    if (seen.has(name)) {
+      throw new Error(
+        `[${id}] Duplicate plugin name: "${name}".\n` +
+        `  Each plugin must have a unique name.`
+      );
     }
-    // ... hooks registration identical ...
-    if (item.spec.onCreate) {
-      item.spec.onCreate({ global: globalConfig, config: conf });
+    seen.add(name);
+  }
+
+  // =========================================================================
+  // Step 5: Validate dependencies
+  // =========================================================================
+  // RATIONALE: depends is validation-only. No topological sort.
+  // Every dependency must exist AND appear EARLIER in the array.
+  for (let i = 0; i < flatPlugins.length; i++) {
+    const plugin = flatPlugins[i];
+    if (!plugin.spec.depends) continue;
+
+    for (const dep of plugin.spec.depends) {
+      const depName = dep.name;
+      const depIndex = names.indexOf(depName);
+
+      if (depIndex === -1) {
+        throw new Error(
+          `[${id}] Plugin "${plugin.name}" depends on "${depName}", ` +
+          `but "${depName}" is not registered.\n` +
+          `  Add "${depName}" to your plugin list before "${plugin.name}".`
+        );
+      }
+      if (depIndex >= i) {
+        throw new Error(
+          `[${id}] Plugin "${plugin.name}" depends on "${depName}", ` +
+          `but "${depName}" appears after "${plugin.name}".\n` +
+          `  Move "${depName}" before "${plugin.name}" in your plugin list.`
+        );
+      }
     }
   }
 
-  // Phase 3: Build APIs (sync)
-  for (const item of items) {
-    // ... same but without await on api() ...
+  // =========================================================================
+  // Step 6: Resolve config
+  // =========================================================================
+  // RATIONALE: Shallow merge. Framework defaults -> consumer overrides.
+  // Config keys are identified from the Config type shape.
+  // Plugin config keys are identified by matching registered plugin names.
+
+  // 6a. Separate config overrides from plugin configs
+  const pluginNameSet = new Set(names);
+  const configOverrides: Partial<Config> = {};
+  const consumerPluginConfigs: Record<string, any> = {};
+
+  for (const [key, value] of Object.entries(rest)) {
+    if (pluginNameSet.has(key)) {
+      consumerPluginConfigs[key] = value;
+    } else {
+      configOverrides[key] = value;
+    }
   }
 
-  // Phase 4: Init (sync)
-  for (const item of items) {
-    // ... same but without await on onInit() ...
+  // 6b. Global config: framework defaults <- consumer overrides
+  const globalConfig: Readonly<Config> = Object.freeze({
+    ...configDefaults,
+    ...configOverrides,
+  });
+
+  // 6c. Per-plugin config: plugin defaults <- framework overrides <- consumer overrides
+  const resolvedConfigs = new Map<string, Readonly<any>>();
+  for (const plugin of flatPlugins) {
+    const merged = Object.freeze({
+      ...plugin.spec.defaultConfig,
+      ...frameworkPluginConfigs[plugin.name],
+      ...consumerPluginConfigs[plugin.name],
+    });
+    resolvedConfigs.set(plugin.name, merged);
   }
 
-  // ... rest identical ...
-  return Object.freeze(app);  // NOT a Promise
+  // =========================================================================
+  // Step 7: Create state
+  // =========================================================================
+  // RATIONALE: State is created before APIs because api() receives state in ctx.
+  // Only MinimalContext available -- no emit, no require, no other plugins.
+  const states = new Map<string, any>();
+  for (const plugin of flatPlugins) {
+    if (plugin.spec.createState) {
+      const ctx = {
+        global: globalConfig,
+        config: resolvedConfigs.get(plugin.name),
+      };
+      states.set(plugin.name, plugin.spec.createState(ctx));
+    }
+  }
+
+  // =========================================================================
+  // Step 8: Build event bus
+  // =========================================================================
+  // RATIONALE: Hooks are registered before APIs and onInit run,
+  // so that events emitted during api() or onInit() are captured.
+  const hookMap = new Map<string, Array<(payload: any) => void | Promise<void>>>();
+
+  async function dispatch(eventName: string, payload: any) {
+    const handlers = hookMap.get(eventName) ?? [];
+    for (const handler of handlers) {
+      await handler(payload);
+    }
+  }
+
+  const emit = (eventName: string, payload?: any) => {
+    void dispatch(eventName, payload);
+  };
+
+  // Register hooks from all plugins
+  for (const plugin of flatPlugins) {
+    if (plugin.spec.hooks) {
+      for (const [eventName, handler] of Object.entries(plugin.spec.hooks)) {
+        if (!handler) continue;
+        const list = hookMap.get(eventName) ?? [];
+        list.push(handler);
+        hookMap.set(eventName, list);
+      }
+    }
+  }
+
+  // =========================================================================
+  // Step 9: Build APIs
+  // =========================================================================
+  // RATIONALE: APIs are built after state and hooks so that api() has access
+  // to state and can emit events. Forward order.
+  const apis = new Map<string, any>();
+
+  // Helper to build plugin context for a specific plugin
+  function buildPluginContext(plugin: PluginInstance) {
+    return {
+      global: globalConfig,
+      config: resolvedConfigs.get(plugin.name),
+      state: states.get(plugin.name),
+      emit,
+      getPlugin: (nameOrInstance: string | PluginInstance) => {
+        const n = typeof nameOrInstance === 'string' ? nameOrInstance : nameOrInstance.name;
+        return apis.get(n);
+      },
+      require: (nameOrInstance: string | PluginInstance) => {
+        const n = typeof nameOrInstance === 'string' ? nameOrInstance : nameOrInstance.name;
+        const api = apis.get(n);
+        if (!api) {
+          throw new Error(
+            `[${id}] Plugin "${plugin.name}" requires "${n}", ` +
+            `but "${n}" is not registered.\n` +
+            `  Add "${n}" to your plugin list.`
+          );
+        }
+        return api;
+      },
+      has: (name: string) => apis.has(name),
+    };
+  }
+
+  for (const plugin of flatPlugins) {
+    if (plugin.spec.api) {
+      const ctx = buildPluginContext(plugin);
+      apis.set(plugin.name, plugin.spec.api(ctx));
+    }
+  }
+
+  // =========================================================================
+  // Step 10: Run onInit (forward order)
+  // =========================================================================
+  // RATIONALE: Sequential, each plugin awaited. All APIs are built,
+  // so onInit can safely call require() and getPlugin().
+  for (const plugin of flatPlugins) {
+    if (plugin.spec.onInit) {
+      const ctx = buildPluginContext(plugin);
+      await plugin.spec.onInit(ctx);
+    }
+  }
+
+  // Call framework onReady if provided
+  if (options.onReady) {
+    await options.onReady({ config: globalConfig });
+  }
+
+  // =========================================================================
+  // Step 11: Build and freeze app
+  // =========================================================================
+  let started = false;
+  let stopped = false;
+
+  function guardStopped() {
+    if (stopped) {
+      throw new Error(`[${id}] App is stopped. No further operations allowed.`);
+    }
+  }
+
+  const app = {
+    start: async () => { /* see Section 6 */ },
+    stop: async () => { /* see Section 7 */ },
+
+    emit: (eventName: string, payload?: any) => {
+      guardStopped();
+      emit(eventName, payload);
+    },
+
+    getPlugin: (nameOrInstance: string | PluginInstance) => {
+      guardStopped();
+      const n = typeof nameOrInstance === 'string' ? nameOrInstance : nameOrInstance.name;
+      return apis.get(n);
+    },
+
+    require: (nameOrInstance: string | PluginInstance) => {
+      guardStopped();
+      const n = typeof nameOrInstance === 'string' ? nameOrInstance : nameOrInstance.name;
+      const api = apis.get(n);
+      if (!api) {
+        throw new Error(
+          `[${id}] app.require("${n}") failed: "${n}" is not registered.\n` +
+          `  Check your plugin list.`
+        );
+      }
+      return api;
+    },
+
+    has: (name: string) => {
+      guardStopped();
+      return apis.has(name);
+    },
+  };
+
+  // Mount plugin APIs directly on app: app.router, app.blog, etc.
+  for (const [name, api] of apis) {
+    app[name] = api;
+  }
+
+  return Object.freeze(app) as App<Config, Events, AllPlugins>;
 }
 ```
 
 ---
 
-## 3. Flatten Helper
+## 6. app.start()
 
-```typescript
-function flatten(items) {
-  const result = [];
-  for (const item of items) {
-    if (item.kind === 'module') {
-      if (item.spec.onRegister) item.spec.onRegister();
-      result.push(...flatten(item.spec.plugins ?? []));
-      result.push(...flatten(item.spec.components ?? []));
-      result.push(...flatten(item.spec.modules ?? []));
-    } else {
-      // Plugin or Component
-      if (item.spec.plugins) {
-        result.push(...flatten(item.spec.plugins));  // sub-plugins first
-      }
-      result.push(item);
+```pseudo-typescript
+async start() {
+  // RATIONALE: Forward order. Sequential. Each plugin awaited.
+  // Throws if already started (catches misuse).
+  guardStopped();
+
+  if (started) {
+    throw new Error(`[${id}] App already started.\n  start() can only be called once.`);
+  }
+  started = true;
+
+  for (const plugin of flatPlugins) {
+    if (plugin.spec.onStart) {
+      const ctx = buildPluginContext(plugin);
+      await plugin.spec.onStart(ctx);
     }
   }
+}
+```
+
+---
+
+## 7. app.stop()
+
+```pseudo-typescript
+async stop() {
+  // RATIONALE: REVERSE order. Plugins that depend on others stop first.
+  // If B depends on A, B stops before A -- B can still use A's resources
+  // during its own cleanup.
+  //
+  // Best-effort: if a plugin's onStop throws, capture the error but
+  // continue stopping remaining plugins. Re-throw the first error after all done.
+
+  guardStopped();
+
+  if (!started) {
+    throw new Error(`[${id}] App not started.\n  Call start() before stop().`);
+  }
+  stopped = true;
+
+  let firstError: Error | null = null;
+
+  for (const plugin of [...flatPlugins].reverse()) {
+    if (plugin.spec.onStop) {
+      try {
+        await plugin.spec.onStop({ global: globalConfig });
+      } catch (err) {
+        if (!firstError) firstError = err as Error;
+        // Continue stopping remaining plugins (best-effort teardown)
+        if (options.onError) options.onError(err as Error);
+      }
+    }
+  }
+
+  if (firstError) throw firstError;
+}
+```
+
+---
+
+## 8. Helper Functions
+
+### flatten
+
+```pseudo-typescript
+function flatten(plugins: PluginInstance[]): PluginInstance[] {
+  // RATIONALE: Depth-first, children before parent.
+  // If a plugin has sub-plugins, they appear before the parent.
+  // This is a simple recursive walk -- no modules, no special cases.
+  const result: PluginInstance[] = [];
+
+  for (const plugin of plugins) {
+    if (plugin.spec.plugins && plugin.spec.plugins.length > 0) {
+      // Recurse into sub-plugins first
+      result.push(...flatten(plugin.spec.plugins));
+    }
+    result.push(plugin);
+  }
+
   return result;
 }
 ```
 
+### buildPluginContext
+
+See Section 5, Step 9 for the full implementation. Constructs the appropriate context object for a given plugin, providing:
+- `global` -- frozen global config
+- `config` -- frozen plugin config
+- `state` -- mutable plugin state
+- `emit` -- event dispatch function
+- `getPlugin` / `require` / `has` -- inter-plugin communication
+
+### guardStopped
+
+```pseudo-typescript
+function guardStopped() {
+  // RATIONALE: After stop(), the app is in a terminal state.
+  // All methods throw to prevent use of a stopped app.
+  if (stopped) {
+    throw new Error(`[${id}] App is stopped. No further operations allowed.`);
+  }
+}
+```
+
 ---
 
-## 4. Design Decisions Log
+## 9. End-to-End Flow Summary
 
-Every significant "why" in this spec:
+```
+Framework config.ts:
+  createCoreConfig<Config, Events>(id, { config })
+    -> captures generics in closure
+    -> returns { createPlugin, createCore }
 
-| Decision | Alternative considered | Why we chose this |
-|---|---|---|
-| Three layers (core -> framework -> consumer) | Single package | Constrains each layer, prevents LLM structural errors |
-| `createCore` as single Layer 1 export | Multiple exports | One function = one concept = micro |
-| `createConfig` + `createApp` two-step pattern | Three-arg createApp | TypeScript can't type arg 2 based on arg 3. Two steps let TS know all plugins before typing pluginConfigs. |
-| `createConfig` returns opaque AppConfig | Return plain tuple/array | Opaque type prevents misuse. Phantom types carry plugin union. |
-| No configRequired field | Boolean flag + defaultConfig | Config type IS the contract. One mechanism, one truth. |
-| `defaultConfig` is full `C` | `Partial<C>` | Consumer gets complete valid config when omitting. |
-| Unified `emit` with overloads (typed + untyped) | Separate `emit` + `signal` methods | Single method is simpler. EventContract provides type safety for known events. Untyped overload is the ad-hoc escape hatch. |
-| Sequential async execution (not parallel) | Parallel execution within phases | Preserves ordering guarantee. Predictable. Debuggable. |
-| No topological sort | Auto-sort by `depends` | Explicit ordering is simpler, more predictable, more debuggable. |
-| `depends` as validation only | Dependency resolution | Just checks. Doesn't change order. Doesn't add magic. |
-| Duplicate names throw | Silent overwrite / merge | Silent bugs are worse than loud errors. |
-| Shallow merge only | Deep merge with lodash | Deep merge is unpredictable. Shallow merge has one rule. |
-| Typed getPlugin/require on App type | Loose typing everywhere | Consumers get full type safety. Plugin internals stay loose (full union not known). |
-| createPluginFactory in CoreAPI | External utility | Multi-instance plugins (two databases, three loggers) are a real need. Minimal addition. |
-| moku_core/testing sub-path export | Testing in main entry point | Keeps core entry minimal. Testing is opt-in. |
-| Typed hooks via EventContract | Untyped hooks at kernel level | EventContract gives typed payloads for known events, `unknown` for ad-hoc. Single mechanism. |
-| No middleware in kernel | Built-in `pipe()` | Plugins implement their own. One less concept to learn. |
-| Component = plugin at runtime | Separate runtime paths | Less code, fewer bugs, same capability. |
-| Module = flattening container | Runtime entity with own lifecycle | Modules are organization, not runtime. |
-| Sub-plugin types not propagated (v1) | Recursive FlattenPlugins type | TypeScript recursion limits. List explicitly for now. Planned for future. |
-| `require()` throws, `getPlugin()` returns undefined | Single method | Two methods, two intentions. Clear semantics. |
-| `ctx` varies by lifecycle phase | Same ctx everywhere | Prevents access to things that don't exist yet. |
-| Configs frozen after creation | Mutable configs | Prevents a class of bugs. Use state for mutable data. |
-| App frozen after creation | Mutable app | Same. The plugin set is static. |
-| Default plugins immutable | Consumer can remove | Framework identity defined by its defaults. |
-| Plugin = connection point | Plugin = code container | Enables independent testing, LLM navigation, separation of concerns. |
-| Framework provides BaseConfig defaults | Consumer provides full config | Consumer only overrides what they need. Partial<BaseConfig>. |
-| Consumer uses framework's createPlugin | Consumer creates plugins independently | Ensures custom plugins inherit BaseConfig and EventContract typing. |
+Framework plugin files:
+  createPlugin('name', { defaultConfig, createState, api, onInit, onStart, onStop, hooks })
+    -> all types inferred from spec; Config + Events from closure
+    -> returns PluginInstance with phantom types
 
-### Open Design Decisions (Variants to Choose During Implementation)
+Framework index.ts:
+  createCore(coreConfig, { plugins: [defaultPlugins...] })
+    -> captures default plugins
+    -> returns { createApp, createPlugin }
 
-| Decision | Variant A | Variant B | Tradeoffs |
-|---|---|---|---|
-| createApp sync/async | Sync (Phases 2-4 sync) | Async (Phases 2-4 async) | B: Plugins can do real I/O during init. A: Simpler, no await needed. |
-| createCore generics | 2 (BaseConfig, EventContract) | **Resolved: 2 generics with unified EventContract** | EventContract replaces BusContract+SignalRegistry. Single generic for all events. |
-| CoreAPI function count | 6 functions | 7 (+createPluginFactory) | B: Multi-instance plugins. A: Smaller API. |
-| App getPlugin/require | Loose `<T = any>(string)` | Constrained to registered names | B: Full type safety. A: Simpler types. |
-| PluginSpec lifecycle | Sync for Phases 2-4 | Async-compatible for Phases 2-4 | B: Real I/O during init. A: Simpler plugin authoring. |
+Consumer main.ts:
+  await createApp({ plugins, ...configOverrides, ...pluginConfigs })
+    -> merge plugins: [...defaults, ...extras]
+    -> flatten sub-plugins (depth-first)
+    -> validate names (no duplicates)
+    -> validate dependencies (exists + earlier in array)
+    -> resolve config (shallow merge, freeze)
+    -> create state (MinimalContext)
+    -> register hooks
+    -> build APIs (PluginContext)
+    -> run onInit (PluginContext, forward, sequential)
+    -> freeze and return app
 
-### Planned Future Improvements (Not In v1)
+  await app.start()
+    -> run onStart (PluginContext, forward, sequential)
 
-| Feature | Why deferred |
-|---|---|
-| Sub-plugin type propagation | Recursive `FlattenPlugins` type. TypeScript recursion limits. High value, needs careful implementation. |
-| Framework composition (`core.extend()`) | Framework B extends Framework A's config + defaults. Needs real-world validation. |
-| Dynamic plugin loading (`app.extend()`) | Add plugins after createApp. Fundamental architecture question. |
-| Reactive state utility (`moku_core/signals`) | Opt-in signals/computed/effects. Utility package, not core. |
-| Consumer plugin restrictions (`validatePlugin`) | Duplicate name check is sufficient for now. |
+  await app.stop()
+    -> run onStop (TeardownContext, REVERSE, sequential, best-effort)
+    -> app enters terminal state
+```
 
 ---
 
 ## Cross-References
 
-- Lifecycle: [06-LIFECYCLE](./06-LIFECYCLE.md)
+- Architecture: [01-ARCHITECTURE](./01-ARCHITECTURE.md)
+- Core API signatures: [02-CORE-API](./02-CORE-API.md)
 - Plugin system: [03-PLUGIN-SYSTEM](./03-PLUGIN-SYSTEM.md)
+- Factory chain: [04-FACTORY-CHAIN](./04-FACTORY-CHAIN.md)
+- Config resolution: [05-CONFIG-SYSTEM](./05-CONFIG-SYSTEM.md)
+- Lifecycle phases: [06-LIFECYCLE](./06-LIFECYCLE.md)
+- Communication: [07-COMMUNICATION](./07-COMMUNICATION.md)
+- Context tiers: [08-CONTEXT](./08-CONTEXT.md)
 - Type system: [09-TYPE-SYSTEM](./09-TYPE-SYSTEM.md)
-
+- Invariants: [11-INVARIANTS](./11-INVARIANTS.md)
