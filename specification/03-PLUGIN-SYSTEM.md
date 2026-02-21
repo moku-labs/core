@@ -1,346 +1,293 @@
 # 03 - Plugin System
 
-**Domain:** PluginSpec, PluginInstance, createPlugin, createPluginFactory, depends
-**Sources:** SPEC_EVOLUTION (v2), SPEC_DEFINITIVE (v1.0.0-rc1), SPEC_IMPROVEMENTS_IDEAS (P4, P6)
+**Domain:** PluginSpec, createPlugin, depends, sub-plugins, lifecycle methods
+**Architecture:** Plugins are the only extensibility primitive in v3
 
 ---
 
 ## 1. PluginSpec
 
-### Variant A: Sync Lifecycle (base)
+The plugin spec is a plain object that describes a plugin's behavior. All fields are optional. Types are inferred from values -- no explicit generics needed.
 
 ```typescript
-interface PluginSpec<
-  N extends string,
-  C = void,
-  A extends Record<string, any> = {},
-  S = void,
-> {
-  /** Complete default config. Presence makes config OPTIONAL for consumer. Full C, not Partial<C>. */
-  defaultConfig?: C;
+{
+  /** Complete default config. Presence makes config OPTIONAL for consumer. */
+  defaultConfig?: C,
 
-  /** Declarative dependencies. Instance-based -- accepts plugin/component instances. Validated at Phase 0. NOT a topological sort -- just validation. */
-  depends?: readonly PluginLikeInstance[];
+  /** Instance-based dependencies. Validated at startup (not a topological sort). */
+  depends?: readonly PluginInstance[],
 
-  /** Create internal mutable state. Runs before any other lifecycle. Minimal context. */
-  createState?: (ctx: { global: Readonly<any>; config: Readonly<C> }) => S;
+  /** Sub-plugins. Flattened depth-first, children registered before parent. */
+  plugins?: PluginInstance[],
 
-  /** Validate config. No other plugins available. */
-  onCreate?: (ctx: { global: Readonly<any>; config: Readonly<C> }) => void;
+  /** Create internal mutable state. Minimal context: global config + plugin config. */
+  createState?: (ctx: { global: Readonly<Config>; config: Readonly<C> }) => S,
 
   /** Build the public API mounted on app.<pluginName>. Full context. */
-  api?: (ctx: PluginCtx) => A;
+  api?: (ctx: PluginContext) => A,
 
-  /** All plugins created and APIs mounted. Check dependencies here. */
-  onInit?: (ctx: BaseCtx & { config: Readonly<C> }) => void;
+  /** All plugins created and APIs mounted. Forward order during createApp. */
+  onInit?: (ctx: PluginContext) => void | Promise<void>,
 
-  /** App is starting. Async allowed. Full context. */
-  onStart?: (ctx: PluginCtx) => void | Promise<void>;
+  /** App is starting. Forward order during app.start(). */
+  onStart?: (ctx: PluginContext) => void | Promise<void>,
 
-  /** Teardown. Reverse order. Minimal context. */
-  onStop?: (ctx: { global: Readonly<any> }) => void | Promise<void>;
+  /** Teardown. REVERSE order during app.stop(). */
+  onStop?: (ctx: { global: Readonly<Config> }) => void | Promise<void>,
 
-  /** Final cleanup. Reverse order. Minimal context. */
-  onDestroy?: (ctx: { global: Readonly<any> }) => void | Promise<void>;
-
-  /**
-   * Event subscriptions. Keys are event names, values are handlers.
-   * Known events (in EventContract) get typed payloads. Unknown events get `unknown`.
-   * Handlers execute in plugin registration order, sequentially.
-   */
+  /** Event subscriptions. Known events get typed payloads. */
   hooks?: {
-    [K in string]?: K extends keyof Events
-      ? (payload: Events[K]) => void | Promise<void>
+    [K in string]?: K extends keyof MergedEvents
+      ? (payload: MergedEvents[K]) => void | Promise<void>
       : (payload: unknown) => void | Promise<void>;
-  };
-
-  /** Sub-plugins. Flattened depth-first, children before parent. */
-  plugins?: PluginInstance[];
+  },
 }
 ```
 
-In this variant, only `onStart`, `onStop`, `onDestroy` accept async returns. `createState`, `onCreate`, `api`, `onInit` are sync. Async initialization is deferred to `onStart`.
+**Type inference:** `C` is inferred from `defaultConfig`, `S` from `createState` return value, `A` from `api` return value. The framework's `Config` and `Events` types flow in from `createCoreConfig` via closures. No manual annotation needed.
 
-### Variant B: Async-Compatible Lifecycle
-
-```typescript
-interface PluginSpec<
-  N extends string,
-  C = void,
-  A extends Record<string, any> = {},
-  S = void,
-> {
-  defaultConfig?: C;
-  depends?: readonly string[];
-
-  /** Create internal mutable state. Async-compatible. Runs before any other lifecycle. Minimal context. */
-  createState?: (ctx: { global: Readonly<any>; config: Readonly<C> }) => S | Promise<S>;
-
-  /** Validate config. No other plugins available. Async-compatible. */
-  onCreate?: (ctx: { global: Readonly<any>; config: Readonly<C> }) => void | Promise<void>;
-
-  /** Build the public API mounted on app.<pluginName>. Full context. Async-compatible. */
-  api?: (ctx: PluginCtx) => A | Promise<A>;
-
-  /** All plugins created and APIs mounted. Check dependencies here. Async-compatible. */
-  onInit?: (ctx: BaseCtx & { config: Readonly<C> }) => void | Promise<void>;
-
-  /** App is starting. Async allowed. Full context. */
-  onStart?: (ctx: PluginCtx) => void | Promise<void>;
-
-  /** Teardown. Reverse order. Minimal context. */
-  onStop?: (ctx: { global: Readonly<any> }) => void | Promise<void>;
-
-  /** Final cleanup. Reverse order. Minimal context. */
-  onDestroy?: (ctx: { global: Readonly<any> }) => void | Promise<void>;
-
-  hooks?: {
-    [K in string]?: K extends keyof Events
-      ? (payload: Events[K]) => void | Promise<void>
-      : (payload: unknown) => void | Promise<void>;
-  };
-  plugins?: PluginInstance[];
-}
-```
-
-In this variant, ALL lifecycle methods accept both sync and async return values:
-
-| Method | Return type | When async is useful |
-|---|---|---|
-| `createState` | `S \| Promise<S>` | Connect to databases, load files |
-| `onCreate` | `void \| Promise<void>` | Validate config against external schemas |
-| `api` | `A \| Promise<A>` | Build API that depends on async-initialized state |
-| `onInit` | `void \| Promise<void>` | Check dependencies with async verification |
-| `onStart` | `void \| Promise<void>` | Start servers, open connections |
-| `onStop` | `void \| Promise<void>` | Flush buffers, close connections |
-| `onDestroy` | `void \| Promise<void>` | Finalize, disconnect |
-
-**Execution: sequential, not parallel.** Plugin A fully completes each phase before Plugin B begins. This preserves the ordering guarantee. If Plugin A's `createState` returns a Promise, it is awaited before Plugin B's `createState` runs.
-
-Sync plugins work unchanged. `void | Promise<void>` covers sync returns.
+**MergedEvents:** The union of global `Events` (from `createCoreConfig`) + any `PluginEvents` declared on this plugin + events from plugins in `depends`. This determines what event names are typed in `hooks` and `ctx.emit`.
 
 ---
 
-## 2. The `depends` Field
+## 2. createPlugin
 
 ```typescript
-// Instance-based depends: pass actual plugin instances, not strings
-const loggerPlugin = createPlugin('logger', { ... });
-const rendererPlugin = createPlugin('renderer', { ... });
+function createPlugin<
+  PluginEvents extends Record<string, any> = {},
+>(
+  name: string,
+  spec: PluginSpec,
+): PluginInstance;
+```
 
-const routerPlugin = createPlugin<'router', RouterConfig, RouterApi, RouterState>('router', {
-  depends: [loggerPlugin, rendererPlugin],
-  // TypeScript infers the tuple type, enabling typed ctx.require
-  // ...
+**0-1 generic.** The only optional generic is `PluginEvents` -- per-plugin typed events this plugin declares. All other types (config, state, API) are inferred from the spec object.
+
+### Example 1: Zero Generics (Most Common)
+
+```typescript
+// my-framework/src/plugins/router/index.ts
+import { createPlugin } from '../../config';
+
+export const routerPlugin = createPlugin('router', {
+  defaultConfig: {
+    basePath: '/',
+    notFoundRedirect: '/404',
+  },
+  createState: () => ({
+    currentPath: '/',
+    history: [] as string[],
+  }),
+  api: (ctx) => ({
+    navigate: (path: string) => {
+      ctx.state.history.push(ctx.state.currentPath);
+      ctx.state.currentPath = path;
+      void ctx.emit('router:navigate', { from: ctx.state.history.at(-1)!, to: path });
+    },
+    current: () => ctx.state.currentPath,
+    back: () => {
+      const prev = ctx.state.history.pop();
+      if (prev) ctx.state.currentPath = prev;
+    },
+  }),
+  onInit: (ctx) => {
+    // All plugins registered, can check dependencies
+  },
+  onStart: (ctx) => {
+    // App is starting, begin routing
+  },
+  onStop: () => {
+    // Cleanup
+  },
 });
 ```
 
-The `depends` field accepts `readonly PluginLikeInstance[]` -- an array of plugin or component instances. Since you import a plugin to depend on it, you already have the instance reference with its phantom types. TypeScript infers the tuple type from the array, enabling fully typed `ctx.require` and `ctx.getPlugin`.
+TypeScript infers:
+- Config type from `defaultConfig`: `{ basePath: string; notFoundRedirect: string }`
+- State type from `createState` return: `{ currentPath: string; history: string[] }`
+- API type from `api` return: `{ navigate(path: string): void; current(): string; back(): void }`
 
-### What `depends` Does at Phase 0
+### Example 2: One Generic (PluginEvents)
 
-1. For each plugin with `depends`, extract names from instances and check that every named dependency exists in the flattened list.
+```typescript
+// my-framework/src/plugins/renderer/index.ts
+import { createPlugin } from '../../config';
+
+type RendererEvents = {
+  'renderer:render': { path: string; html: string };
+  'renderer:error':  { path: string; error: Error };
+};
+
+export const rendererPlugin = createPlugin<RendererEvents>('renderer', {
+  defaultConfig: {
+    template: 'default',
+  },
+  api: (ctx) => ({
+    render: (path: string, data: Record<string, unknown>) => {
+      const html = `<div>${JSON.stringify(data)}</div>`;
+      // ctx.emit is typed: knows about RendererEvents + global Events
+      void ctx.emit('renderer:render', { path, html });
+      return html;
+    },
+  }),
+  hooks: {
+    // Can listen to global events defined in createCoreConfig
+    'page:render': (payload) => {
+      // payload typed as { path: string; html: string } from global Events
+    },
+  },
+});
+```
+
+The `PluginEvents` generic makes `ctx.emit('renderer:render', ...)` typed for this plugin. Other plugins that declare `depends: [rendererPlugin]` also get these events typed in their `hooks` and `ctx.emit`.
+
+### Example 3: Plugin with depends
+
+```typescript
+// my-framework/src/plugins/seo/index.ts
+import { createPlugin } from '../../config';
+import { routerPlugin } from '../router';
+import { rendererPlugin } from '../renderer';
+
+export const seoPlugin = createPlugin('seo', {
+  depends: [routerPlugin, rendererPlugin],
+  defaultConfig: {
+    defaultTitle: 'Untitled',
+  },
+  api: (ctx) => ({
+    setTitle: (title: string) => {
+      // ctx.require returns typed API from the dependency
+      const currentPath = ctx.require(routerPlugin).current();
+      void ctx.emit('renderer:render', {
+        path: currentPath,
+        html: `<title>${title}</title>`,
+      });
+    },
+  }),
+  hooks: {
+    // Can listen to events from dependencies (RendererEvents)
+    'renderer:render': (payload) => {
+      // payload typed as { path: string; html: string }
+    },
+  },
+});
+```
+
+Because `depends: [routerPlugin, rendererPlugin]` is declared:
+- `ctx.require(routerPlugin)` returns the router API, fully typed
+- `hooks` can listen to events from both global Events and RendererEvents
+- Dependency validation ensures router and renderer are registered before seo
+
+---
+
+## 3. The `depends` Field
+
+```typescript
+depends?: readonly PluginInstance[]
+```
+
+The `depends` field accepts an array of plugin instances. Since you import a plugin to depend on it, you already have the instance reference with its types. TypeScript infers the tuple type from the array, enabling fully typed `ctx.require`.
+
+### What `depends` Does at Startup
+
+1. For each plugin with `depends`, check that every dependency exists in the registered plugin list.
 2. Check that every dependency appears BEFORE the dependent plugin in the list.
 3. If either check fails, throw with a clear error:
 
 ```
-Error: [moku-site] Plugin "router" depends on "auth", but "auth" is not registered.
-  Add "auth" to your plugin list before "router".
+[moku-site] Plugin "seo" depends on "auth", but "auth" is not registered.
+  Add "auth" to your plugin list before "seo".
 
-Error: [moku-site] Plugin "router" depends on "logger", but "logger" appears after "router".
-  Move "logger" before "router" in your plugin list.
+[moku-site] Plugin "seo" depends on "router", but "router" appears after "seo".
+  Move "router" before "seo" in your plugin list.
 ```
 
-### What `depends` Does at Runtime (ctx.require/ctx.getPlugin scoping)
+### What `depends` Enables at Runtime
 
-When a plugin declares `depends`, the kernel enforces dependency scoping on `ctx.require` and `ctx.getPlugin`:
-- `ctx.require(plugin)` or `ctx.require('name')` throws if the target is not in the caller's `depends` array
-- `ctx.getPlugin(plugin)` or `ctx.getPlugin('name')` returns `undefined` if the target is not in the caller's `depends` array
-- `ctx.has('name')` is NOT restricted by depends -- it always checks global registration
-
-Plugins without a `depends` declaration have unrestricted access (backward compatible).
+- `ctx.require(plugin)` -- returns the typed API of the dependency, or throws if not found
+- `ctx.getPlugin(plugin)` -- returns the typed API or `undefined`
+- Typed `hooks` -- can listen to events declared by dependency plugins
+- Typed `ctx.emit` -- can emit events declared by dependency plugins
 
 ### What `depends` Does NOT Do
 
 - Does not auto-reorder plugins (no topological sort)
 - Does not create new concepts (no "dependency graph", no "resolution algorithm")
-- Does not change plugin execution order (plugins init in array order, always)
+- Does not change plugin execution order (plugins run in array order, always)
 
 **Visibility for LLMs and tooling:** With `depends`, an LLM can read a plugin's spec without executing any code and know what plugins must precede it. This is pure metadata extractable statically.
 
 ---
 
-## 3. createPlugin
-
-```typescript
-function createPlugin<
-  N extends string,
-  C = void,
-  A extends Record<string, any> = {},
-  S = void,
->(
-  name: N,
-  spec: PluginSpec<N, C, A, S>,
-): PluginInstance<N, C, A, S>;
-```
-
-Returns a `PluginInstance` -- a readonly object with the plugin's name, spec, kind field, and phantom types.
-
-**The consumer's `createPlugin` is the SAME function the framework uses.** It comes from `createCore` and is bound to the same `BaseConfig` and `EventContract`. The consumer's plugin gets typed `ctx.global` and typed `ctx.emit` for free.
-
-### Consumer Custom Plugin Example
-
-```typescript
-// my-blog/src/plugins/contact-form/index.ts
-import { createPlugin } from 'my-framework';
-import type { ContactFormConfig, ContactFormApi } from './types';
-import { createContactFormApi } from './api';
-import { validateConfig } from './validation';
-
-export const ContactFormPlugin = createPlugin<
-  'contactForm',
-  ContactFormConfig,
-  ContactFormApi
->(
-  'contactForm',
-  {
-    depends: [rendererPlugin],
-    onCreate: ({ config }) => validateConfig(config),
-    api: createContactFormApi,
-    hooks: {
-      'page:render': (payload) => {
-        // EventContract event -- framework typed
-        // payload: { path: string; html: string }
-      },
-    },
-  },
-);
-```
-
-```typescript
-// my-blog/src/plugins/contact-form/types.ts
-export type ContactFormConfig = {
-  recipient: string;
-  subject?: string;
-  successMessage?: string;
-};
-
-export type ContactFormApi = {
-  submit: (data: { name: string; email: string; message: string }) => Promise<boolean>;
-  setRecipient: (email: string) => void;
-};
-```
-
----
-
-## 4. createPluginFactory
-
-Factory function for creating named instances of the same plugin shape.
-
-### Problem
-
-Each plugin name maps to one instance. You can't have `primaryDb` and `replicaDb` using the same plugin shape.
-
-### Solution
-
-```typescript
-function createPluginFactory<C, A, S>(
-  spec: Omit<PluginSpec<string, C, A, S>, 'plugins'>,
-): <N extends string>(name: N) => PluginInstance<N, C, A, S>;
-```
-
-### How It Works
-
-`createPluginFactory` is sugar. It returns a function that calls `createPlugin` with a dynamic name:
-
-```typescript
-function createPluginFactory<C, A, S>(spec) {
-  return <N extends string>(name: N) => createPlugin<N, C, A, S>(name, spec);
-}
-```
-
-Each call produces a `PluginInstance` with a different `N` literal, so TypeScript treats them as distinct plugins with distinct config keys and API namespaces.
-
-### Usage at Layer 2
-
-```typescript
-// my-framework/src/plugins/database/factory.ts
-import { createPluginFactory } from '../..';
-import type { DbConfig, DbApi, DbState } from './types';
-
-export const createDbPlugin = createPluginFactory<DbConfig, DbApi, DbState>({
-  createState: async ({ config }) => {
-    const pool = await createPool(config.connectionString);
-    await pool.query('SELECT 1');  // verify connection
-    return { pool };
-  },
-  api: ({ state }) => ({
-    query: (sql: string, params?: any[]) => state.pool.query(sql, params),
-    transaction: (fn: (client: any) => Promise<any>) => state.pool.transaction(fn),
-  }),
-  onDestroy: async ({ global }) => {
-    // cleanup handled by pool reference in closure
-  },
-});
-
-// Create named instances
-export const PrimaryDb = createDbPlugin('primaryDb');
-export const ReplicaDb = createDbPlugin('replicaDb');
-```
-
-### Usage at Layer 3
-
-```typescript
-import { createConfig, createApp, PrimaryDb, ReplicaDb } from 'my-api-framework';
-
-const config = createConfig(
-  { appName: 'My API' },
-  [PrimaryDb, ReplicaDb],
-);
-
-const app = await createApp(config, {
-  primaryDb: { connectionString: 'postgres://primary:5432/main' },
-  replicaDb: { connectionString: 'postgres://replica:5432/main' },
-});
-
-await app.start();
-
-app.primaryDb.query('INSERT INTO ...');   // typed, separate instance
-app.replicaDb.query('SELECT * FROM ...');  // typed, separate instance
-```
-
----
-
-## 5. Sub-Plugins
+## 4. Sub-Plugins
 
 Plugins can declare their own sub-plugins via the `plugins` field:
 
 ```typescript
-const AuthPlugin = createPlugin<'auth', AuthConfig, AuthApi>('auth', {
-  plugins: [SessionPlugin, TokenPlugin],
-  // ...
+const authPlugin = createPlugin('auth', {
+  plugins: [sessionPlugin, tokenPlugin],
+  depends: [sessionPlugin, tokenPlugin],
+  api: (ctx) => ({
+    authenticate: (credentials: { user: string; pass: string }) => {
+      const session = ctx.require(sessionPlugin).create();
+      const token = ctx.require(tokenPlugin).sign(session);
+      return { session, token };
+    },
+  }),
 });
 ```
 
 ### Flattening Rule
 
-Sub-plugins are flattened depth-first, children before parent (see [04-COMPONENT-MODULE](./04-COMPONENT-MODULE.md) for the full algorithm). This means:
-- `SessionPlugin` and `TokenPlugin` are created before `AuthPlugin`
-- Their APIs are available when `AuthPlugin`'s lifecycle runs
+Sub-plugins are flattened depth-first, children before parent. This means:
+- `sessionPlugin` and `tokenPlugin` are registered before `authPlugin`
+- Their APIs are available when `authPlugin`'s lifecycle runs
 
-### Sub-Plugin Type Visibility
+Given:
+```
+[
+  pluginA { plugins: [subPlugin1, subPlugin2] },
+  pluginB
+]
+```
 
-**Sub-plugin types are NOT propagated to the App type in v1.** If `AuthPlugin` declares `plugins: [SessionPlugin]`, the consumer must also list `SessionPlugin` in their extra plugins to get `app.session.*` typed. At runtime, sub-plugins are registered regardless -- they work. But the type system only sees what's in the plugin lists.
+Flattened result:
+```
+[subPlugin1, subPlugin2, pluginA, pluginB]
+```
 
-Recursive sub-plugin type propagation is a **planned future improvement** using a `FlattenPlugins` recursive type and a `_sub` phantom field on `PluginInstance`.
+This is a convenience feature for organizing related plugins. The consumer can also just list all plugins in the correct order.
+
+---
+
+## 5. Plugin Lifecycle Methods
+
+Three lifecycle methods, each running at a specific phase:
+
+| Method | When | Direction | Context |
+|---|---|---|---|
+| `onInit` | During `createApp` | Forward (A, B, C) | Full PluginContext |
+| `onStart` | During `app.start()` | Forward (A, B, C) | Full PluginContext |
+| `onStop` | During `app.stop()` | **Reverse** (C, B, A) | Minimal (global config only) |
+
+All lifecycle methods support async: `void | Promise<void>`. Execution is sequential -- Plugin A's method completes (including await) before Plugin B's method begins.
+
+Two factory methods run during `createApp` before lifecycle:
+
+| Method | When | Context |
+|---|---|---|
+| `createState` | First, before APIs | Minimal: `{ global, config }` |
+| `api` | After state created | Full PluginContext |
+
+See [06-LIFECYCLE](./06-LIFECYCLE.md) for detailed phase documentation.
 
 ---
 
 ## Cross-References
 
-- Component and Module: [04-COMPONENT-MODULE](./04-COMPONENT-MODULE.md)
+- Core API: [02-CORE-API](./02-CORE-API.md)
+- Factory chain: [04-FACTORY-CHAIN](./04-FACTORY-CHAIN.md)
 - Config resolution: [05-CONFIG-SYSTEM](./05-CONFIG-SYSTEM.md)
 - Lifecycle phases: [06-LIFECYCLE](./06-LIFECYCLE.md)
 - Context object: [08-CONTEXT](./08-CONTEXT.md)
 - Type system: [09-TYPE-SYSTEM](./09-TYPE-SYSTEM.md)
-
