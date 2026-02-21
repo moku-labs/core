@@ -2,7 +2,7 @@
 // moku_core - Kernel Runtime (createApp)
 // =============================================================================
 // The runtime engine of moku_core. Implements createApp with all 9 lifecycle
-// phases, dispatch infrastructure (emit/signal/hooks via shared hookMap),
+// phases, dispatch infrastructure (unified emit via shared hookMap),
 // CoreDefaults framework callbacks, kernel-emitted events, and destroyed flag
 // enforcement.
 //
@@ -60,16 +60,16 @@ type RuntimePluginItem = {
 /**
  * Runtime shape of the app object returned by createAppImpl.
  * The full generic App type is asserted at the CoreAPI level in createCore.
+ * Uses unified emit (no separate signal method).
  * @example
  * ```ts
- * const app: RuntimeApp = { config: {}, emit, signal, ... };
+ * const app: RuntimeApp = { config: {}, emit, ... };
  * ```
  */
 type RuntimeApp = {
   readonly config: Readonly<Record<string, unknown>>;
   readonly configs: Readonly<Record<string, unknown>>;
-  emit: (hookName: string, payload: unknown) => Promise<void>;
-  signal: (hookName: string, payload?: unknown) => Promise<void>;
+  emit: (hookName: string, payload?: unknown) => Promise<void>;
   getPlugin: (name: string) => unknown;
   require: (name: string) => unknown;
   has: (name: string) => boolean;
@@ -145,8 +145,7 @@ function resolvePluginName(nameOrInstance: unknown): string {
  * @param globalConfig - The frozen global config.
  * @param config - The plugin's resolved config.
  * @param state - The plugin's mutable state.
- * @param emit - The emit function.
- * @param signal - The signal function.
+ * @param emit - The unified emit function.
  * @param getPlugin - The getPlugin function.
  * @param requirePlugin - The requirePlugin function bound to this plugin.
  * @param has - The has function.
@@ -156,15 +155,14 @@ function resolvePluginName(nameOrInstance: unknown): string {
  * @returns A full plugin context object.
  * @example
  * ```ts
- * const ctx = buildPluginContext(globalConfig, config, state, emit, signal, getPlugin, require, has, dependsNames, "my-plugin", "myFramework");
+ * const ctx = buildPluginContext(globalConfig, config, state, emit, getPlugin, require, has, dependsNames, "my-plugin", "myFramework");
  * ```
  */
 function buildPluginContext(
   globalConfig: Readonly<Record<string, unknown>>,
   config: Readonly<Record<string, unknown>>,
   state: unknown,
-  emit: (hookName: string, payload: unknown) => Promise<void>,
-  signal: (hookName: string, payload?: unknown) => Promise<void>,
+  emit: (hookName: string, payload?: unknown) => Promise<void>,
   getPlugin: (name: string) => unknown,
   requirePlugin: (name: string) => unknown,
   has: (name: string) => boolean,
@@ -177,7 +175,6 @@ function buildPluginContext(
     config,
     state,
     emit,
-    signal,
     /**
      * Get plugin API by instance or name, scoped to declared depends.
      * @param nameOrInstance - Plugin name string or plugin instance.
@@ -221,8 +218,7 @@ function buildPluginContext(
  * Enforces depends scoping on getPlugin/require when dependsNames is provided.
  * @param globalConfig - The frozen global config.
  * @param config - The plugin's resolved config.
- * @param emit - The emit function.
- * @param signal - The signal function.
+ * @param emit - The unified emit function.
  * @param getPlugin - The getPlugin function.
  * @param requirePlugin - The requirePlugin function bound to this plugin.
  * @param has - The has function.
@@ -232,14 +228,13 @@ function buildPluginContext(
  * @returns An init context object (no state field).
  * @example
  * ```ts
- * const ctx = buildInitContext(globalConfig, config, emit, signal, getPlugin, require, has, dependsNames, "my-plugin", "myFramework");
+ * const ctx = buildInitContext(globalConfig, config, emit, getPlugin, require, has, dependsNames, "my-plugin", "myFramework");
  * ```
  */
 function buildInitContext(
   globalConfig: Readonly<Record<string, unknown>>,
   config: Readonly<Record<string, unknown>>,
-  emit: (hookName: string, payload: unknown) => Promise<void>,
-  signal: (hookName: string, payload?: unknown) => Promise<void>,
+  emit: (hookName: string, payload?: unknown) => Promise<void>,
   getPlugin: (name: string) => unknown,
   requirePlugin: (name: string) => unknown,
   has: (name: string) => boolean,
@@ -251,7 +246,6 @@ function buildInitContext(
     global: globalConfig,
     config,
     emit,
-    signal,
     /**
      * Get plugin API by instance or name, scoped to declared depends.
      * @param nameOrInstance - Plugin name string or plugin instance.
@@ -338,8 +332,7 @@ async function executeCreatePhase(
  * @param pluginConfigs - Resolved per-plugin configs.
  * @param states - Plugin state map.
  * @param apis - Map to store plugin APIs.
- * @param emit - The emit function.
- * @param signal - The signal function.
+ * @param emit - The unified emit function.
  * @param getPlugin - The getPlugin function.
  * @param requirePlugin - The requirePlugin factory.
  * @param has - The has function.
@@ -347,7 +340,7 @@ async function executeCreatePhase(
  * @param frameworkName - The framework name for error messages.
  * @example
  * ```ts
- * await executeBuildPhase(items, globalConfig, pluginConfigs, states, apis, emit, signal, getPlugin, requirePlugin, has, defaults, "myFramework");
+ * await executeBuildPhase(items, globalConfig, pluginConfigs, states, apis, emit, getPlugin, requirePlugin, has, defaults, "myFramework");
  * ```
  */
 async function executeBuildPhase(
@@ -356,8 +349,7 @@ async function executeBuildPhase(
   pluginConfigs: Map<string, Readonly<Record<string, unknown>>>,
   states: Map<string, unknown>,
   apis: Map<string, Record<string, unknown>>,
-  emit: (hookName: string, payload: unknown) => Promise<void>,
-  signal: (hookName: string, payload?: unknown) => Promise<void>,
+  emit: (hookName: string, payload?: unknown) => Promise<void>,
   getPlugin: (name: string) => unknown,
   requirePlugin: (name: string, requester: string) => unknown,
   has: (name: string) => boolean,
@@ -377,7 +369,6 @@ async function executeBuildPhase(
           config,
           state,
           emit,
-          signal,
           getPlugin,
           (n: string) => requirePlugin(n, item.name),
           has,
@@ -401,8 +392,7 @@ async function executeBuildPhase(
  * @param items - The flattened plugin list.
  * @param globalConfig - The frozen global config.
  * @param pluginConfigs - Resolved per-plugin configs.
- * @param emit - The emit function.
- * @param signal - The signal function.
+ * @param emit - The unified emit function.
  * @param getPlugin - The getPlugin function.
  * @param requirePlugin - The requirePlugin factory.
  * @param has - The has function.
@@ -410,15 +400,14 @@ async function executeBuildPhase(
  * @param frameworkName - The framework name for error messages.
  * @example
  * ```ts
- * await executeInitPhase(items, globalConfig, pluginConfigs, emit, signal, getPlugin, requirePlugin, has, defaults, "myFramework");
+ * await executeInitPhase(items, globalConfig, pluginConfigs, emit, getPlugin, requirePlugin, has, defaults, "myFramework");
  * ```
  */
 async function executeInitPhase(
   items: RuntimePluginItem[],
   globalConfig: Readonly<Record<string, unknown>>,
   pluginConfigs: Map<string, Readonly<Record<string, unknown>>>,
-  emit: (hookName: string, payload: unknown) => Promise<void>,
-  signal: (hookName: string, payload?: unknown) => Promise<void>,
+  emit: (hookName: string, payload?: unknown) => Promise<void>,
   getPlugin: (name: string) => unknown,
   requirePlugin: (name: string, requester: string) => unknown,
   has: (name: string) => boolean,
@@ -434,7 +423,6 @@ async function executeInitPhase(
           globalConfig,
           config,
           emit,
-          signal,
           getPlugin,
           (n: string) => requirePlugin(n, item.name),
           has,
@@ -457,8 +445,7 @@ async function executeInitPhase(
  * @param globalConfig - The frozen global config.
  * @param pluginConfigs - Resolved per-plugin configs.
  * @param states - Plugin state map.
- * @param emit - The emit function.
- * @param signal - The signal function.
+ * @param emit - The unified emit function.
  * @param getPlugin - The getPlugin function.
  * @param requirePlugin - The requirePlugin factory.
  * @param has - The has function.
@@ -466,7 +453,7 @@ async function executeInitPhase(
  * @param frameworkName - The framework name for error messages.
  * @example
  * ```ts
- * await executeStartPhase(items, globalConfig, pluginConfigs, states, emit, signal, getPlugin, requirePlugin, has, defaults, "myFramework");
+ * await executeStartPhase(items, globalConfig, pluginConfigs, states, emit, getPlugin, requirePlugin, has, defaults, "myFramework");
  * ```
  */
 async function executeStartPhase(
@@ -474,8 +461,7 @@ async function executeStartPhase(
   globalConfig: Readonly<Record<string, unknown>>,
   pluginConfigs: Map<string, Readonly<Record<string, unknown>>>,
   states: Map<string, unknown>,
-  emit: (hookName: string, payload: unknown) => Promise<void>,
-  signal: (hookName: string, payload?: unknown) => Promise<void>,
+  emit: (hookName: string, payload?: unknown) => Promise<void>,
   getPlugin: (name: string) => unknown,
   requirePlugin: (name: string, requester: string) => unknown,
   has: (name: string) => boolean,
@@ -493,7 +479,6 @@ async function executeStartPhase(
           config,
           state,
           emit,
-          signal,
           getPlugin,
           (n: string) => requirePlugin(n, item.name),
           has,
@@ -615,6 +600,7 @@ export async function createAppImpl(
 
   /**
    * Dispatches an event to all registered handlers sequentially.
+   * Internal -- does NOT check destroyed flag (callers handle that).
    * @param hookName - The event/hook name to dispatch.
    * @param payload - The event payload.
    * @returns A promise that resolves when all handlers complete.
@@ -632,32 +618,19 @@ export async function createAppImpl(
   }
 
   /**
-   * Emit a typed bus event. Checks destroyed flag first.
+   * Unified emit function. Checks destroyed flag, then dispatches.
+   * Handles both typed (EventContract) and ad-hoc events.
    * @param hookName - The event name.
-   * @param payload - The event payload.
+   * @param payload - The event payload (optional for ad-hoc events).
    * @returns A promise that resolves when all handlers complete.
    * @example
    * ```ts
    * await emit("page:render", { path: "/" });
+   * await emit("custom:event"); // ad-hoc, no payload
    * ```
    */
-  const emit = (hookName: string, payload: unknown): Promise<void> => {
+  const emit = (hookName: string, payload?: unknown): Promise<void> => {
     assertNotDestroyed("emit");
-    return dispatch(hookName, payload);
-  };
-
-  /**
-   * Fire a signal. Checks destroyed flag first.
-   * @param hookName - The signal name.
-   * @param payload - The signal payload.
-   * @returns A promise that resolves when all handlers complete.
-   * @example
-   * ```ts
-   * await signal("router:navigate", { from: "/a", to: "/b" });
-   * ```
-   */
-  const signal = (hookName: string, payload?: unknown): Promise<void> => {
-    assertNotDestroyed("signal");
     return dispatch(hookName, payload);
   };
 
@@ -729,7 +702,6 @@ export async function createAppImpl(
     states,
     apis,
     emit,
-    signal,
     getPlugin,
     requirePlugin,
     has,
@@ -747,8 +719,7 @@ export async function createAppImpl(
     "has",
     "config",
     "configs",
-    "emit",
-    "signal"
+    "emit"
   ]);
   for (const item of items) {
     if (reservedNames.has(item.name)) {
@@ -764,7 +735,6 @@ export async function createAppImpl(
     globalConfig,
     pluginConfigs,
     emit,
-    signal,
     getPlugin,
     requirePlugin,
     has,
@@ -788,7 +758,6 @@ export async function createAppImpl(
     config: frozenAppConfig,
     configs: configsAccessor,
     emit,
-    signal,
     getPlugin,
     /**
      * Require a plugin API from the app level or throw. Throws on destroyed app.
@@ -806,7 +775,7 @@ export async function createAppImpl(
     has,
 
     /**
-     * Start the app. Emits warning signal on redundant call.
+     * Start the app. Emits warning on redundant call via dispatch (internal).
      * @example
      * ```ts
      * await app.start();
@@ -815,7 +784,7 @@ export async function createAppImpl(
     start: async () => {
       assertNotDestroyed("start");
       if (started) {
-        await signal("app:warn:redundant-start", {
+        await dispatch("app:warn:redundant-start", {
           message: "start() called on already-started app"
         });
         return;
@@ -832,7 +801,6 @@ export async function createAppImpl(
         pluginConfigs,
         states,
         emit,
-        signal,
         getPlugin,
         requirePlugin,
         has,

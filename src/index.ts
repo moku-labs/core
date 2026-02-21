@@ -22,7 +22,7 @@ import { createAppImpl } from "./kernel.js";
 /**
  * Creates a micro-kernel core instance with the given name and defaults.
  * Returns an object with all 7 CoreAPI functions typed against the framework's
- * BaseConfig, BusContract, and SignalRegistry generics.
+ * BaseConfig and EventContract generics.
  * @param name - The framework name used in error messages.
  * @param defaults - Default configuration, built-in plugins, and optional lifecycle callbacks.
  * @returns The core API object with all 7 framework functions.
@@ -37,13 +37,11 @@ export function createCore<
   // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability in TypeScript
   BaseConfig extends Record<string, any> = Record<string, unknown>,
   // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability in TypeScript
-  BusContract extends Record<string, any> = Record<string, unknown>,
-  // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability in TypeScript
-  SignalRegistry extends Record<string, any> = Record<string, unknown>
+  EventContract extends Record<string, any> = Record<string, unknown>
 >(
   name: string,
   defaults: CoreDefaults<BaseConfig>
-): CoreAPI<BaseConfig, BusContract, SignalRegistry> {
+): CoreAPI<BaseConfig, EventContract> {
   // ---------------------------------------------------------------------------
   // Shared validation helpers (internal to createCore)
   // ---------------------------------------------------------------------------
@@ -327,5 +325,5 @@ export function createCore<
     createEventBus: (busConfig?: { maxListeners?: number; onError?: (error: unknown) => void }) =>
       createEventBusImpl(busConfig),
     createPluginFactory
-  } as unknown as CoreAPI<BaseConfig, BusContract, SignalRegistry>;
+  } as unknown as CoreAPI<BaseConfig, EventContract>;
 }

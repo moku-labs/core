@@ -19,6 +19,7 @@ type TestContextOptions = {
 
 /**
  * The result returned by `createTestCtx`, containing the test context and event recorders.
+ * Uses unified emit (no separate signal). The `emitted` array captures all events.
  * @example
  * ```ts
  * const result: TestContextResult = createTestCtx();
@@ -32,13 +33,11 @@ type TestContextResult = {
     config: Record<string, unknown>;
     state: Record<string, unknown>;
     emit: (...arguments_: unknown[]) => unknown;
-    signal: (...arguments_: unknown[]) => unknown;
     getPlugin: (...arguments_: unknown[]) => unknown;
     require: (...arguments_: unknown[]) => unknown;
     has: (...arguments_: unknown[]) => unknown;
   };
   emitted: Array<{ name: string; payload: unknown }>;
-  signaled: Array<{ name: string; payload: unknown }>;
 };
 
 /**
@@ -61,10 +60,10 @@ const notImplemented = (functionName: string): never => {
  * Creates a test context for unit testing plugins and components.
  * In the skeleton phase, this function throws a "not yet implemented" error.
  * @param _options - Optional configuration for the test context (unused in stub).
- * @returns A test context result with context, emitted, and signaled.
+ * @returns A test context result with context and emitted.
  * @example
  * ```ts
- * const { context, emitted, signaled } = createTestCtx({ config: { debug: true } });
+ * const { context, emitted } = createTestCtx({ config: { debug: true } });
  * ```
  */
 // eslint-disable-next-line unicorn/prevent-abbreviations
