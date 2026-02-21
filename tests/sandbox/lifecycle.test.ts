@@ -346,6 +346,7 @@ describe("config resolution", () => {
   it("resolved config is frozen", async () => {
     let globalFrozen = false;
     let configFrozen = false;
+    let assignmentThrew = false;
 
     const cc = createCoreConfig<{ siteName: string }, Record<string, never>>("test", {
       config: { siteName: "Test" }
@@ -357,8 +358,13 @@ describe("config resolution", () => {
         globalFrozen = Object.isFrozen(ctx.global);
         configFrozen = Object.isFrozen(ctx.config);
 
-        // @ts-expect-error -- global config is readonly
-        ctx.global.siteName = "new";
+        // Assignment to frozen config throws TypeError in strict mode (ESM)
+        try {
+          // @ts-expect-error -- global config is readonly
+          ctx.global.siteName = "new";
+        } catch {
+          assignmentThrew = true;
+        }
       }
     });
 
@@ -367,5 +373,6 @@ describe("config resolution", () => {
 
     expect(globalFrozen).toBe(true);
     expect(configFrozen).toBe(true);
+    expect(assignmentThrew).toBe(true);
   });
 });
