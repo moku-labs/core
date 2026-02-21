@@ -1,7 +1,25 @@
-# Moku Core -- Consolidated Specification
+# Moku Core -- v3 Specification
 
-**Status:** Pre-implementation reference
-**Framework:** moku_core -- Universal, type-safe, functional plugin framework for TypeScript
+**Status:** Pre-implementation reference for v3 architecture
+**Framework:** moku_core -- Type-safe micro-kernel plugin framework for TypeScript
+
+---
+
+## Architecture Overview
+
+The 3-step factory chain. Each step captures types in a closure, passing them downstream:
+
+```
+createCoreConfig<Config, Events>(id, options)     -- Framework config.ts
+     |
+createCore(coreConfig, { plugins })               -- Framework index.ts
+     |
+createApp({ plugins?, ...config, ...pluginConfigs })  -- Consumer main.ts
+     |
+Promise<App>  -- Typed plugin APIs: app.router.navigate()
+```
+
+One export at Layer 1 (`createCoreConfig`). One setup call at Layer 2 (`createCore`). One consumer call at Layer 3 (`createApp`). Everything is typed end-to-end through closures.
 
 ---
 
@@ -9,40 +27,34 @@
 
 | # | File | Domain |
 |---|---|---|
-| 01 | [Architecture](./01-ARCHITECTURE.md) | Three-layer model, philosophy, design principles, cross-domain applicability |
-| 02 | [Core API](./02-CORE-API.md) | createCore, CoreDefaults, CoreAPI, createConfig, createApp signatures |
-| 03 | [Plugin System](./03-PLUGIN-SYSTEM.md) | PluginSpec, PluginInstance, createPlugin, createPluginFactory, depends |
-| 04 | [Component & Module](./04-COMPONENT-MODULE.md) | ComponentSpec, ModuleSpec, flattening algorithm |
-| 05 | [Config System](./05-CONFIG-SYSTEM.md) | Config resolution, defaults, BuildPluginConfigs, no configRequired |
-| 06 | [Lifecycle](./06-LIFECYCLE.md) | All 9 stages, ordering, sync/async variants |
-| 07 | [Communication](./07-COMMUNICATION.md) | emit, hooks, EventContract |
-| 08 | [Context](./08-CONTEXT.md) | ctx object, context tiers, phase-appropriate context rules |
-| 09 | [Type System](./09-TYPE-SYSTEM.md) | Phantom types, type helpers, BuildPluginApis, App type |
-| 10 | [Testing](./10-TESTING.md) | createTestCtx, testing patterns |
+| 01 | [Architecture](./01-ARCHITECTURE.md) | Three-layer model, design principles, 3-step flow |
+| 02 | [Core API](./02-CORE-API.md) | createCoreConfig, createCore, createApp, createPlugin signatures |
+| 03 | [Plugin System](./03-PLUGIN-SYSTEM.md) | PluginSpec, createPlugin, depends, sub-plugins |
+| 04 | [Factory Chain](./04-FACTORY-CHAIN.md) | 3-step factory chain: why, how, type flow |
+| 05 | [Config System](./05-CONFIG-SYSTEM.md) | Config resolution, defaults, BuildPluginConfigs |
+| 06 | [Lifecycle](./06-LIFECYCLE.md) | 3 phases (init, start, stop), async model |
+| 07 | [Communication](./07-COMMUNICATION.md) | emit, hooks, global events, per-plugin events |
+| 08 | [Context](./08-CONTEXT.md) | ctx object, 3 context tiers, phase-appropriate context |
+| 09 | [Type System](./09-TYPE-SYSTEM.md) | Type helpers, BuildPluginApis, App type, type flow |
 | 11 | [Invariants](./11-INVARIANTS.md) | Guarantees, error messages, anti-patterns |
-| 12 | [Plugin Patterns](./12-PLUGIN-PATTERNS.md) | Plugin = connection point, file structure, LLM system prompt |
+| 12 | [Plugin Patterns](./12-PLUGIN-PATTERNS.md) | Plugin = connection point, file structure, LLM prompt |
 | 13 | [Kernel Pseudocode](./13-KERNEL-PSEUDOCODE.md) | Reference implementation, design decisions log |
-| -- | [Roadmap](./ROADMAP.md) | Technical development Milestone (pure moku_core only) |
 
 ---
 
-## Resolved Design Variants
+## Future Discussion
 
-These variants were documented throughout the spec and have been resolved during implementation.
+These features are not part of the v3 core. Each file documents a planned concept with proposed API and open questions.
 
-| Decision | Chosen | Rationale |
+| File | Topic | Status |
 |---|---|---|
-| **createApp sync/async** | Async (`Promise<App>`) | Plugins can do real I/O during init |
-| **createCore generics** | 2 (BaseConfig, EventContract) | Unified EventContract replaces BusContract+SignalRegistry |
-| **CoreAPI function count** | 7 (+createPluginFactory) | Multi-instance plugins are a real need |
-| **App getPlugin/require** | Constrained to registered names | Full type safety at consumption site |
-| **PluginSpec lifecycle** | Async-compatible (`S \| Promise<S>`) | Real I/O during init |
-
-The event system uses a unified `EventContract` generic with overloaded `emit`:
-- Known events (in EventContract) get typed required payload
-- Unknown events (any string) get untyped optional payload (escape hatch)
-- No separate `signal` method -- everything goes through `emit`
+| [FUTURE-COMPONENT.md](./FUTURE-COMPONENT.md) | Component sugar over plugins | Not implemented |
+| [FUTURE-MODULE.md](./FUTURE-MODULE.md) | Organizational grouping containers | Not implemented |
+| [FUTURE-TESTING.md](./FUTURE-TESTING.md) | Testing utilities | Not implemented |
+| [FUTURE-SIGNALS.md](./FUTURE-SIGNALS.md) | Reactive state (signal/computed/effect) | Not implemented |
+| [FUTURE-GLOBAL-STATE.md](./FUTURE-GLOBAL-STATE.md) | Shared mutable state across plugins | Not implemented |
+| [FUTURE-LIFECYCLE-HOOKS.md](./FUTURE-LIFECYCLE-HOOKS.md) | Pre/after hooks for lifecycle phases | Not implemented |
 
 ---
 
-*The kernel is boring. The framework is opinionated. The consumer is productive. The LLM is constrained.*
+*The kernel is boring. The framework is opinionated. The consumer is productive.*
