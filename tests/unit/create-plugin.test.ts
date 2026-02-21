@@ -187,9 +187,9 @@ describe("createPlugin", () => {
       createPlugin("", {});
       expect.unreachable("should have thrown");
     } catch (error) {
-      const message = (error as Error).message;
-      expect(message).toContain("\n  ");
-      expect(message).toContain("Pass a non-empty string");
+      if (!(error instanceof Error)) throw error;
+      expect(error.message).toContain("\n  ");
+      expect(error.message).toContain("Pass a non-empty string");
     }
   });
 

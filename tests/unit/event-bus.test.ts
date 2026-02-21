@@ -232,8 +232,10 @@ describe("error handling", () => {
     });
     await expect(bus.emit("test", undefined)).rejects.toThrow("callback test");
     expect(onError).toHaveBeenCalledTimes(1);
-    expect(onError.mock.calls[0]![0]).toBeInstanceOf(Error);
-    expect((onError.mock.calls[0]![0] as Error).message).toBe("callback test");
+    const receivedError = onError.mock.calls[0]?.[0];
+    expect(receivedError).toBeInstanceOf(Error);
+    if (!(receivedError instanceof Error)) throw receivedError;
+    expect(receivedError.message).toBe("callback test");
   });
 });
 

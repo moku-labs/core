@@ -99,9 +99,9 @@ describe("createCore", () => {
       core.createPlugin("", {});
       expect.unreachable("should have thrown");
     } catch (error) {
-      const message = (error as Error).message;
-      expect(message).toContain("[test]");
-      expect(message).toContain("Plugin name must not be empty");
+      if (!(error instanceof Error)) throw error;
+      expect(error.message).toContain("[test]");
+      expect(error.message).toContain("Plugin name must not be empty");
     }
   });
 });

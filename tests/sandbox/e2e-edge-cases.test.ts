@@ -345,7 +345,8 @@ describe("destroy contract enforcement", () => {
     try {
       await app.start();
     } catch (error) {
-      expect((error as Error).message).toContain("[edge-test]");
+      if (!(error instanceof Error)) throw error;
+      expect(error.message).toContain("[edge-test]");
     }
   });
 });
@@ -373,7 +374,7 @@ describe("event round-trip", () => {
       depends: [tracker],
       hooks: {
         "test:event": (payload: unknown) => {
-          // Hook receives payload at runtime (unknown per hooks type)
+          // Intentional cast: hooks receive unknown payloads by design (hooks type is Record<string, (...args: unknown[]) => void>)
           const data = payload as { value: number };
           // In hooks we cannot directly access plugin APIs (no ctx),
           // but we record data for later verification

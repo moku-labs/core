@@ -15,11 +15,11 @@ describe("createTestCtx", () => {
       createTestCtx();
       expect.unreachable("should have thrown");
     } catch (error) {
-      const message = (error as Error).message;
-      expect(message).toContain("[moku_core]");
-      expect(message).toContain("createTestCtx");
-      expect(message).toContain("is not yet implemented");
-      expect(message).toContain("stub from the skeleton phase");
+      if (!(error instanceof Error)) throw error;
+      expect(error.message).toContain("[moku_core]");
+      expect(error.message).toContain("createTestCtx");
+      expect(error.message).toContain("is not yet implemented");
+      expect(error.message).toContain("stub from the skeleton phase");
     }
   });
 });

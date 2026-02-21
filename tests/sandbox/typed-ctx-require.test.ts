@@ -38,7 +38,7 @@ function createTestCore() {
 describe("typed ctx.require via depends instances", () => {
   it("ctx.require(routerPlugin) during onInit returns router's API object", async () => {
     const core = createTestCore();
-    let requiredApi: unknown;
+    let requiredApi: { resolve: (p: string) => string } | undefined;
 
     const routerPlugin = core.createPlugin("router", {
       defaultConfig: { basePath: "/" },
@@ -51,7 +51,7 @@ describe("typed ctx.require via depends instances", () => {
       defaultConfig: {},
       depends: [routerPlugin],
       onInit: (ctx: { require: (plugin: unknown) => unknown }) => {
-        requiredApi = ctx.require(routerPlugin);
+        requiredApi = ctx.require(routerPlugin) as { resolve: (p: string) => string };
       }
     });
 
@@ -59,12 +59,12 @@ describe("typed ctx.require via depends instances", () => {
     await core.createApp(config);
 
     expect(requiredApi).toBeDefined();
-    expect((requiredApi as { resolve: (p: string) => string }).resolve("/home")).toBe("/home");
+    expect(requiredApi?.resolve("/home")).toBe("/home");
   });
 
   it("ctx.require('router') during onInit returns router's API object (same result)", async () => {
     const core = createTestCore();
-    let requiredApi: unknown;
+    let requiredApi: { resolve: (p: string) => string } | undefined;
 
     const routerPlugin = core.createPlugin("router", {
       defaultConfig: { basePath: "/" },
@@ -77,7 +77,7 @@ describe("typed ctx.require via depends instances", () => {
       defaultConfig: {},
       depends: [routerPlugin],
       onInit: (ctx: { require: (name: string) => unknown }) => {
-        requiredApi = ctx.require("router");
+        requiredApi = ctx.require("router") as { resolve: (p: string) => string };
       }
     });
 
@@ -85,7 +85,7 @@ describe("typed ctx.require via depends instances", () => {
     await core.createApp(config);
 
     expect(requiredApi).toBeDefined();
-    expect((requiredApi as { resolve: (p: string) => string }).resolve("about")).toBe("/about");
+    expect(requiredApi?.resolve("about")).toBe("/about");
   });
 
   it("ctx.require for plugin NOT in depends throws with correct error message", async () => {
@@ -120,7 +120,7 @@ describe("typed ctx.require via depends instances", () => {
 
   it("ctx.getPlugin(routerPlugin) during api() returns router's API", async () => {
     const core = createTestCore();
-    let gottenApi: unknown;
+    let gottenApi: { resolve: (p: string) => string } | undefined;
 
     const routerPlugin = core.createPlugin("router", {
       defaultConfig: {},
@@ -133,7 +133,7 @@ describe("typed ctx.require via depends instances", () => {
       defaultConfig: {},
       depends: [routerPlugin],
       api: (ctx: { getPlugin: (plugin: unknown) => unknown }) => {
-        gottenApi = ctx.getPlugin(routerPlugin);
+        gottenApi = ctx.getPlugin(routerPlugin) as { resolve: (p: string) => string } | undefined;
         return {};
       }
     });
@@ -142,7 +142,7 @@ describe("typed ctx.require via depends instances", () => {
     await core.createApp(config);
 
     expect(gottenApi).toBeDefined();
-    expect((gottenApi as { resolve: (p: string) => string }).resolve("/test")).toBe("/test");
+    expect(gottenApi?.resolve("/test")).toBe("/test");
   });
 
   it("ctx.getPlugin for plugin NOT in depends returns undefined (no throw)", async () => {
@@ -235,7 +235,7 @@ describe("typed ctx.require via depends instances", () => {
 
   it("cross-plugin access: A depends on B, B depends on C. A can access B but NOT C", async () => {
     const core = createTestCore();
-    let accessedBApi: unknown;
+    let accessedBApi: { bMethod: () => string } | undefined;
 
     const pluginC = core.createPlugin("c", {
       defaultConfig: {},
@@ -254,15 +254,15 @@ describe("typed ctx.require via depends instances", () => {
       depends: [pluginB],
       onInit: (ctx: { require: (name: string) => unknown }) => {
         // Can access B (declared in depends)
-        accessedBApi = ctx.require("b");
+        accessedBApi = ctx.require("b") as { bMethod: () => string };
         // Cannot access C (not declared in depends)
         try {
           ctx.require("c");
           // If we get here, the test should fail
           throw new Error("should have thrown for undeclared dep");
         } catch (error) {
-          const message = (error as Error).message;
-          if (!message.includes("not in depends")) {
+          if (!(error instanceof Error)) throw error;
+          if (!error.message.includes("not in depends")) {
             throw error; // Re-throw unexpected errors
           }
           // Expected: "c" not in depends for "a"
@@ -276,12 +276,12 @@ describe("typed ctx.require via depends instances", () => {
     await core.createApp(config);
 
     expect(accessedBApi).toBeDefined();
-    expect((accessedBApi as { bMethod: () => string }).bMethod()).toBe("b-result");
+    expect(accessedBApi?.bMethod()).toBe("b-result");
   });
 
   it("component with depends works the same as plugin with depends", async () => {
     const core = createTestCore();
-    let requiredApi: unknown;
+    let requiredApi: { resolve: (p: string) => string } | undefined;
 
     const routerPlugin = core.createPlugin("router", {
       defaultConfig: {},
@@ -293,7 +293,7 @@ describe("typed ctx.require via depends instances", () => {
       defaultConfig: { width: 300 },
       createState: () => ({ open: false }),
       api: (ctx: { getPlugin: (name: string) => unknown }) => {
-        requiredApi = ctx.getPlugin("router");
+        requiredApi = ctx.getPlugin("router") as { resolve: (p: string) => string } | undefined;
         return {
           toggle: () => {},
           isOpen: () => false
@@ -307,9 +307,7 @@ describe("typed ctx.require via depends instances", () => {
     await core.createApp(config);
 
     expect(requiredApi).toBeDefined();
-    expect((requiredApi as { resolve: (p: string) => string }).resolve("/sidebar")).toBe(
-      "/sidebar"
-    );
+    expect(requiredApi?.resolve("/sidebar")).toBe("/sidebar");
   });
 
   it("ctx.has() is NOT restricted by depends (always checks global registration)", async () => {
@@ -462,9 +460,9 @@ describe("typed ctx.require via depends instances", () => {
       await core.createApp(config);
       expect.unreachable("should have thrown");
     } catch (error) {
-      const message = (error as Error).message;
+      if (!(error instanceof Error)) throw error;
       // Verify exact format: [frameworkName] Plugin "X" not in depends for "Y".\n  Add the plugin to your depends array.
-      expect(message).toBe(
+      expect(error.message).toBe(
         '[test-framework] Plugin "unknown-plugin" not in depends for "logger".\n  Add the plugin to your depends array.'
       );
     }

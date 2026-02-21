@@ -79,10 +79,10 @@ describe("validatePlugins", () => {
         validatePlugins("test-fw", [a1, a2]);
         expect.unreachable("should have thrown");
       } catch (error) {
-        const message = (error as Error).message;
-        expect(message).toContain('[test-fw] Duplicate plugin name "auth"');
-        expect(message).toContain("Found at positions 0 and 1");
-        expect(message).toContain("\n  Rename one of the plugins or remove the duplicate.");
+        if (!(error instanceof Error)) throw error;
+        expect(error.message).toContain('[test-fw] Duplicate plugin name "auth"');
+        expect(error.message).toContain("Found at positions 0 and 1");
+        expect(error.message).toContain("\n  Rename one of the plugins or remove the duplicate.");
       }
     });
   });
@@ -112,8 +112,8 @@ describe("validatePlugins", () => {
         validatePlugins("test-fw", [dashboard]);
         expect.unreachable("should have thrown");
       } catch (error) {
-        const message = (error as Error).message;
-        expect(message).toContain('Add "auth" to your plugin list before "dashboard"');
+        if (!(error instanceof Error)) throw error;
+        expect(error.message).toContain('Add "auth" to your plugin list before "dashboard"');
       }
     });
 
@@ -124,8 +124,8 @@ describe("validatePlugins", () => {
         validatePlugins("test-fw", [dashboard]);
         expect.unreachable("should have thrown");
       } catch (error) {
-        const message = (error as Error).message;
-        expect(message).toBe(
+        if (!(error instanceof Error)) throw error;
+        expect(error.message).toBe(
           '[test-fw] Plugin "dashboard" depends on "auth", but "auth" is not registered.\n  Add "auth" to your plugin list before "dashboard".'
         );
       }
@@ -156,8 +156,8 @@ describe("validatePlugins", () => {
         validatePlugins("test-fw", [dashboard, auth]);
         expect.unreachable("should have thrown");
       } catch (error) {
-        const message = (error as Error).message;
-        expect(message).toContain('Move "auth" before "dashboard"');
+        if (!(error instanceof Error)) throw error;
+        expect(error.message).toContain('Move "auth" before "dashboard"');
       }
     });
 
@@ -168,8 +168,8 @@ describe("validatePlugins", () => {
         validatePlugins("test-fw", [dashboard, auth]);
         expect.unreachable("should have thrown");
       } catch (error) {
-        const message = (error as Error).message;
-        expect(message).toBe(
+        if (!(error instanceof Error)) throw error;
+        expect(error.message).toBe(
           '[test-fw] Plugin "dashboard" depends on "auth", but "auth" appears after "dashboard".\n  Move "auth" before "dashboard" in your plugin list.'
         );
       }

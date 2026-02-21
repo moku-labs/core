@@ -470,7 +470,9 @@ describe("end-to-end three-layer type flow", () => {
         }
       },
       onInit: ctx => {
-        // Verify cross-plugin access via instance-based depends
+        // Intentional cast: publisherPlugin is declared at function scope where
+        // the plugin reference type is available but ctx.require return type
+        // cannot infer the API from the runtime depends array
         const pub = ctx.require(publisherPlugin) as { publish: () => string };
         hookLog.push(`publisher says: ${pub.publish()}`);
       }
