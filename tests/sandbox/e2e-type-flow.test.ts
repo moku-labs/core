@@ -2,7 +2,7 @@
 // End-to-End Type Flow: Three-Layer Narrative Runtime Test
 // =============================================================================
 // This test exercises the complete type inference chain:
-//   Layer 1: createCore<BaseConfig, BusContract, SignalRegistry>()
+//   Layer 1: createCore<BaseConfig, EventContract>()
 //   Layer 2: Framework defines 4 plugins (router, build, spa, i18n)
 //   Layer 3: Consumer adds analytics plugin, creates config, builds app
 //
@@ -18,8 +18,8 @@ import { createCore } from "../../src/index";
 // =============================================================================
 // Layer 1: Core Setup -- Framework Types and createCore
 // =============================================================================
-// The framework author defines the base config shape, bus contract, and signal
-// registry. These three generics flow through the entire system.
+// The framework author defines the base config shape and event contract.
+// These two generics flow through the entire system.
 
 /** Framework's global config shape -- realistic nested objects */
 type BaseConfig = {
@@ -27,14 +27,10 @@ type BaseConfig = {
   build: { outDir: string; minify: boolean };
 };
 
-/** Typed bus contract -- events that flow through emit() */
-type BusContract = {
+/** Unified event contract -- all events that flow through emit() */
+type EventContract = {
   "content:updated": { path: string; hash: string };
   "build:complete": { files: string[]; duration: number };
-};
-
-/** Typed signal registry -- signals that flow through signal() */
-type SignalRegistry = {
   "route:change": { from: string; to: string };
 };
 
@@ -51,7 +47,7 @@ type SignalRegistry = {
  * State: { registeredRoutes: string[] }
  */
 function createRouterPlugin(
-  core: ReturnType<typeof createCore<BaseConfig, BusContract, SignalRegistry>>
+  core: ReturnType<typeof createCore<BaseConfig, EventContract>>
 ) {
   return core.createPlugin("router", {
     defaultConfig: { basePath: "/", trailingSlash: false },
@@ -98,7 +94,7 @@ type BuildState = { artifacts: string[]; eventLog: string[] };
  * @param routerPlugin - The router plugin instance for depends declaration.
  */
 function createBuildPlugin(
-  core: ReturnType<typeof createCore<BaseConfig, BusContract, SignalRegistry>>,
+  core: ReturnType<typeof createCore<BaseConfig, EventContract>>,
   // biome-ignore lint/suspicious/noExplicitAny: Plugin instance type is erased at function boundary
   routerPlugin: any
 ) {
@@ -144,7 +140,7 @@ function createBuildPlugin(
  * Maps onMount -> onStart, onUnmount -> onStop at runtime.
  */
 function createSpaComponent(
-  core: ReturnType<typeof createCore<BaseConfig, BusContract, SignalRegistry>>
+  core: ReturnType<typeof createCore<BaseConfig, EventContract>>
 ) {
   return core.createComponent("spa", {
     defaultConfig: { mountPoint: "#app" },
@@ -167,7 +163,7 @@ function createSpaComponent(
  * API: { t: (key: string) => string; locale: () => string }
  */
 function createI18nPlugin(
-  core: ReturnType<typeof createCore<BaseConfig, BusContract, SignalRegistry>>
+  core: ReturnType<typeof createCore<BaseConfig, EventContract>>
 ) {
   return core.createPlugin("i18n", {
     defaultConfig: { locale: "en", fallback: "en" },
@@ -190,7 +186,7 @@ describe("end-to-end three-layer type flow", () => {
 
     const lifecycleLog: string[] = [];
 
-    const core = createCore<BaseConfig, BusContract, SignalRegistry>("moku", {
+    const core = createCore<BaseConfig, EventContract>("moku", {
       config: {
         site: { title: "Default Site", url: "https://example.com" },
         build: { outDir: "./build", minify: false }
@@ -205,7 +201,7 @@ describe("end-to-end three-layer type flow", () => {
         lifecycleLog.push("shutdown");
       }
     });
-    // TS infers: CoreAPI<BaseConfig, BusContract, SignalRegistry>
+    // TS infers: CoreAPI<BaseConfig, EventContract>
 
     // =========================================================================
     // Layer 2: Framework Defines Plugins
@@ -256,7 +252,7 @@ describe("end-to-end three-layer type flow", () => {
 
     // Consumer creates app -- no type annotations
     const app = await core.createApp(config);
-    // TS infers: App<BaseConfig, BusContract, SignalRegistry, P>
+    // TS infers: App<BaseConfig, EventContract, P>
 
     // --- Verify boot callback fired ---
     expect(lifecycleLog).toContain("boot");
@@ -298,11 +294,11 @@ describe("end-to-end three-layer type flow", () => {
     expect(app.configs.i18n.fallback).toBe("en"); // Default preserved (shallow merge)
     expect(app.configs.spa.mountPoint).toBe("#app"); // Default
 
-    // --- Typed bus event ---
+    // --- Typed event ---
     await app.emit("content:updated", { path: "/", hash: "abc123" });
 
-    // --- Typed signal ---
-    await app.signal("route:change", { from: "/", to: "/about" });
+    // --- Typed event (formerly signal) ---
+    await app.emit("route:change", { from: "/", to: "/about" });
 
     // --- Plugin registry ---
     expect(app.has("router")).toBe(true);
@@ -374,8 +370,8 @@ describe("end-to-end three-layer type flow", () => {
     expect(() => app.emit("content:updated" as never, {} as never)).toThrow(
       "Cannot call emit() on a destroyed app"
     );
-    expect(() => app.signal("route:change" as never, {} as never)).toThrow(
-      "Cannot call signal() on a destroyed app"
+    expect(() => app.emit("route:change" as never, {} as never)).toThrow(
+      "Cannot call emit() on a destroyed app"
     );
     expect(() => app.has("router")).toThrow("Cannot call has() on a destroyed app");
     expect(() => app.getPlugin("router" as never)).toThrow(
@@ -387,7 +383,7 @@ describe("end-to-end three-layer type flow", () => {
   });
 
   it("config resolution: defaults + overrides + required configs", async () => {
-    const core = createCore<BaseConfig, BusContract, SignalRegistry>("moku", {
+    const core = createCore<BaseConfig, EventContract>("moku", {
       config: {
         site: { title: "Default", url: "https://default.com" },
         build: { outDir: "./out", minify: true }
@@ -440,7 +436,7 @@ describe("end-to-end three-layer type flow", () => {
   });
 
   it("cross-plugin communication via hooks and require", async () => {
-    const core = createCore<BaseConfig, BusContract, SignalRegistry>("moku", {
+    const core = createCore<BaseConfig, EventContract>("moku", {
       config: {
         site: { title: "Test", url: "https://test.com" },
         build: { outDir: "./out", minify: false }
@@ -495,8 +491,8 @@ describe("end-to-end three-layer type flow", () => {
     await app.destroy();
   });
 
-  it("typed signals: SignalRegistry enforces payload, hooks receive it", async () => {
-    const core = createCore<BaseConfig, BusContract, SignalRegistry>("moku", {
+  it("typed emit: EventContract enforces payload, hooks receive it", async () => {
+    const core = createCore<BaseConfig, EventContract>("moku", {
       config: {
         site: { title: "Test", url: "https://test.com" },
         build: { outDir: "./out", minify: false }
@@ -504,21 +500,21 @@ describe("end-to-end three-layer type flow", () => {
     });
 
     // Track what the listener receives
-    const signalLog: Array<{ from: string; to: string }> = [];
+    const eventLog: Array<{ from: string; to: string }> = [];
     const untypedLog: unknown[] = [];
 
-    // Plugin that listens to both typed and untyped signals via hooks
+    // Plugin that listens to both typed and untyped events via hooks
     const listenerPlugin = core.createPlugin("listener", {
       defaultConfig: {},
       api: () => ({
-        getSignalLog: () => [...signalLog],
+        getEventLog: () => [...eventLog],
         getUntypedLog: () => [...untypedLog]
       }),
       hooks: {
         "route:change": (payload: unknown) => {
-          // At the hooks level, payload is unknown (hooks don't carry generics).
-          // The typing benefit is on the SENDER side (ctx.signal / app.signal).
-          signalLog.push(payload as { from: string; to: string });
+          // At the hooks level, payload comes from dispatch.
+          // The typing benefit is on the SENDER side (ctx.emit / app.emit).
+          eventLog.push(payload as { from: string; to: string });
         },
         "custom:adhoc": (payload: unknown) => {
           untypedLog.push(payload);
@@ -526,16 +522,16 @@ describe("end-to-end three-layer type flow", () => {
       }
     });
 
-    // Plugin that fires a typed signal during onStart
+    // Plugin that fires a typed event during onStart
     const navigatorPlugin = core.createPlugin("navigator", {
       defaultConfig: {},
       api: () => ({}),
       onStart: async ctx => {
-        // TYPED: "route:change" is in SignalRegistry — TS enforces { from, to }
-        await ctx.signal("route:change", { from: "/home", to: "/dashboard" });
+        // TYPED: "route:change" is in EventContract -- TS enforces { from, to }
+        await ctx.emit("route:change", { from: "/home", to: "/dashboard" });
 
-        // UNTYPED: "custom:adhoc" is NOT in SignalRegistry — falls through to untyped overload
-        await ctx.signal("custom:adhoc", { message: "hello from navigator" });
+        // UNTYPED: "custom:adhoc" is NOT in EventContract -- falls through to untyped overload
+        await ctx.emit("custom:adhoc", { message: "hello from navigator" });
       }
     });
 
@@ -544,28 +540,28 @@ describe("end-to-end three-layer type flow", () => {
     });
     const app = await core.createApp(config);
 
-    // Before start: no signals fired yet
-    expect(app.listener.getSignalLog()).toEqual([]);
+    // Before start: no events fired yet
+    expect(app.listener.getEventLog()).toEqual([]);
     expect(app.listener.getUntypedLog()).toEqual([]);
 
-    // Start triggers navigatorPlugin.onStart which fires both signals
+    // Start triggers navigatorPlugin.onStart which fires both events
     await app.start();
 
-    // Typed signal: listener received the route:change payload
-    expect(app.listener.getSignalLog()).toEqual([{ from: "/home", to: "/dashboard" }]);
+    // Typed event: listener received the route:change payload
+    expect(app.listener.getEventLog()).toEqual([{ from: "/home", to: "/dashboard" }]);
 
-    // Untyped signal: listener received the custom:adhoc payload
+    // Untyped event: listener received the custom:adhoc payload
     expect(app.listener.getUntypedLog()).toEqual([{ message: "hello from navigator" }]);
 
-    // App-level typed signal — TS enforces the payload shape
-    await app.signal("route:change", { from: "/dashboard", to: "/settings" });
-    expect(app.listener.getSignalLog()).toEqual([
+    // App-level typed emit -- TS enforces the payload shape
+    await app.emit("route:change", { from: "/dashboard", to: "/settings" });
+    expect(app.listener.getEventLog()).toEqual([
       { from: "/home", to: "/dashboard" },
       { from: "/dashboard", to: "/settings" }
     ]);
 
-    // App-level untyped signal — any string works
-    await app.signal("some:random:event", { data: 42 });
+    // App-level untyped emit -- any string works (ad-hoc event)
+    await app.emit("some:random:event", { data: 42 });
     // No hook registered for "some:random:event", so untypedLog unchanged
     expect(app.listener.getUntypedLog()).toHaveLength(1);
 
@@ -573,7 +569,7 @@ describe("end-to-end three-layer type flow", () => {
   });
 
   it("component lifecycle maps onMount/onUnmount correctly", async () => {
-    const core = createCore<BaseConfig, BusContract, SignalRegistry>("moku", {
+    const core = createCore<BaseConfig, EventContract>("moku", {
       config: {
         site: { title: "Test", url: "https://test.com" },
         build: { outDir: "./out", minify: false }
@@ -620,7 +616,7 @@ describe("end-to-end three-layer type flow", () => {
   });
 
   it("event bus via core.createEventBus works standalone", () => {
-    const core = createCore<BaseConfig, BusContract, SignalRegistry>("moku", {
+    const core = createCore<BaseConfig, EventContract>("moku", {
       config: {
         site: { title: "Test", url: "https://test.com" },
         build: { outDir: "./out", minify: false }
@@ -645,7 +641,7 @@ describe("end-to-end three-layer type flow", () => {
   });
 
   it("plugin factory produces multiple named instances", async () => {
-    const core = createCore<BaseConfig, BusContract, SignalRegistry>("moku", {
+    const core = createCore<BaseConfig, EventContract>("moku", {
       config: {
         site: { title: "Test", url: "https://test.com" },
         build: { outDir: "./out", minify: false }

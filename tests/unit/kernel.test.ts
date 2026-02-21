@@ -158,7 +158,7 @@ describe("dispatch", () => {
     expect(log).toEqual(["hook-fired"]);
   });
 
-  it("signal dispatches to the same hookMap", async () => {
+  it("emit dispatches ad-hoc events to hookMap", async () => {
     const log: string[] = [];
     const core = testCore();
     const plugin = core.createPlugin("signaler", {
@@ -171,7 +171,7 @@ describe("dispatch", () => {
 
     const config = core.createConfig({ plugins: [plugin] });
     const app = await core.createApp(config);
-    await app.signal("my:signal");
+    await app.emit("my:signal" as never);
 
     expect(log).toEqual(["signal-hook"]);
   });
@@ -243,7 +243,7 @@ describe("dispatch", () => {
     await expect(app.emit("bad:event" as never, {} as never)).rejects.toThrow("hook boom");
   });
 
-  it("handler error propagation: if a hook handler throws, signal rejects", async () => {
+  it("handler error propagation: if a hook handler throws, emit rejects for ad-hoc events", async () => {
     const core = testCore();
     const plugin = core.createPlugin("thrower", {
       hooks: {
@@ -256,7 +256,7 @@ describe("dispatch", () => {
     const config = core.createConfig({ plugins: [plugin] });
     const app = await core.createApp(config);
 
-    await expect(app.signal("bad:signal")).rejects.toThrow("signal boom");
+    await expect(app.emit("bad:signal" as never)).rejects.toThrow("signal boom");
   });
 });
 
@@ -348,9 +348,9 @@ describe("kernel events (COMM-04)", () => {
     expect(log).toEqual(["b-onDestroy", "a-onDestroy", "app:destroy-hook"]);
   });
 
-  it("kernel events fire even if BusContract does not declare them", async () => {
+  it("kernel events fire even if EventContract does not declare them", async () => {
     const log: string[] = [];
-    // No BusContract at all -- kernel events should still fire
+    // No EventContract at all -- kernel events should still fire
     const core = testCore();
     const plugin = core.createPlugin("listener", {
       hooks: {
@@ -740,7 +740,7 @@ describe("destroy contract", () => {
     // getPlugin on a frozen object still returns the mounted value,
     // but the internal registry was cleared. The mounted property on
     // the frozen app still exists, though.
-    // The important thing: emit/signal/start/stop/destroy all throw.
+    // The important thing: emit/start/stop/destroy all throw.
     expect(() => app.emit("any" as never, {} as never)).toThrow("destroyed");
   });
 
@@ -774,14 +774,16 @@ describe("destroy contract", () => {
     );
   });
 
-  it("post-destroy signal() throws synchronously", async () => {
+  it("post-destroy emit() throws for ad-hoc events", async () => {
     const core = testCore();
     const config = core.createConfig();
     const app = await core.createApp(config);
     await app.destroy();
 
-    // signal checks destroyed flag synchronously before dispatch
-    expect(() => app.signal("any")).toThrow("Cannot call signal() on a destroyed app");
+    // emit checks destroyed flag synchronously before dispatch (ad-hoc event)
+    expect(() => app.emit("any-adhoc" as never)).toThrow(
+      "Cannot call emit() on a destroyed app"
+    );
   });
 
   it("post-destroy destroy() throws", async () => {
@@ -856,7 +858,6 @@ describe("context shapes", () => {
           config?: Record<string, unknown>;
           state?: unknown;
           emit?: unknown;
-          signal?: unknown;
         }
       | undefined;
     const core = testCore({ config: { env: "test" } });
@@ -876,10 +877,9 @@ describe("context shapes", () => {
     expect(context?.config).toBeDefined();
     expect(context?.global?.env).toBe("test");
     expect(context?.config?.key).toBe("value");
-    // Should NOT have state, emit, signal, getPlugin, require, has
+    // Should NOT have state, emit, getPlugin, require, has
     expect(context?.state).toBeUndefined();
     expect(context?.emit).toBeUndefined();
-    expect(context?.signal).toBeUndefined();
   });
 
   it("onCreate receives { global, config } (MinimalContext)", async () => {
@@ -901,7 +901,7 @@ describe("context shapes", () => {
     expect(context?.emit).toBeUndefined();
   });
 
-  it("api receives full PluginContext (global, config, state, emit, signal, getPlugin, require, has)", async () => {
+  it("api receives full PluginContext (global, config, state, emit, getPlugin, require, has)", async () => {
     let context: Record<string, unknown> | undefined;
     const core = testCore();
     const plugin = core.createPlugin("checker", {
@@ -921,13 +921,12 @@ describe("context shapes", () => {
     expect(context?.config).toBeDefined();
     expect(context?.state).toEqual({ count: 0 });
     expect(typeof context?.emit).toBe("function");
-    expect(typeof context?.signal).toBe("function");
     expect(typeof context?.getPlugin).toBe("function");
     expect(typeof context?.require).toBe("function");
     expect(typeof context?.has).toBe("function");
   });
 
-  it("onInit receives InitContext (global, config, emit, signal, getPlugin, require, has -- NO state)", async () => {
+  it("onInit receives InitContext (global, config, emit, getPlugin, require, has -- NO state)", async () => {
     let context: Record<string, unknown> | undefined;
     const core = testCore();
     const plugin = core.createPlugin("checker", {
@@ -945,7 +944,6 @@ describe("context shapes", () => {
     expect(context?.global).toBeDefined();
     expect(context?.config).toBeDefined();
     expect(typeof context?.emit).toBe("function");
-    expect(typeof context?.signal).toBe("function");
     expect(typeof context?.getPlugin).toBe("function");
     expect(typeof context?.require).toBe("function");
     expect(typeof context?.has).toBe("function");
@@ -973,7 +971,6 @@ describe("context shapes", () => {
     expect(context?.config).toBeDefined();
     expect(context?.state).toEqual({ items: [] });
     expect(typeof context?.emit).toBe("function");
-    expect(typeof context?.signal).toBe("function");
   });
 
   it("onStop receives TeardownContext { global }", async () => {
@@ -1326,13 +1323,13 @@ describe("edge cases", () => {
     expect(result).toBeUndefined();
   });
 
-  it("signal for event with no handlers is a no-op", async () => {
+  it("emit for ad-hoc event with no handlers is a no-op", async () => {
     const core = testCore();
     const config = core.createConfig();
     const app = await core.createApp(config);
 
     // Should not throw -- resolves to undefined
-    const result = await app.signal("nonexistent");
+    const result = await app.emit("nonexistent:adhoc" as never);
     expect(result).toBeUndefined();
   });
 
@@ -1564,7 +1561,7 @@ describe("app interface", () => {
   // start() warning signal on redundant call
   // -------------------------------------------------------------------------
 
-  it("start() emits app:warn:redundant-start signal on second call", async () => {
+  it("start() emits app:warn:redundant-start event on second call", async () => {
     const log: string[] = [];
     const core = testCore();
     const plugin = core.createPlugin("watcher", {

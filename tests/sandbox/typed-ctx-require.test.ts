@@ -22,11 +22,13 @@ import { createCore } from "../../src/index";
 // =============================================================================
 
 type TestConfig = { env: string };
-type TestBus = { "test:event": { data: string } };
-type TestSignals = { "test:signal": { value: number } };
+type TestEvents = {
+  "test:event": { data: string };
+  "test:signal": { value: number };
+};
 
 function createTestCore() {
-  return createCore<TestConfig, TestBus, TestSignals>("test-framework", {
+  return createCore<TestConfig, TestEvents>("test-framework", {
     config: { env: "test" }
   });
 }

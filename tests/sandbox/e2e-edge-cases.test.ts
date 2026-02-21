@@ -22,12 +22,14 @@ import { createCore } from "../../src/index";
 // =============================================================================
 
 type MinimalConfig = { appName: string };
-type MinimalBus = { "test:event": { value: number } };
-type MinimalSignals = { "test:signal": { data: string } };
+type MinimalEvents = {
+  "test:event": { value: number };
+  "test:signal": { data: string };
+};
 
 /** Creates a minimal core instance for edge case tests. */
 function createMinimalCore() {
-  return createCore<MinimalConfig, MinimalBus, MinimalSignals>("edge-test", {
+  return createCore<MinimalConfig, MinimalEvents>("edge-test", {
     config: { appName: "edge-test-app" }
   });
 }
@@ -50,16 +52,16 @@ describe("zero-plugin app", () => {
     await app.destroy();
   });
 
-  it("zero-plugin app has working emit and signal", async () => {
+  it("zero-plugin app has working emit for typed and ad-hoc events", async () => {
     const core = createMinimalCore();
     const config = core.createConfig();
     const app = await core.createApp(config);
 
-    // emit and signal should work even with no plugins/hooks (no throw)
+    // emit should work even with no plugins/hooks (no throw)
     await app.emit("test:event", { value: 42 });
-    await app.signal("test:signal", { data: "hello" });
+    await app.emit("test:signal", { data: "hello" });
 
-    // Verify app is still functional after emit/signal
+    // Verify app is still functional after emit
     expect(app.has("anything")).toBe(false);
 
     await app.destroy();
@@ -332,8 +334,8 @@ describe("destroy contract enforcement", () => {
     expect(() => app.emit("test:event" as never, {} as never)).toThrow(
       "Cannot call emit() on a destroyed app"
     );
-    expect(() => app.signal("test:signal" as never, {} as never)).toThrow(
-      "Cannot call signal() on a destroyed app"
+    expect(() => app.emit("test:signal" as never, {} as never)).toThrow(
+      "Cannot call emit() on a destroyed app"
     );
     expect(() => app.has("dummy")).toThrow("Cannot call has() on a destroyed app");
     expect(() => app.getPlugin("dummy" as never)).toThrow(
