@@ -201,7 +201,7 @@ The framework is designed **types-first.** The runtime is trivial (under 200 lin
 
 Moku provides `createPlugin` as the single primitive for extending functionality. Plugins communicate intent through their spec shape:
 
-- **defaultConfig** -- what config this plugin accepts
+- **config** -- what config this plugin accepts
 - **api** -- what public methods this plugin exposes
 - **hooks** -- what events this plugin listens to
 - **depends** -- what other plugins this plugin requires
@@ -307,7 +307,7 @@ The consumer never sees `createCoreConfig`. Never sees `moku_core`. Never thinks
 import { createApp, createPlugin } from 'my-framework';
 
 const myPlugin = createPlugin('analytics', {
-  defaultConfig: { trackingId: '' },
+  config: { trackingId: '' },
   api: (ctx) => ({
     track: (event: string) => console.log(`[${ctx.config.trackingId}] ${event}`),
   }),

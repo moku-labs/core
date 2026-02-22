@@ -1,7 +1,7 @@
 import { createPlugin } from "../config";
 
 export const templateEnginePlugin = createPlugin("template-engine", {
-  defaultConfig: {
+  config: {
     engine: "default" as string
   },
   api: _ctx => ({

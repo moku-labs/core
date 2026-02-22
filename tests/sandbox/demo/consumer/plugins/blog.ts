@@ -1,7 +1,7 @@
 import { createPlugin } from "../../moku-web";
 
 export const blogPlugin = createPlugin("blog", {
-  defaultConfig: {
+  config: {
     postsPerPage: 10,
     showDrafts: false
   },

@@ -4,7 +4,7 @@ import { routerPlugin } from "./router";
 
 export const seoPlugin = createPlugin("seo", {
   depends: [routerPlugin, rendererPlugin] as const,
-  defaultConfig: {
+  config: {
     defaultTitle: "Untitled"
   },
   api: ctx => ({

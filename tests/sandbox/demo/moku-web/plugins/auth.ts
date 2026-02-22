@@ -4,10 +4,11 @@ import { routerPlugin } from "./router";
 export const authPlugin = createPlugin("auth", {
   events: register => ({
     "auth:login": register<{ userId: string }>("Triggered after user login"),
-    "auth:logout": register<{ userId: string }>("Triggered after user logout")
+    "auth:logout": register<{ userId: string }>("Triggered after user logout"),
+    "auth:timeout": register<{ sessionTimeout: number }>("Triggered on session timeout")
   }),
-  depends: [routerPlugin] as const,
-  defaultConfig: {
+  depends: [routerPlugin],
+  config: {
     loginPath: "/login",
     sessionTimeout: 3600
   },
@@ -32,6 +33,7 @@ export const authPlugin = createPlugin("auth", {
       }
 
       ctx.require(routerPlugin).navigate(ctx.config.loginPath);
+      ctx.emit("auth:timeout", { sessionTimeout: ctx.config.sessionTimeout });
 
       // @ts-expect-error -- wrong payload shape: { ctx } is not { from: string, to: string }
       ctx.emit("router:navigate", { ctx });

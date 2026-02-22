@@ -1,7 +1,7 @@
 import { createPlugin } from "../config";
 
 export const routerPlugin = createPlugin("router", {
-  defaultConfig: {
+  config: {
     basePath: "/",
     trailingSlash: false
   },

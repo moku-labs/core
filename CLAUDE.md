@@ -66,7 +66,7 @@ Full specification: `specification/14-EVENT-REGISTRATION.md`
 
 - **3-step factory chain** (`createCoreConfig` -> `createCore` -> `createApp`): Each step captures types in a closure.
 - **No topological sort**: `depends` is validation-only. Plugin order is explicit in the array.
-- **Shallow merge only**: `{ ...defaultConfig, ...consumerConfig }`. No deep merge.
+- **Shallow merge only**: `{ ...config, ...consumerConfig }`. No deep merge.
 - **Sequential async execution**: Within each phase, plugins run one at a time, awaited. No parallelism.
 - **Configs frozen, state mutable**: Configs are `Object.freeze`'d. Plugin state (`S`) is the mutable escape hatch.
 - **Strict emit, no escape hatch**: `emit` only accepts known event names with typed payloads.

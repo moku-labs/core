@@ -191,7 +191,7 @@ export const authPlugin = createPlugin('auth', {
     'auth:login':  register<{ userId: string }>('Triggered after user login'),
     'auth:logout': register<{ userId: string }>('Triggered after user logout'),
   }),
-  defaultConfig: {
+  config: {
     loginPath: '/login',
     sessionTimeout: 3600,
   },
@@ -221,7 +221,7 @@ export const authPlugin = createPlugin('auth', {
 
 ```typescript
 export const routerPlugin = createPlugin('router', {
-  defaultConfig: { basePath: '/' },
+  config: { basePath: '/' },
   createState: () => ({ currentPath: '/' }),
   api: ctx => ({
     navigate: (path: string) => {

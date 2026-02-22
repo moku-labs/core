@@ -172,7 +172,7 @@ type RegisterFunction = <PayloadType>(description?: string) => EventDescriptor<P
  * - `GlobalConfig`: app-wide config object
  * - `GlobalEventMap`: app-wide events from `createCoreConfig`
  * - `PluginEventMap`: plugin-specific events declared by `events`
- * - `PluginConfig`: plugin config shape from `defaultConfig`
+ * - `PluginConfig`: plugin config shape from `config`
  * - `PluginState`: mutable state returned by `createState`
  * - `PluginApi`: API returned by `api`
  * - `DependencyPlugins`: tuple from `depends`
@@ -212,7 +212,7 @@ type CreatePluginSpec<
   events?: (register: RegisterFunction) => {
     [EventName in keyof PluginEventMap]: EventDescriptor<PluginEventMap[EventName]>;
   };
-  defaultConfig?: PluginConfig;
+  config?: PluginConfig;
   depends?: DependencyPlugins;
   plugins?: PluginLike[];
   createState?: (context: {
@@ -268,7 +268,7 @@ type CreatePluginSpec<
  * @example
  * ```ts
  * const { createPlugin } = createCoreConfig<MyConfig, MyEvents>("my-app", { config: defaults });
- * const router = createPlugin("router", { defaultConfig: { basePath: "/" } });
+ * const router = createPlugin("router", { config: { basePath: "/" } });
  * const renderer = createPlugin<RendererEvents>("renderer", { api: ctx => ({ ... }) });
  * ```
  */
@@ -472,7 +472,7 @@ function assertValidHooks(frameworkId: string, pluginName: string, hooks: unknow
  * @example
  * ```ts
  * const createPlugin = createPluginFactory<MyConfig, MyEvents>("my-app");
- * const plugin = createPlugin("router", { defaultConfig: { basePath: "/" } });
+ * const plugin = createPlugin("router", { config: { basePath: "/" } });
  * ```
  */
 function createPluginFactory<
@@ -487,7 +487,7 @@ function createPluginFactory<
    * @example
    * ```ts
    * const router = createPlugin("router", {
-   *   defaultConfig: { basePath: "/" },
+   *   config: { basePath: "/" },
    *   api: (ctx) => ({ navigate: (path: string) => path }),
    * });
    * ```

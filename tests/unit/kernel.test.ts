@@ -255,7 +255,7 @@ describe("context tiers", () => {
     const cc = createTestCore();
 
     const plugin = cc.createPlugin("probe", {
-      defaultConfig: { debug: true },
+      config: { debug: true },
       createState: context => {
         contextKeys = Object.keys(context);
         return {};
@@ -278,7 +278,7 @@ describe("context tiers", () => {
     const cc = createTestCore();
 
     const plugin = cc.createPlugin("probe", {
-      defaultConfig: { debug: true },
+      config: { debug: true },
       createState: () => ({ count: 0 }),
       onInit: context => {
         contextKeys = Object.keys(context);

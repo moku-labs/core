@@ -15,7 +15,7 @@ The key insight is that **at runtime, everything is a plugin.** Components exist
 import { createComponent } from './config'; // From framework's createCoreConfig
 
 const HealthCheck = createComponent('health', {
-  defaultConfig: {
+  config: {
     endpoint: '/health',
     interval: 30_000,
   },

@@ -26,7 +26,7 @@ import { handleNotFound } from './handlers';
 
 export const routerPlugin = createPlugin('router', {
   depends: ['renderer'],
-  defaultConfig: { basePath: '/', default: 'home' },
+  config: { basePath: '/', default: 'home' },
   createState: createRouterState,
   api: createRouterApi,
 
@@ -142,7 +142,7 @@ export const { createPlugin, createCore } = coreConfig;
 import { createPlugin } from '../../config';
 
 export const routerPlugin = createPlugin('router', {
-  defaultConfig: { basePath: '/' },
+  config: { basePath: '/' },
   createState: () => ({ currentPath: '/' }),
   api: (ctx) => ({
     navigate: (path: string) => {
@@ -186,7 +186,7 @@ export const { createApp, createPlugin } = framework;
 import { createApp, createPlugin } from 'my-framework';
 
 const blogPlugin = createPlugin('blog', {
-  defaultConfig: { postsPerPage: 10 },
+  config: { postsPerPage: 10 },
   api: (ctx) => ({
     listPosts: () => ['post1', 'post2'],
   }),
@@ -281,7 +281,7 @@ THREE-STEP PATTERN:
 CREATING PLUGINS:
   import { createPlugin } from 'my-framework';  // NOT from moku_core
   export const myPlugin = createPlugin('myPlugin', {
-    defaultConfig: { /* optional defaults */ },
+    config: { /* optional defaults */ },
     createState: (ctx) => ({ /* internal mutable state */ }),
     api: (ctx) => ({
       /* public methods -- this becomes app.myPlugin.methodName() */
@@ -323,9 +323,9 @@ EVENT SYSTEM:
   Events are notifications. Use ctx.require('name') for request/response.
 
 CONFIG RULES:
-  - defaultConfig present = config key optional in createApp
-  - defaultConfig absent + non-void config = config key required in createApp
-  - Shallow merge: { ...defaultConfig, ...consumerConfig }
+  - config present = config key optional in createApp
+  - config absent + non-void config = config key required in createApp
+  - Shallow merge: { ...config, ...consumerConfig }
   - Configs are frozen after creation
   - depends: ['pluginName'] declares dependencies. Validated at startup. Not a sort.
 

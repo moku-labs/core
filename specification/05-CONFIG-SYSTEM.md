@@ -11,7 +11,7 @@ The system has two levels of configuration:
 
 **Global Config:** Defined via `createCoreConfig<Config, Events>(id, { config })`. The framework provides defaults; the consumer can override any field in the flat `createApp` object.
 
-**Per-Plugin Config:** Defined via `defaultConfig` on each plugin's spec. The consumer can override any field by passing a keyed object in the flat `createApp` object.
+**Per-Plugin Config:** Defined via `config` on each plugin's spec. The consumer can override any field by passing a keyed object in the flat `createApp` object.
 
 Both levels use the same resolution strategy: **shallow merge**.
 
@@ -19,9 +19,9 @@ Both levels use the same resolution strategy: **shallow merge**.
 
 ## 2. The Rule
 
-TypeScript's own type system determines config behavior. No flags. No metadata. Just the type plus the presence of `defaultConfig`.
+TypeScript's own type system determines config behavior. No flags. No metadata. Just the type plus the presence of `config`.
 
-| Plugin Config Type `C` | `defaultConfig` | Consumer must provide |
+| Plugin Config Type `C` | `config` | Consumer must provide |
 |---|---|---|
 | `void` | (ignored) | Nothing. No key in createApp. |
 | `{}` | (ignored) | Nothing. No key in createApp. |
@@ -30,7 +30,7 @@ TypeScript's own type system determines config behavior. No flags. No metadata. 
 | `{ req: string; opt?: number }` | absent | **Required.** `{ req: "value" }` at minimum. |
 | `{ req: string; opt?: number }` | present | **Optional.** Defaults cover everything. Override what you want. |
 
-**Single canonical rule:** Config key is optional in `createApp` if and only if `defaultConfig` is provided. Otherwise it's required (unless C is void/{}).
+**Single canonical rule:** Config key is optional in `createApp` if and only if `config` is provided. Otherwise it's required (unless C is void/{}).
 
 ---
 
@@ -39,12 +39,12 @@ TypeScript's own type system determines config behavior. No flags. No metadata. 
 **Shallow merge. No deep merge. Ever.**
 
 ```typescript
-resolvedConfig = { ...spec.defaultConfig, ...consumerProvidedConfig }
+resolvedConfig = { ...spec.config, ...consumerProvidedConfig }
 ```
 
-If `defaultConfig` is `{ level: 'info', prefix: '[app]' }` and the consumer provides `{ level: 'debug' }`, the result is `{ level: 'debug', prefix: '[app]' }`.
+If `config` is `{ level: 'info', prefix: '[app]' }` and the consumer provides `{ level: 'debug' }`, the result is `{ level: 'debug', prefix: '[app]' }`.
 
-If `defaultConfig` has a nested object `{ database: { host: 'localhost', port: 5432 } }` and the consumer provides `{ database: { host: 'prod.example.com' } }`, the result is `{ database: { host: 'prod.example.com' } }`. The `port` field is **gone**. This is intentional. Deep merge is unpredictable. Shallow merge is obvious.
+If `config` has a nested object `{ database: { host: 'localhost', port: 5432 } }` and the consumer provides `{ database: { host: 'prod.example.com' } }`, the result is `{ database: { host: 'prod.example.com' } }`. The `port` field is **gone**. This is intentional. Deep merge is unpredictable. Shallow merge is obvious.
 
 ---
 
@@ -99,16 +99,16 @@ const app = await createApp({
 
 ---
 
-## 6. defaultConfig Is Full C, Not Partial
+## 6. config Is Full C, Not Partial
 
-`defaultConfig` must provide a complete `C` value -- all fields, even optional ones with `?`. This ensures that when the consumer omits config entirely, every field has a defined value. No `undefined` surprises. Partial defaults create ambiguity about which fields the consumer must provide.
+`config` must provide a complete `C` value -- all fields, even optional ones with `?`. This ensures that when the consumer omits config entirely, every field has a defined value. No `undefined` surprises. Partial defaults create ambiguity about which fields the consumer must provide.
 
 ```typescript
 // BAD: partial defaults leave gaps
-defaultConfig: { level: 'info' }  // where's prefix? where's silent?
+config: { level: 'info' }  // where's prefix? where's silent?
 
 // GOOD: complete defaults
-defaultConfig: { level: 'info', prefix: '[app]', silent: false }
+config: { level: 'info', prefix: '[app]', silent: false }
 ```
 
 ---
@@ -124,9 +124,9 @@ type AnalyticsConfig = {
   debugMode?: boolean;       // same -- optional
 };
 
-// With defaultConfig: config key is optional in createApp
+// With config: config key is optional in createApp
 const analyticsPlugin = createPlugin('analytics', {
-  defaultConfig: {
+  config: {
     trackingId: '',          // empty string -- must be overridden at runtime
     sampleRate: 1.0,
     debugMode: false,
@@ -138,9 +138,9 @@ const analyticsPlugin = createPlugin('analytics', {
   },
 });
 
-// Without defaultConfig: config key is required in createApp
+// Without config: config key is required in createApp
 const strictAnalyticsPlugin = createPlugin('analytics', {
-  // no defaultConfig -> consumer MUST provide at minimum: { trackingId: 'G-XXXXX' }
+  // no config -> consumer MUST provide at minimum: { trackingId: 'G-XXXXX' }
   // sampleRate and debugMode are optional per the type, so consumer can omit them
   onInit: (ctx) => { /* config is required at createApp call site */ },
 });
@@ -148,10 +148,10 @@ const strictAnalyticsPlugin = createPlugin('analytics', {
 
 **The interplay:**
 
-- `C`'s required fields (`trackingId: string`) -- consumer must provide them if no `defaultConfig`
+- `C`'s required fields (`trackingId: string`) -- consumer must provide them if no `config`
 - `C`'s optional fields (`sampleRate?: number`) -- consumer can always omit them
-- `defaultConfig` present -- the entire config key becomes optional in `createApp`
-- `defaultConfig` absent -- the config key is required, but optional `?` fields within C can still be omitted
+- `config` present -- the entire config key becomes optional in `createApp`
+- `config` absent -- the config key is required, but optional `?` fields within C can still be omitted
 
 ---
 
@@ -163,8 +163,8 @@ const strictAnalyticsPlugin = createPlugin('analytics', {
  *
  * Rules:
  *   C is void/{}          -> excluded (no config key)
- *   defaultConfig provided -> OPTIONAL (Partial<C>)
- *   no defaultConfig       -> REQUIRED (full C)
+ *   config provided -> OPTIONAL (Partial<C>)
+ *   no config       -> REQUIRED (full C)
  */
 type BuildPluginConfigs<P extends PluginInstance> = Prettify<
   & OmitNever<{
@@ -208,7 +208,7 @@ All resolved configs are `Object.freeze`'d after resolution. Both global config 
 
 At runtime, the kernel validates config completeness:
 
-- If a plugin requires config (no `defaultConfig`, non-void `C`), and the consumer didn't provide it, throw with a clear error message.
+- If a plugin requires config (no `config`, non-void `C`), and the consumer didn't provide it, throw with a clear error message.
 - TypeScript catches this at compile time, but runtime validation is a safety net.
 
 ```

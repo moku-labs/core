@@ -241,7 +241,7 @@ describe("createPlugin - return value", () => {
     const { createPlugin } = setup();
 
     const plugin = createPlugin("router", {
-      defaultConfig: { basePath: "/" }
+      config: { basePath: "/" }
     });
 
     expect(plugin).toHaveProperty("name");
@@ -253,7 +253,7 @@ describe("createPlugin - return value", () => {
     const { createPlugin } = setup();
 
     const plugin = createPlugin("router", {
-      defaultConfig: { basePath: "/" }
+      config: { basePath: "/" }
     });
 
     expect(plugin).toHaveProperty("_phantom");
@@ -263,14 +263,14 @@ describe("createPlugin - return value", () => {
     const { createPlugin } = setup();
 
     const plugin = createPlugin("full", {
-      defaultConfig: { x: 1 },
+      config: { x: 1 },
       onInit: () => {},
       onStart: () => {},
       onStop: () => {},
       hooks: { "some:event": () => {} }
     });
 
-    expect(plugin.spec.defaultConfig).toEqual({ x: 1 });
+    expect(plugin.spec.config).toEqual({ x: 1 });
     expect(typeof plugin.spec.onInit).toBe("function");
     expect(typeof plugin.spec.onStart).toBe("function");
     expect(typeof plugin.spec.onStop).toBe("function");

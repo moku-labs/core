@@ -24,7 +24,7 @@ describe("createCoreConfig (Step 1)", () => {
 
   it("createPlugin from coreConfig is callable with name and spec", () => {
     const testPlugin = createPlugin("test-plugin", {
-      defaultConfig: { x: 1 }
+      config: { x: 1 }
     });
 
     // Type-level: result carries the name property

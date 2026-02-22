@@ -20,7 +20,7 @@ describe("full lifecycle integration", () => {
 
     // Create plugins with full lifecycle tracking
     const database = cc.createPlugin("database", {
-      defaultConfig: { host: "localhost", port: 5432 },
+      config: { host: "localhost", port: 5432 },
       createState: () => ({ connected: false }),
       api: context => ({
         isConnected: () => context.state.connected

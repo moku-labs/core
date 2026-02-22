@@ -196,7 +196,7 @@ function createPlugin(
 ```
 
 **Zero generic parameters.** All types are inferred from the spec object:
-- Config shape (`C`) from `defaultConfig`
+- Config shape (`C`) from `config`
 - State shape (`S`) from `createState` return
 - API shape (`A`) from `api` return
 - Event map from the `events` register callback (see [14-EVENT-REGISTRATION](./14-EVENT-REGISTRATION.md))
@@ -283,7 +283,7 @@ export const { createPlugin, createCore } = coreConfig;
 import { createPlugin } from '../../config';
 
 export const routerPlugin = createPlugin('router', {
-  defaultConfig: {
+  config: {
     basePath: '/',
   },
   createState: () => ({
@@ -333,7 +333,7 @@ import { createApp, createPlugin, analyticsPlugin } from 'my-framework';
 
 // Consumer custom plugin
 const blogPlugin = createPlugin('blog', {
-  defaultConfig: { postsPerPage: 10 },
+  config: { postsPerPage: 10 },
   api: (ctx) => ({
     listPosts: () => ['post1', 'post2'],
   }),

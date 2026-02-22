@@ -55,7 +55,7 @@ type PluginEvents = {
 // Important there is no generic for state, confgi etc in createPlugin only optional PluginEvents contract!!!! It very Important all other contract already set ian ifered by createCoreConfig
 // Only optional PluginEvents can be provided on this level
 export const heroPlugin = createPlugin<PluginEvents>('hero', { // It already know all global config typepin signals and have access (read and write) to global state
-    defaultConfig: {
+    config: {
         property: ["prop"]
     },
     createState: () => ({ // Create plagin soce opnly plagin can write read
@@ -80,7 +80,7 @@ import { heroPlugin } from './plugins/heroPlugin'; // Important dependency plugi
 // Important there is no generic for createPlugin, iotianl event cofnig was skipped!!!! It very Important all contract already set in cofnig
 export const sidePlugin = createPlugin('side', { 
     depends: [heroPlugin], // NOW side have gloabl api state events typeing + all heroPlugin api and events typings!!!
-    defaultConfig: {
+    config: {
         property: ["prop"]
     },
     createState: () => ({ // Create plagin soce opnly plagin can write read
@@ -125,7 +125,7 @@ import { createApp, createPlugin } from 'moku'; // Import framework form package
 
 // Consumer can have own plugins that baased on framework confguration, it will be saprate files and folder i will palce it ere jsut ot explain
 export const consumerPlugin = createPlugin('consumer', { 
-    defaultConfig: {
+    config: {
         property: ["prop"]
     },
     createState: () => ({ // Create plagin soce opnly plagin can write read

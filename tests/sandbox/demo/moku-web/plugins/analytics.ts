@@ -1,7 +1,7 @@
 import { createPlugin } from "../config";
 
 export const analyticsPlugin = createPlugin("analytics", {
-  defaultConfig: {
+  config: {
     trackingId: "",
     debug: false
   },

@@ -7,11 +7,11 @@ export const rendererPlugin = createPlugin("renderer", {
       "Triggered after render completes"
     )
   }),
-  defaultConfig: {
+  config: {
     template: "default"
   },
   plugins: [templateEnginePlugin],
-  depends: [templateEnginePlugin] as const,
+  depends: [templateEnginePlugin],
   api: ctx => ({
     render: (path: string) => {
       const engine = ctx.require(templateEnginePlugin);

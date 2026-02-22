@@ -99,16 +99,16 @@ describe("global config overrides via createApp", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Plugin config defaults from defaultConfig
+// Plugin config defaults from config
 // ---------------------------------------------------------------------------
 
 describe("plugin config defaults", () => {
-  it("plugin receives its defaultConfig when no override", async () => {
+  it("plugin receives its config when no override", async () => {
     let capturedConfig: Record<string, unknown> = {};
     const cc = createTestCore();
 
     const router = cc.createPlugin("router", {
-      defaultConfig: { basePath: "/", trailingSlash: false },
+      config: { basePath: "/", trailingSlash: false },
       onInit: context => {
         capturedConfig = { ...context.config };
       }
@@ -121,7 +121,7 @@ describe("plugin config defaults", () => {
     expect(capturedConfig.trailingSlash).toBe(false);
   });
 
-  it("plugin without defaultConfig gets empty frozen config", async () => {
+  it("plugin without config gets empty frozen config", async () => {
     let capturedConfig: Record<string, unknown> = {};
     const cc = createTestCore();
 
@@ -148,7 +148,7 @@ describe("plugin config overrides via createApp", () => {
     const cc = createTestCore();
 
     const router = cc.createPlugin("router", {
-      defaultConfig: { basePath: "/", trailingSlash: false },
+      config: { basePath: "/", trailingSlash: false },
       onInit: context => {
         capturedConfig = { ...context.config };
       }
@@ -166,7 +166,7 @@ describe("plugin config overrides via createApp", () => {
     const cc = createTestCore();
 
     const router = cc.createPlugin("router", {
-      defaultConfig: { basePath: "/" },
+      config: { basePath: "/" },
       onInit: context => {
         capturedConfig = { ...context.config };
       }
@@ -192,7 +192,7 @@ describe("3-level config merge", () => {
     const cc = createTestCore();
 
     const router = cc.createPlugin("router", {
-      defaultConfig: { basePath: "/", retries: 3, debug: false },
+      config: { basePath: "/", retries: 3, debug: false },
       onInit: context => {
         capturedConfig = { ...context.config };
       }
@@ -239,7 +239,7 @@ describe("config freezing", () => {
     const cc = createTestCore();
 
     const router = cc.createPlugin("router", {
-      defaultConfig: { basePath: "/" },
+      config: { basePath: "/" },
       onInit: context => {
         frozen = Object.isFrozen(context.config);
       }
@@ -315,7 +315,7 @@ describe("key discrimination", () => {
     const cc = createTestCore();
 
     const router = cc.createPlugin("router", {
-      defaultConfig: { basePath: "/" },
+      config: { basePath: "/" },
       onInit: context => {
         capturedGlobal = { ...context.global };
         capturedPluginConfig = { ...context.config };

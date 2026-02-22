@@ -71,7 +71,7 @@ function createPlugin(
   name: N,  // N is a literal string type, inferred from the argument
   spec: {
     events?: (register: RegisterFn) => EventDescriptorMap,  // PluginEvents inferred from return
-    defaultConfig?: C,                                       // C inferred from value
+    config?: C,                                       // C inferred from value
     depends?: readonly [...PluginInstance[]],                 // tuple of instances
     plugins?: PluginInstance[],                               // sub-plugins
     createState?: (ctx: MinimalContext<Config, C>) => S,      // S inferred from return
@@ -84,7 +84,7 @@ function createPlugin(
 ): PluginInstance<N, C, S, A, PluginEvents> {
   // RATIONALE: All generics (N, C, S, A, PluginEvents) are inferred from the spec object.
   // The framework doesn't pass them. The plugin author doesn't write them.
-  // TypeScript infers N from the name string literal, C from defaultConfig,
+  // TypeScript infers N from the name string literal, C from config,
   // S from createState return, A from api return, PluginEvents from events callback return.
   //
   // The events register callback solves the "infer from type position" problem:
@@ -115,7 +115,7 @@ function createPlugin(
 **Type flow:**
 - `Config` and `Events` -- from createCoreConfig closure (invisible to plugin author)
 - `N` -- inferred from `name` argument (literal string type)
-- `C` -- inferred from `defaultConfig` value
+- `C` -- inferred from `config` value
 - `S` -- inferred from `createState` return type
 - `A` -- inferred from `api` return type
 - `PluginEvents` -- inferred from `events` register callback return type
@@ -271,7 +271,7 @@ async function createApp(consumerOptions?: {
   const resolvedConfigs = new Map<string, Readonly<any>>();
   for (const plugin of flatPlugins) {
     const merged = Object.freeze({
-      ...plugin.spec.defaultConfig,
+      ...plugin.spec.config,
       ...frameworkPluginConfigs[plugin.name],
       ...consumerPluginConfigs[plugin.name],
     });
@@ -558,7 +558,7 @@ Framework config.ts:
     -> returns { createPlugin, createCore }
 
 Framework plugin files:
-  createPlugin('name', { events, defaultConfig, createState, api, onInit, onStart, onStop, hooks })
+  createPlugin('name', { events, config, createState, api, onInit, onStart, onStop, hooks })
     -> all types inferred from spec; Config + Events from closure
     -> PluginEvents inferred from events register callback
     -> returns PluginInstance with phantom types

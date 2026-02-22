@@ -173,7 +173,7 @@ import { createApp, createPlugin } from 'my-framework';
 
 // Consumer can create plugins using the framework's bound createPlugin
 const blogPlugin = createPlugin('blog', {
-  defaultConfig: { postsPerPage: 10 },
+  config: { postsPerPage: 10 },
   api: (ctx) => ({
     listPosts: () => ['post1', 'post2'],
   }),
@@ -337,10 +337,10 @@ export const { createApp, createPlugin } = framework;
 import { createApp, createPlugin } from 'my-framework';
 
 const dashboardPlugin = createPlugin('dashboard', {
-  defaultConfig: { refreshInterval: 5000 },
+  config: { refreshInterval: 5000 },
   api: (ctx) => ({
     refresh: async () => {
-      // ctx.global typed as Config, ctx.config typed from defaultConfig
+      // ctx.global typed as Config, ctx.config typed from config
       console.log(`Refreshing ${ctx.global.appName} dashboard...`);
     },
   }),
@@ -350,7 +350,7 @@ const app = await createApp({
   plugins: [dashboardPlugin],
   appName: 'My Dashboard',    // typed as string (from Config)
   debug: true,                // typed as boolean (from Config)
-  dashboard: {                // typed from dashboardPlugin's defaultConfig
+  dashboard: {                // typed from dashboardPlugin's config
     refreshInterval: 1000,
   },
 });

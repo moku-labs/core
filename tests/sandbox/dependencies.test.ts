@@ -14,7 +14,7 @@ describe("ctx.require returns typed API (SAND-05)", () => {
     let capturedRouterApi: { resolve: (path: string) => string } | undefined;
 
     const router = cc.createPlugin("router", {
-      defaultConfig: { basePath: "/" },
+      config: { basePath: "/" },
       api: () => ({
         resolve: (path: string) => path
       })
@@ -414,7 +414,7 @@ describe("multiple plugin dependencies", () => {
     });
 
     const router = cc.createPlugin("router", {
-      defaultConfig: { basePath: "/" },
+      config: { basePath: "/" },
       createState: () => ({ currentPath: "/" }),
       api: ctx => ({
         navigate: (path: string) => {
@@ -426,7 +426,7 @@ describe("multiple plugin dependencies", () => {
 
     const auth = cc.createPlugin("auth", {
       depends: [router] as const,
-      defaultConfig: { loginPath: "/login" },
+      config: { loginPath: "/login" },
       createState: () => ({ user: undefined as string | undefined }),
       api: ctx => ({
         login: (userId: string) => {

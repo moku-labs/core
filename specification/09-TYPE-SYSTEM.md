@@ -66,7 +66,7 @@ type IsEmptyConfig<C> =
   [keyof C] extends [never] ? true :
   false;
 
-/** Does this plugin have defaultConfig? */
+/** Does this plugin have config? */
 type HasDefaults<P> = P extends { _hasDefaults: true } ? true : false;
 
 /** Extract API by plugin name from a plugin union */
@@ -218,7 +218,7 @@ const { createPlugin, createCore } = coreConfig;
 
 // Step 2: Framework plugins
 const routerPlugin = createPlugin('router', {
-  defaultConfig: { basePath: '/' },
+  config: { basePath: '/' },
   createState: () => ({ currentPath: '/' }),
   api: (ctx) => ({
     navigate: (path: string) => { ctx.state.currentPath = path; },

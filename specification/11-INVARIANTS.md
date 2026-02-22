@@ -36,7 +36,7 @@ This is **validation only.** It does not change plugin order. It does not comput
 
 ### 1.3 Config Completeness
 
-If a plugin requires config (no `defaultConfig`, non-void `C`), TypeScript rejects `createApp` without it. At runtime, the kernel also validates: if required config is missing, throw.
+If a plugin requires config (no `config`, non-void `C`), TypeScript rejects `createApp` without it. At runtime, the kernel also validates: if required config is missing, throw.
 
 ### 1.4 Lifecycle Order
 
@@ -178,12 +178,12 @@ One plugin that does routing, auth, data fetching, and rendering. Split it. Each
 
 ```typescript
 // BAD: deep nested config with merge ambiguity
-defaultConfig: {
+config: {
   database: { host: 'localhost', port: 5432, pool: { min: 2, max: 10 } }
 }
 
 // GOOD: flat config, or document that nested objects replace entirely
-defaultConfig: {
+config: {
   dbHost: 'localhost',
   dbPort: 5432,
   dbPoolMin: 2,

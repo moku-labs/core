@@ -118,7 +118,7 @@ type PluginSpec<
   // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability
   Deps extends ReadonlyArray<PluginInstance<string, any, any, any, any>>
 > = {
-  defaultConfig?: C;
+  config?: C;
   depends?: Deps;
   // biome-ignore lint/suspicious/noExplicitAny: Sub-plugins use widened types for assignability
   plugins?: Array<PluginInstance<string, any, any, any, any>>;

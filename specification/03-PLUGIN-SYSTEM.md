@@ -12,7 +12,7 @@ The plugin spec is a plain object that describes a plugin's behavior. All fields
 ```typescript
 {
   /** Complete default config. Presence makes config OPTIONAL for consumer. */
-  defaultConfig?: C,
+  config?: C,
 
   /** Instance-based dependencies. Validated at startup (not a topological sort). */
   depends?: readonly PluginInstance[],
@@ -44,7 +44,7 @@ The plugin spec is a plain object that describes a plugin's behavior. All fields
 }
 ```
 
-**Type inference:** `C` is inferred from `defaultConfig`, `S` from `createState` return value, `A` from `api` return value. The framework's `Config` and `Events` types flow in from `createCoreConfig` via closures. No manual annotation needed.
+**Type inference:** `C` is inferred from `config`, `S` from `createState` return value, `A` from `api` return value. The framework's `Config` and `Events` types flow in from `createCoreConfig` via closures. No manual annotation needed.
 
 **MergedEvents:** The intersection of global `Events` (from `createCoreConfig`) + any `PluginEvents` declared via the `events` register callback on this plugin + events from plugins in `depends`. This determines what event names are typed in `hooks` and `ctx.emit`. See [14-EVENT-REGISTRATION](./14-EVENT-REGISTRATION.md) for the register callback pattern.
 
@@ -59,7 +59,7 @@ function createPlugin(
 ): PluginInstance;
 ```
 
-**Zero generics.** All types are inferred from the spec object -- config from `defaultConfig`, state from `createState`, API from `api`, and events from the `events` register callback. Config and Events flow in from the `createCoreConfig` closure.
+**Zero generics.** All types are inferred from the spec object -- config from `config`, state from `createState`, API from `api`, and events from the `events` register callback. Config and Events flow in from the `createCoreConfig` closure.
 
 ### Example 1: Zero Events (Most Common)
 
@@ -68,7 +68,7 @@ function createPlugin(
 import { createPlugin } from '../../config';
 
 export const routerPlugin = createPlugin('router', {
-  defaultConfig: {
+  config: {
     basePath: '/',
     notFoundRedirect: '/404',
   },
@@ -101,7 +101,7 @@ export const routerPlugin = createPlugin('router', {
 ```
 
 TypeScript infers:
-- Config type from `defaultConfig`: `{ basePath: string; notFoundRedirect: string }`
+- Config type from `config`: `{ basePath: string; notFoundRedirect: string }`
 - State type from `createState` return: `{ currentPath: string; history: string[] }`
 - API type from `api` return: `{ navigate(path: string): void; current(): string; back(): void }`
 
@@ -116,7 +116,7 @@ export const rendererPlugin = createPlugin('renderer', {
     'renderer:render': register<{ path: string; html: string }>('Triggered after render'),
     'renderer:error':  register<{ path: string; error: Error }>('Triggered on render error'),
   }),
-  defaultConfig: {
+  config: {
     template: 'default',
   },
   api: (ctx) => ({
@@ -148,7 +148,7 @@ import { rendererPlugin } from '../renderer';
 
 export const seoPlugin = createPlugin('seo', {
   depends: [routerPlugin, rendererPlugin],
-  defaultConfig: {
+  config: {
     defaultTitle: 'Untitled',
   },
   api: (ctx) => ({

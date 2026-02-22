@@ -102,7 +102,7 @@ function resolvePluginConfigs(
   const resolvedConfigs = new Map<string, Readonly<Record<string, unknown>>>();
   for (const plugin of flatPlugins) {
     const merged = Object.freeze({
-      ...(plugin.spec.defaultConfig as Record<string, unknown> | undefined),
+      ...(plugin.spec.config as Record<string, unknown> | undefined),
       ...asRecord(frameworkPluginConfigs[plugin.name]),
       ...asRecord(consumerPluginConfigs[plugin.name])
     });

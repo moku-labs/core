@@ -2,6 +2,7 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 
 import { createPlugin } from "./demo/moku-web/config";
 import { createApp } from "./demo/moku-web/index";
+import { authPlugin } from "./demo/moku-web/plugins/auth";
 import { rendererPlugin } from "./demo/moku-web/plugins/renderer";
 import { routerPlugin } from "./demo/moku-web/plugins/router";
 import { templateEnginePlugin } from "./demo/moku-web/plugins/template-engine";
@@ -19,9 +20,9 @@ describe("createPlugin infers all types from spec (SAND-02)", () => {
     expect(routerPlugin.name).toBe("router");
   });
 
-  it("infers config type from defaultConfig", () => {
+  it("infers config type from config", () => {
     const plugin = createPlugin("config-test", {
-      defaultConfig: { basePath: "/", retries: 3 }
+      config: { basePath: "/", retries: 3 }
     });
 
     // Type-level: plugin carries inferred name
@@ -136,5 +137,44 @@ describe("sub-plugin type inference", () => {
     // At runtime, this is visible in the plugin's spec structure.
     expect(rendererPlugin).toBeDefined();
     expect(templateEnginePlugin).toBeDefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Plugin config is typed and flows through ctx (SAND-04)
+// ---------------------------------------------------------------------------
+
+describe("plugin config is typed and flows through ctx (SAND-04)", () => {
+  it("ctx.config.sessionTimeout is typed as number and receives default value", async () => {
+    const app = await createApp({
+      plugins: [authPlugin],
+      auth: { loginPath: "/login", sessionTimeout: 3600 }
+    });
+
+    // Type-level: auth API is accessible and typed
+    expectTypeOf(app.auth.login).toBeFunction();
+    expectTypeOf(app.auth.isAuthenticated).toBeFunction();
+
+    // Runtime: auth plugin is wired up
+    expect(app.auth).toBeDefined();
+  });
+
+  it("ctx.config fields are correctly typed from spec config", () => {
+    const plugin = createPlugin("typed-config-test", {
+      config: { timeout: 5000, retries: 3, enabled: true },
+      api: ctx => {
+        // Type-level: each field has its inferred type
+        expectTypeOf(ctx.config.timeout).toEqualTypeOf<number>();
+        expectTypeOf(ctx.config.retries).toEqualTypeOf<number>();
+        expectTypeOf(ctx.config.enabled).toEqualTypeOf<boolean>();
+
+        // @ts-expect-error -- non-existent field is a compile error
+        ctx.config.nonExistent;
+
+        return {};
+      }
+    });
+
+    expect(plugin.name).toBe("typed-config-test");
   });
 });

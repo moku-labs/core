@@ -195,7 +195,7 @@ describe("lifecycle execution order", () => {
     });
 
     const plugin = cc.createPlugin("probe", {
-      defaultConfig: { debug: true },
+      config: { debug: true },
       createState: ctx => {
         capturedCtx = { ...ctx };
 
@@ -332,7 +332,7 @@ describe("config resolution", () => {
     });
 
     const router = cc.createPlugin("router", {
-      defaultConfig: { basePath: "/", trailingSlash: false },
+      config: { basePath: "/", trailingSlash: false },
       onInit: ctx => {
         capturedConfig = { ...ctx.config };
       }
@@ -355,7 +355,7 @@ describe("config resolution", () => {
     });
 
     const probe = cc.createPlugin("probe", {
-      defaultConfig: { debug: true },
+      config: { debug: true },
       onInit: ctx => {
         globalFrozen = Object.isFrozen(ctx.global);
         configFrozen = Object.isFrozen(ctx.config);

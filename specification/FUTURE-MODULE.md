@@ -15,7 +15,7 @@ Modules solve the problem of distributing a set of related plugins as a single u
 import { createModule, createPlugin } from './config'; // From framework's createCoreConfig
 
 const cachePlugin = createPlugin('cache', {
-  defaultConfig: { ttl: 60_000 },
+  config: { ttl: 60_000 },
   api: (ctx) => ({
     get: (key: string) => null,
     set: (key: string, value: unknown) => {},
