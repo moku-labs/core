@@ -135,16 +135,71 @@ type PluginExecutionContext<
   PluginConfig,
   PluginState
 > = {
+  /**
+   * Frozen app-wide config from `createCoreConfig`. Shared by all plugins.
+   * @example
+   * ```ts
+   * const siteUrl = ctx.global.siteUrl;
+   * ```
+   */
   readonly global: Readonly<GlobalConfig>;
+  /**
+   * Frozen plugin-specific config. Defaults from the plugin spec, shallow-merged
+   * with consumer overrides.
+   * @example
+   * ```ts
+   * const base = ctx.config.basePath; // from plugin defaults or consumer override
+   * ```
+   */
   readonly config: Readonly<PluginConfig>;
+  /**
+   * Mutable plugin state created by `createState`. The only mutable store in the system.
+   * @example
+   * ```ts
+   * ctx.state.count += 1;
+   * ctx.state.cache.set(key, value);
+   * ```
+   */
   state: PluginState;
+  /**
+   * Dispatch a typed event. Only known event names are accepted (no escape hatch).
+   * @example
+   * ```ts
+   * ctx.emit("auth:login", { userId: "123" });
+   * ```
+   */
   emit: EmitFunction<AllEvents>;
+  /**
+   * Get a dependency plugin's API, or `undefined` if not registered.
+   * Accepts only plugin instance references (not strings).
+   * @example
+   * ```ts
+   * const authApi = ctx.getPlugin(authPlugin);
+   * if (authApi) authApi.logout();
+   * ```
+   */
   getPlugin: <PluginCandidate extends PluginLike>(
     plugin: PluginCandidate
   ) => ExtractPluginApi<PluginCandidate> | undefined;
+  /**
+   * Get a dependency plugin's API. Throws if the plugin is not registered.
+   * Accepts only plugin instance references (not strings).
+   * @example
+   * ```ts
+   * const http = ctx.require(httpPlugin);
+   * http.use(authMiddleware);
+   * ```
+   */
   require: <PluginCandidate extends PluginLike>(
     plugin: PluginCandidate
   ) => ExtractPluginApi<PluginCandidate>;
+  /**
+   * Check if a plugin is registered by name. String-based (boolean check only).
+   * @example
+   * ```ts
+   * if (ctx.has("analytics")) { ... }
+   * ```
+   */
   has: (name: string) => boolean;
 };
 
