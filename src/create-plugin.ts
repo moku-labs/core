@@ -358,7 +358,7 @@ type CreatePluginSpec<
   GlobalConfig extends FrameworkConfig,
   GlobalEventMap extends FrameworkEventMap,
   PluginEventMap extends Record<string, unknown>,
-  PluginConfig,
+  PluginConfig extends Record<string, unknown>,
   PluginState,
   PluginApi extends Record<string, unknown>,
   DependencyPlugins extends DependencyPluginTuple
@@ -534,7 +534,7 @@ type BoundCreatePluginFunction<
   // Per-plugin events use the register callback: events: register => ({ ... })
   <
     const PluginName extends string = string,
-    PluginConfig = Record<string, never>,
+    PluginConfig extends Record<string, unknown> = Record<string, never>,
     PluginState = Record<string, never>,
     PluginApi extends Record<string, unknown> = Record<string, never>,
     DependencyPlugins extends DependencyPluginTuple = readonly [],
