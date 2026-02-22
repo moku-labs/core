@@ -212,13 +212,55 @@ type CreatePluginSpec<
   events?: (register: RegisterFunction) => {
     [EventName in keyof PluginEventMap]: EventDescriptor<PluginEventMap[EventName]>;
   };
+  /**
+   * Default config values for this plugin. Consumers can override via `pluginName: { ... }`.
+   * Shallow-merged at startup, then frozen.
+   * @example
+   * ```ts
+   * config: { basePath: "/", trailing: false }
+   * ```
+   */
   config?: PluginConfig;
+  /**
+   * Plugins this plugin depends on. Dependency APIs are available via `ctx.require()`.
+   * Dependencies must appear earlier in the plugins array (no topological sort).
+   * @example
+   * ```ts
+   * depends: [authPlugin, httpPlugin] as const
+   * ```
+   */
   depends?: DependencyPlugins;
+  /**
+   * Sub-plugins bundled with this plugin. Flattened depth-first during startup.
+   * @example
+   * ```ts
+   * plugins: [loggerPlugin, metricsPlugin]
+   * ```
+   */
   plugins?: PluginLike[];
+  /**
+   * Factory for mutable plugin state. Called once at startup with a minimal context
+   * (global config + plugin config). The returned object is the only mutable store.
+   * @example
+   * ```ts
+   * createState: (ctx) => ({ count: 0, cache: new Map() })
+   * ```
+   */
   createState?: (context: {
     readonly global: Readonly<GlobalConfig>;
     readonly config: Readonly<PluginConfig>;
   }) => PluginState;
+  /**
+   * Public API factory. Receives full plugin context; returns the API object
+   * other plugins access via `ctx.require(thisPlugin)`.
+   * @example
+   * ```ts
+   * api: (ctx) => ({
+   *   navigate: (path: string) => { ctx.state.currentPath = path; },
+   *   getCurrentPath: () => ctx.state.currentPath,
+   * })
+   * ```
+   */
   api?: (
     context: PluginExecutionContext<
       GlobalConfig,
@@ -227,6 +269,17 @@ type CreatePluginSpec<
       PluginState
     >
   ) => PluginApi;
+  /**
+   * Called after all plugins are registered and APIs are built. Runs in forward
+   * plugin order, sequentially awaited. Use for setup that depends on other plugins.
+   * @example
+   * ```ts
+   * onInit: (ctx) => {
+   *   const http = ctx.require(httpPlugin);
+   *   http.use(authMiddleware);
+   * }
+   * ```
+   */
   onInit?: (
     context: PluginExecutionContext<
       GlobalConfig,
@@ -235,6 +288,16 @@ type CreatePluginSpec<
       PluginState
     >
   ) => void | Promise<void>;
+  /**
+   * Called when the app starts. Runs in forward plugin order, sequentially awaited.
+   * Use for runtime startup (open connections, start listeners).
+   * @example
+   * ```ts
+   * onStart: async (ctx) => {
+   *   await ctx.state.db.connect(ctx.config.connectionString);
+   * }
+   * ```
+   */
   onStart?: (
     context: PluginExecutionContext<
       GlobalConfig,
@@ -243,7 +306,31 @@ type CreatePluginSpec<
       PluginState
     >
   ) => void | Promise<void>;
+  /**
+   * Called when the app stops. Runs in **reverse** plugin order, sequentially awaited.
+   * Use for teardown (close connections, flush buffers). Receives only global config.
+   * @example
+   * ```ts
+   * onStop: async (ctx) => {
+   *   await db.disconnect();
+   * }
+   * ```
+   */
   onStop?: (context: { readonly global: Readonly<GlobalConfig> }) => void | Promise<void>;
+  /**
+   * Event subscription factory. Receives full plugin context; returns a map of
+   * event handlers. Same closure pattern as `api`. Handlers can access `ctx.state`,
+   * `ctx.emit`, `ctx.require`, etc.
+   * @example
+   * ```ts
+   * hooks: (ctx) => ({
+   *   "auth:login": ({ userId }) => {
+   *     ctx.state.lastLogin = userId;
+   *     ctx.emit("page:render", { path: "/dashboard", html: "<div>Welcome</div>" });
+   *   },
+   * })
+   * ```
+   */
   hooks?: (
     context: PluginExecutionContext<
       GlobalConfig,
