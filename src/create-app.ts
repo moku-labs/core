@@ -16,11 +16,7 @@
 //   Step 11: Build and freeze app (start/stop/emit/require/getPlugin/has)
 // =============================================================================
 
-import type { PluginInstance } from "./types";
-
-/** Widened PluginInstance type for generic constraints. */
-// biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint on PluginInstance arrays
-type AnyPluginInstance = PluginInstance<string, any, any, any, any>;
+import type { AnyPluginInstance } from "./type-utilities";
 
 /** Parameters for the kernel function. */
 interface KernelParameters {

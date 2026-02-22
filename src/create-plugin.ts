@@ -1,31 +1,106 @@
-import type { EmitFunction, PluginInstance, UnionToIntersection } from "./types";
+// =============================================================================
+// moku_core v3 — Plugin Author Type Definitions
+// =============================================================================
+// Types for the createPlugin API surface. Plugin authors interact with these
+// types through inference — they never import them directly.
+//
+// Sections:
+//   §1 Plugin Structural Types    — PluginLike, DependencyPluginTuple
+//      Variance-safe shapes for generic constraints.
+//   §2 Plugin Type Extraction     — ExtractPluginApi, ExtractPluginEvents
+//      Pull API/events phantom types from a plugin-like value.
+//   §3 Event Merging              — DependencyEvents, MergedPluginEvents
+//      Combine global + own + dependency event maps into one surface.
+//   §4 Plugin Context             — PluginExecutionContext
+//      The ctx object for api, hooks, onInit, onStart.
+//   §5 Event Registration         — EventDescriptor, RegisterFunction
+//      The register<T>() callback for typed event declarations.
+//   §6 Plugin Spec                — CreatePluginSpec
+//      Full spec object shape passed to createPlugin.
+//   §7 Plugin Factory             — BoundCreatePluginFunction
+//      Overloaded createPlugin signature (0 or 1 explicit generic).
+//   §8 Runtime Types              — LifecycleMethodName, RuntimePluginSpec
+//      Minimal runtime shapes for validation.
+//   §9 Runtime Assertions         — isRecord, assertValid*
+//      Validation functions called inside createPlugin.
+//   §10 Plugin Factory            — createPluginFactory
+//       Creates a bound createPlugin function for a framework.
+//
+// Types:
+//   PluginLike               Structural shape matching any PluginInstance. Avoids
+//                             variance issues that PluginInstance<string,any,...> has.
+//   DependencyPluginTuple    readonly PluginLike[] — the depends array constraint.
+//   ExtractPluginApi<P>      Pulls the API phantom type from a PluginLike value.
+//                             Used by ctx.require() and ctx.getPlugin() return types.
+//   ExtractPluginEvents<P>   Pulls the events phantom type from a PluginLike value.
+//                             Falls back to {} (identity) when no events declared.
+//   DependencyEvents<Deps>   Intersects all events from a depends tuple into one map.
+//                             [authPlugin, routerPlugin] → AuthEvents & RouterEvents.
+//   MergedPluginEvents       GlobalEvents & PluginEvents & DependencyEvents — the
+//                             full event surface a plugin can emit/listen to.
+//   PluginExecutionContext    The ctx object. Provides global, config, state, emit,
+//                             require, getPlugin, has. Same shape for api/hooks/lifecycle.
+//   EventDescriptor<T>       Returned by register<T>(). Carries payload type as phantom.
+//   RegisterFunction         <T>(description?) => EventDescriptor<T>. Passed to events().
+//   CreatePluginSpec         The spec object shape with all optional fields: events,
+//                             config, depends, plugins, createState, api, onInit,
+//                             onStart, onStop, hooks. 7 generic parameters, all inferred.
+//   BoundCreatePluginFunction  Overloaded createPlugin. Overload 1: zero explicit generics
+//                             (all inferred). Overload 2: one explicit generic (PluginEvents).
+//   LifecycleMethodName      "onInit" | "onStart" | "onStop" — for runtime validation.
+//   RuntimePluginSpec        Minimal runtime shape for assertion functions.
+//
+// Usage:
+//
+//   Simple plugin — state + API, no events, no deps:
+//
+//     const logger = createPlugin("logger", {
+//       createState: () => ({ entries: [] as string[] }),
+//       api: ctx => ({
+//         log: (msg: string) => { ctx.state.entries.push(msg); },
+//       }),
+//     });
+//
+//   Plugin with config + deps — hooks react to dependency events:
+//
+//     const dashboard = createPlugin("dashboard", {
+//       config: { refreshInterval: 5000 },
+//       depends: [authPlugin] as const,
+//       createState: () => ({ lastLogin: "" }),
+//       hooks: ctx => ({
+//         "auth:login": ({ userId }) => { ctx.state.lastLogin = userId; },
+//       }),
+//       api: ctx => ({ getLastLogin: () => ctx.state.lastLogin }),
+//     });
+//
+//   Plugin with custom events — other plugins listen via depends:
+//
+//     const router = createPlugin("router", {
+//       events: register => ({
+//         "router:navigate": register<{ from: string; to: string }>("Route changed"),
+//       }),
+//       createState: () => ({ currentPath: "/" }),
+//       api: ctx => ({
+//         navigate: (path: string) => {
+//           const from = ctx.state.currentPath;
+//           ctx.state.currentPath = path;
+//           ctx.emit("router:navigate", { from, to: path });
+//         },
+//       }),
+//     });
+// =============================================================================
 
-/**
- * Framework configuration object captured by `createCoreConfig`.
- * @example
- * ```ts
- * type SiteConfig = FrameworkConfig;
- * ```
- */
-type FrameworkConfig = Record<string, unknown>;
+import type {
+  EmptyPluginEventMap,
+  FrameworkConfig,
+  FrameworkEventMap,
+  UnionToIntersection
+} from "./type-utilities";
+import type { EmitFunction, PluginInstance } from "./types";
 
-/**
- * Framework event map captured by `createCoreConfig`.
- * @example
- * ```ts
- * type SiteEvents = FrameworkEventMap;
- * ```
- */
-type FrameworkEventMap = Record<string, unknown>;
-
-/**
- * Empty event map used as the default when a plugin declares no custom events.
- * @example
- * ```ts
- * type NoCustomEvents = EmptyPluginEventMap;
- * ```
- */
-type EmptyPluginEventMap = Record<never, never>;
+// =============================================================================
+// Section 1: Plugin Structural Types
+// =============================================================================
 
 /**
  * Structural plugin shape used for generic constraints without variance issues.
@@ -53,6 +128,10 @@ type PluginLike = {
  * ```
  */
 type DependencyPluginTuple = readonly PluginLike[];
+
+// =============================================================================
+// Section 2: Plugin Type Extraction
+// =============================================================================
 
 /**
  * Extracts API type from a plugin-like value.
@@ -86,6 +165,10 @@ type ExtractPluginEvents<PluginCandidate> = PluginCandidate extends {
     : EmptyPluginEventMap
   : EmptyPluginEventMap;
 
+// =============================================================================
+// Section 3: Event Merging
+// =============================================================================
+
 /**
  * Event map contributed by all dependency plugins.
  * @example
@@ -110,6 +193,10 @@ type MergedPluginEvents<
   PluginEventMap extends Record<string, unknown>,
   DependencyPlugins extends DependencyPluginTuple
 > = GlobalEventMap & PluginEventMap & DependencyEvents<DependencyPlugins>;
+
+// =============================================================================
+// Section 4: Plugin Context
+// =============================================================================
 
 /**
  * Runtime context for `api`, `onInit`, and `onStart`.
@@ -203,6 +290,10 @@ type PluginExecutionContext<
   has: (name: string) => boolean;
 };
 
+// =============================================================================
+// Section 5: Event Registration
+// =============================================================================
+
 /**
  * Descriptor returned by register(). Carries the payload type.
  * and an optional description string for runtime event catalogs.
@@ -219,6 +310,10 @@ type EventDescriptor<PayloadType = unknown> = {
  * that carries both the payload type and description.
  */
 type RegisterFunction = <PayloadType>(description?: string) => EventDescriptor<PayloadType>;
+
+// =============================================================================
+// Section 6: Plugin Spec
+// =============================================================================
 
 /**
  * Specification object passed to `createPlugin`.
@@ -401,6 +496,10 @@ type CreatePluginSpec<
   };
 };
 
+// =============================================================================
+// Section 7: Plugin Factory
+// =============================================================================
+
 /**
  * Bound createPlugin function type, parameterized by the framework's Config and Events.
  *
@@ -464,6 +563,10 @@ type BoundCreatePluginFunction<
   ): PluginInstance<string, unknown, unknown, any, PluginEventMap>;
 };
 
+// =============================================================================
+// Section 8: Runtime Types
+// =============================================================================
+
 /**
  * Valid lifecycle method names accepted in plugin specs.
  * @example
@@ -486,6 +589,10 @@ type RuntimePluginSpec = Record<string, unknown> & {
   readonly onStop?: unknown;
   readonly hooks?: unknown;
 };
+
+// =============================================================================
+// Section 9: Runtime Assertions
+// =============================================================================
 
 /**
  * Checks whether a value is a non-null object record.
@@ -596,6 +703,10 @@ function assertValidHooks(frameworkId: string, pluginName: string, hooks: unknow
     );
   }
 }
+
+// =============================================================================
+// Section 10: Plugin Factory
+// =============================================================================
 
 /**
  * Creates a bound `createPlugin` function that captures framework generics.

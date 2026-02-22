@@ -15,11 +15,8 @@
 import { kernel } from "./create-app";
 import { type BoundCreatePluginFunction, createPluginFactory } from "./create-plugin";
 import { flattenPlugins, validatePlugins } from "./flatten";
-import type { App, CreateAppOptions, PluginInstance } from "./types";
-
-/** Widened PluginInstance type for generic constraints on arrays. */
-// biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint on PluginInstance arrays
-type AnyPluginInstance = PluginInstance<string, any, any, any, any>;
+import type { AnyPluginInstance } from "./type-utilities";
+import type { App, CreateAppOptions } from "./types";
 
 /**
  * Return type of createCoreConfig. Named type required for isolatedDeclarations.

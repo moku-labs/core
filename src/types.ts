@@ -1,17 +1,19 @@
 // =============================================================================
-// moku_core v3 - Internal Type Definitions
+// moku_core v3 - Kernel Type Definitions
 // =============================================================================
-// These types are internal to the implementation. They are NOT exported from
-// the package entry point. Consumer types flow through inference, not import.
+// Types for the kernel runtime contract. NOT exported from the package entry
+// point. Consumer types flow through inference, not import.
 //
 // Sections:
 //   1. Context Tiers (MinimalContext, PluginContext, TeardownContext)
 //   2. Emit Function Types
 //   3. Plugin Lookup Types (GetPluginFunction, RequireFunction, HasFunction)
 //   4. Plugin Types (PluginSpec, PluginInstance)
-//   5. Utility / Extraction Types
-//   6. Aggregate Types (BuildPluginApis)
+//   5. Extraction Types (ExtractApi, ExtractEvents, ExtractName, ExtractConfig, DepsEvents)
+//   6. Aggregate Types (BuildPluginApis, App, CreateAppOptions)
 // =============================================================================
+
+import type { IsLiteralString, UnionToIntersection } from "./type-utilities";
 
 // =============================================================================
 // Section 1: Context Tiers
@@ -214,12 +216,6 @@ type ExtractName<P> =
     ? N
     : never;
 
-/** Convert a union to an intersection via distributive conditional + contra-variance. */
-// biome-ignore lint/suspicious/noExplicitAny: Required for union-to-intersection inference trick
-type UnionToIntersection<U> = (U extends any ? (k: U) => void : never) extends (k: infer I) => void
-  ? I
-  : never;
-
 /** Intersection of all PluginEvents from a depends tuple. */
 type DepsEvents<
   // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability
@@ -230,14 +226,6 @@ type DepsEvents<
 // =============================================================================
 // Section 6: Aggregate Types
 // =============================================================================
-
-/**
- * Detect if a string type is a literal (e.g. "router") vs the general `string` type.
- * Used by BuildPluginApis to exclude plugins created via overload 2 (which have
- * name type `string` instead of a literal) from polluting the mapped type
- * with a string index signature.
- */
-type IsLiteralString<S extends string> = string extends S ? false : true;
 
 /**
  * Map a plugin tuple to `{ [Name]: Api }` for the app surface.
@@ -335,7 +323,6 @@ export type {
   ExtractEvents,
   ExtractName,
   ExtractConfig,
-  UnionToIntersection,
   DepsEvents,
   // Aggregate types
   BuildPluginApis,

@@ -9,11 +9,7 @@
 // createCore (create-core-config.ts) during app initialization.
 // =============================================================================
 
-import type { PluginInstance } from "./types";
-
-/** Widened PluginInstance type for generic constraints. */
-// biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint on PluginInstance arrays
-type AnyPluginInstance = PluginInstance<string, any, any, any, any>;
+import type { AnyPluginInstance } from "./type-utilities";
 
 /** Reserved app method names that cannot be used as plugin names. */
 const RESERVED_NAMES = new Set(["start", "stop", "emit", "getPlugin", "require", "has"]);
