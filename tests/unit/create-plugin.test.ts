@@ -72,6 +72,15 @@ describe("createPlugin - spec validation", () => {
     // eslint-disable-next-line unicorn/no-null -- testing runtime null rejection
     expect(() => createPlugin("bad-spec", null)).toThrow(TypeError);
   });
+
+  it("throws on array spec", () => {
+    const { createPlugin } = setup();
+
+    // @ts-expect-error -- testing runtime validation
+    expect(() => createPlugin("bad-spec", [])).toThrow(TypeError);
+    // @ts-expect-error -- testing runtime validation
+    expect(() => createPlugin("bad-spec", [])).toThrow("invalid spec");
+  });
 });
 
 // ---------------------------------------------------------------------------
