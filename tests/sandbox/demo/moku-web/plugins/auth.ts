@@ -46,6 +46,11 @@ export const authPlugin = createPlugin("auth", {
       if (to === "/protected" && !ctx.state.isAuthenticated) {
         ctx.require(routerPlugin).navigate(ctx.config.loginPath);
       }
+    },
+    "page:render": ({ path }) => {
+      if (ctx.state.isAuthenticated) {
+        // Optionally inject user info into rendered pages
+      }
     }
   })
 });
