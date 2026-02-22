@@ -231,7 +231,7 @@ type DepsEvents<
  * Map a plugin tuple to `{ [Name]: Api }` for the app surface.
  * Plugins with empty API (Record<string, never>) are excluded.
  * Plugins with non-literal name type (string) are excluded to prevent
- * index signature pollution from overload 2 of createPlugin.
+ * index signature pollution on the App type.
  */
 type BuildPluginApis<
   // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability

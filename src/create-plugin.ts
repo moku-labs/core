@@ -21,7 +21,7 @@
 //   §6 Plugin Spec                — CreatePluginSpec
 //      Full spec object shape passed to createPlugin.
 //   §7 Plugin Factory             — BoundCreatePluginFunction
-//      Overloaded createPlugin signature (0 or 1 explicit generic).
+//      createPlugin signature — all types inferred from spec.
 //   §8 Runtime Types              — LifecycleMethodName, RuntimePluginSpec
 //      Minimal runtime shapes for validation.
 //   §9 Runtime Assertions         — isRecord, assertValid*
@@ -57,8 +57,8 @@
 //                            config, depends, plugins, createState, api, onInit,
 //                            onStart, onStop, hooks. 7 generic parameters, all inferred.
 //
-//   BoundCreatePluginFunction  Overloaded createPlugin. Overload 1: zero explicit generics
-//                            (all inferred). Overload 2: one explicit generic (PluginEvents).
+//   BoundCreatePluginFunction  Bound createPlugin function. All types inferred from spec —
+//                            no explicit generics needed.
 //
 //   LifecycleMethodName      "onInit" | "onStart" | "onStop" — for runtime validation.
 //   RuntimePluginSpec        Minimal runtime shape for assertion functions.
@@ -518,25 +518,20 @@ type CreatePluginSpec<
 /**
  * Bound createPlugin function type, parameterized by the framework's Config and Events.
  *
- * Two overloads handle the partial inference problem:
- * - Overload 1 (1 type param): `createPlugin<PluginEvents>(name, spec)` -- PluginEvents explicit, rest inferred
- * - Overload 2 (0 or 6 type params): `createPlugin(name, spec)` -- all inferred
- *
- * TypeScript selects overloads by matching number of explicit type arguments.
+ * All type parameters are inferred from the spec object — no explicit generics needed.
+ * Per-plugin events use the register callback pattern instead of explicit type arguments.
  * @example
  * ```ts
  * const { createPlugin } = createCoreConfig<MyConfig, MyEvents>("my-app", { config: defaults });
  * const router = createPlugin("router", { config: { basePath: "/" } });
- * const renderer = createPlugin<RendererEvents>("renderer", { api: ctx => ({ ... }) });
  * ```
  */
 type BoundCreatePluginFunction<
   GlobalConfig extends FrameworkConfig,
   GlobalEventMap extends FrameworkEventMap
 > = {
-  // Overload 1: Zero explicit generics. Everything inferred from spec.
-  // Used as: createPlugin("router", { ... })
-  // Must be first so TypeScript tries it before the less-specific overload.
+  // All type parameters inferred from the spec object.
+  // Per-plugin events use the register callback: events: register => ({ ... })
   <
     const PluginName extends string = string,
     PluginConfig = Record<string, never>,
@@ -556,26 +551,6 @@ type BoundCreatePluginFunction<
       DependencyPlugins
     >
   ): PluginInstance<PluginName, PluginConfig, PluginState, PluginApi, PluginEventMap>;
-
-  // Overload 2: One explicit generic (PluginEvents). Rest inferred from spec.
-  // Used as: createPlugin<RendererEvents>("renderer", { ... })
-  // Falls back to this when overload 1 fails with explicit type arg.
-  // Name type is `string` (not literal) due to TypeScript partial inference
-  // limitation. BuildPluginApis filters out non-literal names to prevent
-  // string index signature pollution on the App type.
-  <PluginEventMap extends Record<string, unknown>>(
-    name: string,
-    spec: CreatePluginSpec<
-      GlobalConfig,
-      GlobalEventMap,
-      PluginEventMap,
-      unknown,
-      unknown,
-      Record<string, unknown>,
-      DependencyPluginTuple
-    >
-    // biome-ignore lint/suspicious/noExplicitAny: Overload 2 erases Api type; any preserves ctx.require() usability
-  ): PluginInstance<string, unknown, unknown, any, PluginEventMap>;
 };
 
 // =============================================================================

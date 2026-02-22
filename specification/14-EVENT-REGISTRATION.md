@@ -30,6 +30,8 @@ This worked, but had problems:
 - Could not carry runtime metadata (descriptions, categories) alongside types
 - Only worked for `createPlugin` -- not reusable for other APIs
 
+**This overload has been removed.** The register callback pattern is now the only way to declare per-plugin events. `createPlugin` accepts zero explicit generics.
+
 ---
 
 ## 2. The Register Callback Pattern
