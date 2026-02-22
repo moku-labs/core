@@ -131,7 +131,7 @@ type PluginSpec<
     context: PluginContext<Config, Events & PluginEvents & DepsEvents<Deps>, C, S>
   ) => void | Promise<void>;
   onStop?: (context: TeardownContext<Config>) => void | Promise<void>;
-  hooks?: {
+  hooks?: (context: PluginContext<Config, Events & PluginEvents & DepsEvents<Deps>, C, S>) => {
     [K in string & keyof (Events & PluginEvents & DepsEvents<Deps>)]?: (
       payload: (Events & PluginEvents & DepsEvents<Deps>)[K]
     ) => void | Promise<void>;

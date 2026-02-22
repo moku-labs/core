@@ -98,12 +98,13 @@ ctx.emit('unknown:event', { anything: true });                         // ERROR 
 
 ## 4. Hooks
 
-Plugins subscribe to events via the `hooks` field on the plugin spec:
+Plugins subscribe to events via the `hooks` field on the plugin spec. Hooks follow the same closure pattern as `api` -- a function receiving full `PluginContext` that returns the handler map:
 
 ```typescript
 const dashboardPlugin = createPlugin('dashboard', {
   depends: [authPlugin],
-  hooks: {
+  createState: () => ({ lastLogin: '' }),
+  hooks: (ctx) => ({
     // Global event -- payload typed from Events
     'page:render': (payload) => {
       console.log(`Rendered ${payload.path}`);  // payload.path is string
@@ -111,15 +112,20 @@ const dashboardPlugin = createPlugin('dashboard', {
     // Dependency event -- payload typed from AuthEvents via depends
     'auth:login': (payload) => {
       console.log(`User ${payload.userId} logged in`);  // payload.userId is string
+      // Full context available: state, emit, require, etc.
+      ctx.state.lastLogin = payload.userId;
+      ctx.emit('page:render', { path: '/dashboard', html: '<div>Welcome</div>' });
     },
-  },
+  }),
 });
 ```
+
+**Context-aware hooks:** The `hooks` function receives the same `PluginContext` as `api`, `onInit`, and `onStart`. Handlers can access `ctx.state`, `ctx.emit`, `ctx.require`, `ctx.getPlugin`, etc. via closure. This enables hooks to mutate plugin state and trigger cross-plugin communication.
 
 **Typed hooks:** Hook handlers receive fully typed payloads for known event names (global Events, own PluginEvents, and dependency events via `depends`). There is no `(payload: unknown)` fallback -- the type system maps each event key directly to its payload type.
 
 ```typescript
-hooks?: {
+hooks?: (ctx: PluginContext) => {
   [K in string & keyof AllEvents]?: (payload: AllEvents[K]) => void | Promise<void>;
 };
 ```
@@ -153,12 +159,12 @@ const authPlugin = createPlugin('auth', {
 const dashboardPlugin = createPlugin('dashboard', {
   depends: [authPlugin] as const,
   // dashboard now sees: Events & AuthPlugin's events
-  hooks: {
+  hooks: (ctx) => ({
     'auth:login': (payload) => {
       // payload typed from auth's PluginEvents via depends
       console.log(`User ${payload.userId} logged in`);  // payload.userId is string
     },
-  },
+  }),
   api: (ctx) => ({
     refresh: () => {
       // dashboard can also EMIT auth events because of depends

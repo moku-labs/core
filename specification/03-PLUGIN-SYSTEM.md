@@ -35,8 +35,8 @@ The plugin spec is a plain object that describes a plugin's behavior. All fields
   /** Teardown. REVERSE order during app.stop(). */
   onStop?: (ctx: { global: Readonly<Config> }) => void | Promise<void>,
 
-  /** Event subscriptions. Only known events accepted; payloads fully typed. */
-  hooks?: {
+  /** Event subscriptions. Receives PluginContext; payloads fully typed. */
+  hooks?: (ctx: PluginContext) => {
     [K in string & keyof MergedEvents]?: (payload: MergedEvents[K]) => void | Promise<void>;
   },
 }
@@ -125,12 +125,12 @@ export const rendererPlugin = createPlugin('renderer', {
       return html;
     },
   }),
-  hooks: {
+  hooks: (ctx) => ({
     // Can listen to global events defined in createCoreConfig
     'page:render': (payload) => {
-      // payload typed from global Events
+      // payload typed from global Events; ctx is full PluginContext
     },
-  },
+  }),
 });
 ```
 
@@ -159,12 +159,13 @@ export const seoPlugin = createPlugin('seo', {
       });
     },
   }),
-  hooks: {
+  hooks: (ctx) => ({
     // Can listen to events from dependencies (RendererEvents)
     'renderer:render': (payload) => {
       // payload typed as { path: string; html: string }
+      // ctx provides full PluginContext: state, emit, require, etc.
     },
-  },
+  }),
 });
 ```
 

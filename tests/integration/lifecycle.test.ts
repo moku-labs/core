@@ -62,11 +62,11 @@ describe("full lifecycle integration", () => {
     });
 
     const logger = cc.createPlugin("logger", {
-      hooks: {
+      hooks: _ctx => ({
         "app:log": (payload: unknown) => {
           order.push(`logger:hook:${JSON.stringify(payload)}`);
         }
-      },
+      }),
       onInit: () => {
         order.push("logger:init");
       },

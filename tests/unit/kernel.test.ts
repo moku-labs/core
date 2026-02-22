@@ -132,11 +132,11 @@ describe("dispatch and hooks", () => {
     const cc = createTestCore();
 
     const plugin = cc.createPlugin("listener", {
-      hooks: {
+      hooks: _ctx => ({
         "test:event": (payload: unknown) => {
           received.push(payload);
         }
-      }
+      })
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [plugin] });
@@ -158,18 +158,18 @@ describe("dispatch and hooks", () => {
     const cc = createTestCore();
 
     const a = cc.createPlugin("a", {
-      hooks: {
+      hooks: _ctx => ({
         "shared:event": () => {
           callOrder.push("a");
         }
-      }
+      })
     });
     const b = cc.createPlugin("b", {
-      hooks: {
+      hooks: _ctx => ({
         "shared:event": () => {
           callOrder.push("b");
         }
-      }
+      })
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [a, b] });
@@ -200,11 +200,11 @@ describe("dispatch and hooks", () => {
     const cc = createTestCore();
 
     const listener = cc.createPlugin("listener", {
-      hooks: {
+      hooks: _ctx => ({
         "setup:done": () => {
           received.push("heard");
         }
-      }
+      })
     });
 
     const emitter = cc.createPlugin("emitter", {
@@ -224,11 +224,11 @@ describe("dispatch and hooks", () => {
     const cc = createTestCore();
 
     const listener = cc.createPlugin("listener", {
-      hooks: {
+      hooks: _ctx => ({
         "api:ready": () => {
           received.push("heard");
         }
-      }
+      })
     });
 
     const emitter = cc.createPlugin("emitter", {

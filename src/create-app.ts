@@ -145,18 +145,22 @@ function createPluginStates(
 }
 
 /**
- * Build event bus: hookMap with async dispatch and fire-and-forget emit.
- * @param flatPlugins - Flattened plugin list.
- * @returns Object with the emit function.
+ * Build event bus: hookMap with async dispatch, fire-and-forget emit, and registerHook.
+ * The hookMap starts empty — hooks are registered separately in Step 8b after
+ * the context factory is created, so that hooks(ctx) receives PluginContext.
+ * @returns Object with emit and registerHook functions.
  * @example
  * ```ts
- * const { emit } = buildEventBus(flatPlugins);
+ * const { emit, registerHook } = buildEventBus();
+ * registerHook("page:render", payload => console.log(payload));
  * emit("page:render", { path: "/", html: "<h1>Home</h1>" });
  * ```
  */
-function buildEventBus(flatPlugins: AnyPluginInstance[]): {
+function buildEventBus(): {
   // biome-ignore lint/suspicious/noExplicitAny: event payloads are dynamically typed
   emit: (eventName: string, payload?: any) => void;
+  // biome-ignore lint/suspicious/noExplicitAny: event payloads are dynamically typed
+  registerHook: (eventName: string, handler: (payload: any) => void | Promise<void>) => void;
 } {
   // biome-ignore lint/suspicious/noExplicitAny: event payloads are dynamically typed
   const hookMap = new Map<string, Array<(payload: any) => void | Promise<void>>>();
@@ -193,22 +197,59 @@ function buildEventBus(flatPlugins: AnyPluginInstance[]): {
     void dispatch(eventName, payload);
   };
 
-  // Register hooks from all plugins
+  /**
+   * Register a single hook handler for an event name.
+   * @param eventName - Name of the event to listen for.
+   * @param handler - Handler function to call when the event is emitted.
+   * @example
+   * ```ts
+   * registerHook("page:render", payload => console.log(payload));
+   * ```
+   */
+  const registerHook = (
+    eventName: string,
+    // biome-ignore lint/suspicious/noExplicitAny: event payloads are dynamically typed
+    handler: (payload: any) => void | Promise<void>
+  ): void => {
+    let list = hookMap.get(eventName);
+    if (!list) {
+      list = [];
+      hookMap.set(eventName, list);
+    }
+    list.push(handler);
+  };
+
+  return { emit, registerHook };
+}
+
+/**
+ * Register hooks from all plugins. Each plugin's `hooks(ctx)` is called
+ * to produce a handler map, then each handler is registered on the event bus.
+ *
+ * Called before APIs and onInit so events emitted during those phases are captured.
+ * @param flatPlugins - Flattened plugin list in registration order.
+ * @param buildPluginContext - Factory that builds PluginContext for a given plugin.
+ * @param registerHook - Function to register a single hook handler on the event bus.
+ * @example
+ * ```ts
+ * registerPluginHooks(flatPlugins, buildPluginContext, registerHook);
+ * ```
+ */
+function registerPluginHooks(
+  flatPlugins: AnyPluginInstance[],
+  // biome-ignore lint/suspicious/noExplicitAny: context factory returns dynamically typed PluginContext
+  buildPluginContext: (plugin: AnyPluginInstance) => any,
+  registerHook: (eventName: string, handler: (payload: unknown) => void | Promise<void>) => void
+): void {
   for (const plugin of flatPlugins) {
     if (plugin.spec.hooks) {
-      for (const [eventName, handler] of Object.entries(plugin.spec.hooks)) {
+      const hookHandlers = plugin.spec.hooks(buildPluginContext(plugin));
+      for (const [eventName, handler] of Object.entries(hookHandlers)) {
         if (!handler) continue;
-        let list = hookMap.get(eventName);
-        if (!list) {
-          list = [];
-          hookMap.set(eventName, list);
-        }
-        list.push(handler as (payload: unknown) => void | Promise<void>);
+        registerHook(eventName, handler as (payload: unknown) => void | Promise<void>);
       }
     }
   }
-
-  return { emit };
 }
 
 /**
@@ -561,10 +602,10 @@ async function kernel(parameters: KernelParameters): Promise<any> {
   // Step 7: Create state (MinimalContext -- global + config only)
   const states = createPluginStates(flatPlugins, globalConfig, resolvedConfigs);
 
-  // Step 8: Build event bus
-  const { emit } = buildEventBus(flatPlugins);
+  // Step 8a: Build event bus (empty -- hooks registered in Step 8b)
+  const { emit, registerHook } = buildEventBus();
 
-  // Step 9: Build APIs (forward order)
+  // Build context factory (needed by hooks and APIs)
   // biome-ignore lint/suspicious/noExplicitAny: API values are plugin-specific
   const apis = new Map<string, any>();
   const buildPluginContext = createContextFactory(
@@ -577,6 +618,10 @@ async function kernel(parameters: KernelParameters): Promise<any> {
     pluginNameSet
   );
 
+  // Step 8b: Register hooks (context-aware)
+  registerPluginHooks(flatPlugins, buildPluginContext, registerHook);
+
+  // Step 9: Build APIs (forward order)
   for (const plugin of flatPlugins) {
     if (plugin.spec.api) {
       apis.set(plugin.name, plugin.spec.api(buildPluginContext(plugin)));

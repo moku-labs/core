@@ -18,9 +18,9 @@ export const seoPlugin = createPlugin("seo", {
     },
     getDefaultTitle: () => ctx.config.defaultTitle
   }),
-  hooks: {
+  hooks: _ctx => ({
     "renderer:complete": _payload => {
       // Listen to RendererEvents from depends chain
     }
-  }
+  })
 });

@@ -40,12 +40,12 @@ export const authPlugin = createPlugin("auth", {
     },
     currentUser: () => ctx.state.currentUser,
     isAuthenticated: () => ctx.state.isAuthenticated
+  }),
+  hooks: ctx => ({
+    "router:navigate": ({ to }) => {
+      if (to === "/protected" && !ctx.state.isAuthenticated) {
+        ctx.require(routerPlugin).navigate(ctx.config.loginPath);
+      }
+    }
   })
-  // hooks: {
-  //   "router:navigate": ({ to }) => {
-  //     if (to === "/protected" && !ctx.state.isAuthenticated) {
-  //       ctx.api.logout();
-  //     }
-  //   },
-  // },
 });

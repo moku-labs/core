@@ -48,9 +48,9 @@ export const sitemapPlugin = createPlugin("sitemap", {
     getEntries: () => ctx.state.entries,
     getEntryCount: () => ctx.state.entries.length
   }),
-  hooks: {
+  hooks: _ctx => ({
     "renderer:complete": _payload => {
       // Listen to renderer events from dependency chain (seo -> renderer)
     }
-  }
+  })
 });

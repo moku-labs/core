@@ -79,7 +79,7 @@ function createPlugin(
     onInit?: (ctx: PluginContext<...>) => void | Promise<void>,
     onStart?: (ctx: PluginContext<...>) => void | Promise<void>,
     onStop?: (ctx: TeardownContext<Config>) => void | Promise<void>,
-    hooks?: Partial<EventHandlers<Events & PluginEvents & DepsEvents>>,
+    hooks?: (ctx: PluginContext<...>) => Partial<EventHandlers<Events & PluginEvents & DepsEvents>>,
   },
 ): PluginInstance<N, C, S, A, PluginEvents> {
   // RATIONALE: All generics (N, C, S, A, PluginEvents) are inferred from the spec object.
@@ -295,10 +295,12 @@ async function createApp(consumerOptions?: {
   }
 
   // =========================================================================
-  // Step 8: Build event bus
+  // Step 8a: Build event bus (empty -- hooks registered in Step 8b)
   // =========================================================================
-  // RATIONALE: Hooks are registered before APIs and onInit run,
-  // so that events emitted during api() or onInit() are captured.
+  // RATIONALE: The event bus infrastructure is created first (hookMap, dispatch,
+  // emit, registerHook). Hooks are NOT registered yet -- that happens in Step 8b
+  // after the context factory is available. This 2-step approach preserves the
+  // invariant that hooks are registered before APIs and onInit run.
   const hookMap = new Map<string, Array<(payload: any) => void | Promise<void>>>();
 
   async function dispatch(eventName: string, payload: any) {
@@ -312,23 +314,20 @@ async function createApp(consumerOptions?: {
     void dispatch(eventName, payload);
   };
 
-  // Register hooks from all plugins
-  for (const plugin of flatPlugins) {
-    if (plugin.spec.hooks) {
-      for (const [eventName, handler] of Object.entries(plugin.spec.hooks)) {
-        if (!handler) continue;
-        const list = hookMap.get(eventName) ?? [];
-        list.push(handler);
-        hookMap.set(eventName, list);
-      }
-    }
+  function registerHook(eventName: string, handler: (payload: any) => void | Promise<void>) {
+    const list = hookMap.get(eventName) ?? [];
+    list.push(handler);
+    hookMap.set(eventName, list);
   }
 
   // =========================================================================
-  // Step 9: Build APIs
+  // Step 8b: Build context factory + Register hooks
   // =========================================================================
-  // RATIONALE: APIs are built after state and hooks so that api() has access
-  // to state and can emit events. Forward order.
+  // RATIONALE: hooks(ctx) follows the same closure pattern as api(ctx).
+  // The context factory must exist before hooks can be called.
+  // hooks(ctx) returns handler functions that capture ctx via closure.
+  // The handlers don't call ctx.require() until an event fires (at runtime),
+  // by which point all APIs are built.
   const apis = new Map<string, any>();
 
   // Helper to build plugin context for a specific plugin
@@ -359,6 +358,22 @@ async function createApp(consumerOptions?: {
     };
   }
 
+  // Register hooks (context-aware)
+  for (const plugin of flatPlugins) {
+    if (plugin.spec.hooks) {
+      const hookHandlers = plugin.spec.hooks(buildPluginContext(plugin));
+      for (const [eventName, handler] of Object.entries(hookHandlers)) {
+        if (!handler) continue;
+        registerHook(eventName, handler);
+      }
+    }
+  }
+
+  // =========================================================================
+  // Step 9: Build APIs
+  // =========================================================================
+  // RATIONALE: APIs are built after state and hooks so that api() has access
+  // to state and can emit events. Forward order.
   for (const plugin of flatPlugins) {
     if (plugin.spec.api) {
       const ctx = buildPluginContext(plugin);
@@ -576,7 +591,9 @@ Consumer main.ts:
     -> validate dependencies (exists + earlier in array)
     -> resolve config (shallow merge, freeze)
     -> create state (MinimalContext)
-    -> register hooks
+    -> build event bus (empty hookMap, emit, registerHook)
+    -> build context factory
+    -> register hooks (hooks(ctx), context-aware)
     -> build APIs (PluginContext)
     -> run onInit (PluginContext, forward, sequential)
     -> freeze and return app

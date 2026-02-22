@@ -13,11 +13,11 @@ describe("global events (from createCoreConfig Events)", () => {
     const received: Array<{ path: string; html: string }> = [];
 
     const listenerPlugin = createPlugin("listener", {
-      hooks: {
+      hooks: _ctx => ({
         "page:render": payload => {
           received.push(payload);
         }
-      }
+      })
     });
 
     const app = await createApp({ plugins: [listenerPlugin] });
@@ -79,11 +79,11 @@ describe("per-plugin events (PluginEvents)", () => {
 
     const listenerPlugin = createPlugin("render-listener", {
       depends: [rendererPlugin] as const,
-      hooks: {
+      hooks: _ctx => ({
         "renderer:complete": payload => {
           received.push(payload);
         }
-      }
+      })
     });
 
     const app = await createApp({ plugins: [listenerPlugin] });
@@ -114,11 +114,11 @@ describe("event merging via depends", () => {
     // When router emits "router:navigate", the hook fires with typed payload.
     const navListenerPlugin = createPlugin("nav-listener", {
       depends: [routerPlugin] as const,
-      hooks: {
+      hooks: _ctx => ({
         "router:navigate": payload => {
           navigations.push(payload);
         }
-      }
+      })
     });
 
     const app = await createApp({ plugins: [navListenerPlugin] });
@@ -150,11 +150,11 @@ describe("event merging via depends", () => {
 
     const pluginB = createPlugin("plugin-b", {
       depends: [pluginA] as const,
-      hooks: {
+      hooks: _ctx => ({
         "pluginA:action": payload => {
           received.push(payload);
         }
-      }
+      })
     });
 
     const cc = createCoreConfig<{ siteName: string }, Record<string, never>>("test", {
@@ -212,12 +212,12 @@ describe("strict hooks typing (no escape hatch)", () => {
     const received: Array<{ path: string; html: string }> = [];
 
     const plugin = createPlugin("typed-hook-check", {
-      hooks: {
+      hooks: _ctx => ({
         "page:render": payload => {
           // payload is typed as { path: string; html: string } -- no cast needed
           received.push(payload);
         }
-      }
+      })
     });
 
     const app = await createApp({ plugins: [plugin] });
@@ -243,12 +243,12 @@ describe("strict hooks typing (no escape hatch)", () => {
 
     const pluginB = createPlugin("typed-dep-hook", {
       depends: [pluginA] as const,
-      hooks: {
+      hooks: _ctx => ({
         "source:action": payload => {
           // payload is typed as { value: number } -- no cast needed
           received.push(payload);
         }
-      }
+      })
     });
 
     const cc = createCoreConfig<{ siteName: string }, Record<string, never>>("test", {
@@ -274,16 +274,41 @@ describe("strict hooks typing (no escape hatch)", () => {
 
     const pluginB = createPlugin("wrong-hook-payload", {
       depends: [pluginA] as const,
-      hooks: {
+      hooks: _ctx => ({
         "source:action": payload => {
           // @ts-expect-error -- payload.value is number, not assignable to string
           expect(payload.value satisfies string).toBeDefined();
         }
-      }
+      })
     });
 
     expect(pluginA.name).toBe("event-source-2");
     expect(pluginB.name).toBe("wrong-hook-payload");
+  });
+
+  it("hooks receive full PluginContext (state, emit, require)", () => {
+    const pluginA = createPlugin("event-source-3", {
+      events: register => ({
+        "source:action": register<{ value: number }>("Source action")
+      }),
+      api: () => ({})
+    });
+
+    const pluginB = createPlugin("context-hook", {
+      depends: [pluginA] as const,
+      createState: () => ({ lastValue: 0 }),
+      hooks: ctx => ({
+        "source:action": payload => {
+          // ctx.state is available and typed
+          ctx.state.lastValue = payload.value;
+          // ctx.emit is available
+          ctx.emit("page:render", { path: "/hook", html: "<div/>" });
+        }
+      })
+    });
+
+    expect(pluginA.name).toBe("event-source-3");
+    expect(pluginB.name).toBe("context-hook");
   });
 });
 

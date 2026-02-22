@@ -17,12 +17,12 @@ export const analyticsPlugin = createPlugin("analytics", {
     },
     getEvents: () => ctx.state.events
   }),
-  hooks: {
+  hooks: _ctx => ({
     "page:render": _payload => {
       // Track page renders
     },
     "router:navigate": _payload => {
       // Track navigations
     }
-  }
+  })
 });

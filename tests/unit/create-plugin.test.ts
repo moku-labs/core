@@ -170,30 +170,47 @@ describe("createPlugin - lifecycle validation", () => {
 // ---------------------------------------------------------------------------
 
 describe("createPlugin - hooks validation", () => {
-  it("accepts valid hooks object", () => {
+  it("accepts valid hooks function", () => {
     const { createPlugin } = setup();
 
     const plugin = createPlugin("valid", {
-      hooks: {
+      hooks: _ctx => ({
         "some:event": () => {}
-      }
+      })
     });
     expect(plugin.name).toBe("valid");
   });
 
-  it("throws on non-object hooks", () => {
+  it("throws on non-function hooks", () => {
     const { createPlugin } = setup();
 
     expect(() =>
       createPlugin("bad", {
         // @ts-expect-error -- testing runtime validation
-        hooks: "not an object"
+        hooks: "not a function"
       })
     ).toThrow(TypeError);
     expect(() =>
       createPlugin("bad", {
         // @ts-expect-error -- testing runtime validation
-        hooks: "not an object"
+        hooks: "not a function"
+      })
+    ).toThrow("invalid hooks");
+  });
+
+  it("throws on non-function hooks (object instead of function)", () => {
+    const { createPlugin } = setup();
+
+    expect(() =>
+      createPlugin("bad", {
+        // @ts-expect-error -- testing runtime validation: object not allowed, must be a function
+        hooks: { "some:event": () => {} }
+      })
+    ).toThrow(TypeError);
+    expect(() =>
+      createPlugin("bad", {
+        // @ts-expect-error -- testing runtime validation: object not allowed, must be a function
+        hooks: { "some:event": () => {} }
       })
     ).toThrow("invalid hooks");
   });
@@ -208,27 +225,6 @@ describe("createPlugin - hooks validation", () => {
         hooks: null
       })
     ).toThrow(TypeError);
-  });
-
-  it("throws on non-function hook handler", () => {
-    const { createPlugin } = setup();
-
-    expect(() =>
-      createPlugin("bad", {
-        hooks: {
-          // @ts-expect-error -- testing runtime validation
-          "some:event": "not a function"
-        }
-      })
-    ).toThrow(TypeError);
-    expect(() =>
-      createPlugin("bad", {
-        hooks: {
-          // @ts-expect-error -- testing runtime validation
-          "some:event": "not a function"
-        }
-      })
-    ).toThrow('invalid hook for "some:event"');
   });
 });
 
@@ -267,7 +263,7 @@ describe("createPlugin - return value", () => {
       onInit: () => {},
       onStart: () => {},
       onStop: () => {},
-      hooks: { "some:event": () => {} }
+      hooks: _ctx => ({ "some:event": () => {} })
     });
 
     expect(plugin.spec.config).toEqual({ x: 1 });

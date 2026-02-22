@@ -244,7 +244,14 @@ type CreatePluginSpec<
     >
   ) => void | Promise<void>;
   onStop?: (context: { readonly global: Readonly<GlobalConfig> }) => void | Promise<void>;
-  hooks?: {
+  hooks?: (
+    context: PluginExecutionContext<
+      GlobalConfig,
+      MergedPluginEvents<GlobalEventMap, PluginEventMap, DependencyPlugins>,
+      PluginConfig,
+      PluginState
+    >
+  ) => {
     [EventName in string &
       keyof MergedPluginEvents<GlobalEventMap, PluginEventMap, DependencyPlugins>]?: (
       payload: MergedPluginEvents<GlobalEventMap, PluginEventMap, DependencyPlugins>[EventName]
@@ -425,13 +432,14 @@ function assertValidLifecycleHandlers(
 }
 
 /**
- * Validates hooks object and each hook handler function.
+ * Validates that hooks is a function (the context-receiving factory).
+ * The return value (handler map) is validated at kernel time when hooks(ctx) is called.
  * @param frameworkId - Framework identifier used in error messages.
  * @param pluginName - Validated plugin name.
- * @param hooks - Candidate hooks object from plugin spec.
+ * @param hooks - Candidate hooks value from plugin spec.
  * @example
  * ```ts
- * assertValidHooks("my-app", "router", { "route:change": () => {} });
+ * assertValidHooks("my-app", "router", ctx => ({ "route:change": () => {} }));
  * ```
  */
 function assertValidHooks(frameworkId: string, pluginName: string, hooks: unknown): void {
@@ -439,20 +447,11 @@ function assertValidHooks(frameworkId: string, pluginName: string, hooks: unknow
     return;
   }
 
-  if (!isRecord(hooks)) {
+  if (typeof hooks !== "function") {
     throw new TypeError(
-      `[${frameworkId}] Plugin "${pluginName}" has invalid hooks: expected an object.\n` +
-        `  Provide an object mapping event names to handler functions.`
+      `[${frameworkId}] Plugin "${pluginName}" has invalid hooks: expected a function.\n` +
+        `  Provide a function like: hooks: ctx => ({ "event:name": payload => { ... } })`
     );
-  }
-
-  for (const [eventName, handler] of Object.entries(hooks)) {
-    if (typeof handler !== "function") {
-      throw new TypeError(
-        `[${frameworkId}] Plugin "${pluginName}" has invalid hook for "${eventName}": expected a function.\n` +
-          `  Provide a function as the hook handler for "${eventName}".`
-      );
-    }
   }
 }
 

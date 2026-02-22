@@ -314,11 +314,11 @@ describe("4-level dependency chain: event propagation through hooks", () => {
           ctx.emit("level1:action", { value });
         }
       }),
-      hooks: {
+      hooks: _ctx => ({
         "level0:action": payload => {
           hookCalls.push(`level1-heard-level0:${payload.value}`);
         }
-      }
+      })
     });
 
     const level2 = cc.createPlugin("level2", {
@@ -332,11 +332,11 @@ describe("4-level dependency chain: event propagation through hooks", () => {
           ctx.emit("level2:action", { value });
         }
       }),
-      hooks: {
+      hooks: _ctx => ({
         "level1:action": payload => {
           hookCalls.push(`level2-heard-level1:${payload.value}`);
         }
-      }
+      })
     });
 
     const level3 = cc.createPlugin("level3", {
@@ -346,11 +346,11 @@ describe("4-level dependency chain: event propagation through hooks", () => {
           ctx.require(level2).act(`from-level3:${value}`);
         }
       }),
-      hooks: {
+      hooks: _ctx => ({
         "level2:action": payload => {
           hookCalls.push(`level3-heard-level2:${payload.value}`);
         }
-      }
+      })
     });
 
     const { createApp } = cc.createCore(cc, {
