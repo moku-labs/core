@@ -622,6 +622,53 @@ describe("getPlugin, require, has", () => {
     // No API mounted -> getPlugin returns undefined
     expect(app.getPlugin(noApi)).toBeUndefined();
   });
+
+  it("ctx.require, ctx.getPlugin, ctx.has work inside plugin lifecycle", async () => {
+    const cc = createTestCore();
+    const results: { api: unknown; optional: unknown; has: boolean; hasMissing: boolean } = {
+      api: undefined,
+      optional: undefined,
+      has: false,
+      hasMissing: false
+    };
+
+    const dep = cc.createPlugin("dep", {
+      api: () => ({ value: 42 })
+    });
+
+    const consumer = cc.createPlugin("consumer", {
+      depends: [dep] as const,
+      onInit: ctx => {
+        results.api = ctx.require(dep);
+        results.optional = ctx.getPlugin(dep);
+        results.has = ctx.has("dep");
+        results.hasMissing = ctx.has("nonexistent");
+      }
+    });
+
+    const { createApp } = cc.createCore(cc, { plugins: [dep, consumer] });
+    await createApp();
+
+    expect(results.api).toEqual({ value: 42 });
+    expect(results.optional).toEqual({ value: 42 });
+    expect(results.has).toBe(true);
+    expect(results.hasMissing).toBe(false);
+  });
+
+  it("ctx.require throws for unregistered plugin inside lifecycle", async () => {
+    const cc = createTestCore();
+
+    const missing = cc.createPlugin("missing", {});
+
+    const consumer = cc.createPlugin("consumer", {
+      onInit: ctx => {
+        ctx.require(missing);
+      }
+    });
+
+    const { createApp } = cc.createCore(cc, { plugins: [consumer] });
+    await expect(createApp()).rejects.toThrow("missing");
+  });
 });
 
 // ---------------------------------------------------------------------------

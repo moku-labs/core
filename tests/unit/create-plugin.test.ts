@@ -175,6 +175,40 @@ describe("createPlugin - lifecycle validation", () => {
 });
 
 // ---------------------------------------------------------------------------
+// createPlugin - events validation
+// ---------------------------------------------------------------------------
+
+describe("createPlugin - events validation", () => {
+  it("accepts valid events function", () => {
+    const { createPlugin } = setup();
+
+    const plugin = createPlugin("valid", {
+      events: register => ({
+        "test:event": register<{ id: string }>("A test event")
+      })
+    });
+    expect(plugin.name).toBe("valid");
+  });
+
+  it("throws on non-function events", () => {
+    const { createPlugin } = setup();
+
+    expect(() =>
+      createPlugin("bad", {
+        // @ts-expect-error -- testing runtime validation
+        events: { "test:event": {} }
+      })
+    ).toThrow(TypeError);
+    expect(() =>
+      createPlugin("bad", {
+        // @ts-expect-error -- testing runtime validation
+        events: { "test:event": {} }
+      })
+    ).toThrow("invalid events");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // createPlugin - hooks validation
 // ---------------------------------------------------------------------------
 

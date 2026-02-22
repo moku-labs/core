@@ -292,33 +292,31 @@ function createContextFactory(
     emit,
     /**
      * Get plugin API by instance. Returns undefined if not found.
-     * @param nameOrInstance - Plugin name string or PluginInstance.
+     * @param instance - The plugin instance to look up.
      * @returns The plugin API or undefined.
      * @example
      * ```ts
      * ctx.getPlugin(routerPlugin);
      * ```
      */
-    getPlugin: (nameOrInstance: string | AnyPluginInstance) => {
-      const name = typeof nameOrInstance === "string" ? nameOrInstance : nameOrInstance.name;
-      return apis.get(name);
+    getPlugin: (instance: AnyPluginInstance) => {
+      return apis.get(instance.name);
     },
     /**
      * Get plugin API by instance or throw if not found.
-     * @param nameOrInstance - Plugin name string or PluginInstance.
+     * @param instance - The plugin instance to require.
      * @returns The plugin API.
      * @example
      * ```ts
      * ctx.require(routerPlugin);
      * ```
      */
-    require: (nameOrInstance: string | AnyPluginInstance) => {
-      const name = typeof nameOrInstance === "string" ? nameOrInstance : nameOrInstance.name;
-      const api = apis.get(name);
+    require: (instance: AnyPluginInstance) => {
+      const api = apis.get(instance.name);
       if (!api) {
         throw new Error(
-          `[${id}] Plugin "${plugin.name}" requires "${name}", but "${name}" is not registered.\n` +
-            `  Add "${name}" to your plugin list.`
+          `[${id}] Plugin "${plugin.name}" requires "${instance.name}", but "${instance.name}" is not registered.\n` +
+            `  Add "${instance.name}" to your plugin list.`
         );
       }
       return api;
@@ -366,20 +364,6 @@ async function executeStop(
   }
 
   if (firstError) throw firstError;
-}
-
-/**
- * Resolve a plugin name from a string or PluginInstance argument.
- * @param nameOrInstance - A string name or PluginInstance object.
- * @returns The plugin name string.
- * @example
- * ```ts
- * resolvePluginName("router") // "router"
- * resolvePluginName(routerPlugin) // "router"
- * ```
- */
-function resolvePluginName(nameOrInstance: string | AnyPluginInstance): string {
-  return typeof nameOrInstance === "string" ? nameOrInstance : nameOrInstance.name;
 }
 
 /**
@@ -494,21 +478,21 @@ function buildApp(
 
     /**
      * Get plugin API by instance. Returns undefined if not found.
-     * @param nameOrInstance - Plugin name string or PluginInstance object.
+     * @param instance - PluginInstance to look up.
      * @returns The plugin API object or undefined.
      * @example
      * ```ts
      * const routerApi = app.getPlugin(routerPlugin);
      * ```
      */
-    getPlugin: (nameOrInstance: string | AnyPluginInstance) => {
+    getPlugin: (instance: AnyPluginInstance) => {
       guardStopped();
-      return apis.get(resolvePluginName(nameOrInstance));
+      return apis.get(instance.name);
     },
 
     /**
      * Get plugin API or throw if not found.
-     * @param nameOrInstance - Plugin name string or PluginInstance object.
+     * @param instance - PluginInstance to require.
      * @returns The plugin API object.
      * @throws {Error} If the plugin is not registered.
      * @example
@@ -516,13 +500,12 @@ function buildApp(
      * const routerApi = app.require(routerPlugin);
      * ```
      */
-    require: (nameOrInstance: string | AnyPluginInstance) => {
+    require: (instance: AnyPluginInstance) => {
       guardStopped();
-      const name = resolvePluginName(nameOrInstance);
-      const api = apis.get(name);
+      const api = apis.get(instance.name);
       if (!api) {
         throw new Error(
-          `[${id}] app.require("${name}") failed: "${name}" is not registered.\n  Check your plugin list.`
+          `[${id}] app.require("${instance.name}") failed: "${instance.name}" is not registered.\n  Check your plugin list.`
         );
       }
       return api;
