@@ -4,7 +4,10 @@
 // Types for the createPlugin API surface. Plugin authors interact with these
 // types through inference — they never import them directly.
 //
-// Sections:
+// -----------------------------------------------------------------------------
+// Sections
+// -----------------------------------------------------------------------------
+//
 //   §1 Plugin Structural Types    — PluginLike, DependencyPluginTuple
 //      Variance-safe shapes for generic constraints.
 //   §2 Plugin Type Extraction     — ExtractPluginApi, ExtractPluginEvents
@@ -26,31 +29,43 @@
 //   §10 Plugin Factory            — createPluginFactory
 //       Creates a bound createPlugin function for a framework.
 //
-// Types:
+// -----------------------------------------------------------------------------
+// Types
+// -----------------------------------------------------------------------------
+//
 //   PluginLike               Structural shape matching any PluginInstance. Avoids
-//                             variance issues that PluginInstance<string,any,...> has.
+//                            variance issues that PluginInstance<string,any,...> has.
 //   DependencyPluginTuple    readonly PluginLike[] — the depends array constraint.
+//
 //   ExtractPluginApi<P>      Pulls the API phantom type from a PluginLike value.
-//                             Used by ctx.require() and ctx.getPlugin() return types.
+//                            Used by ctx.require() and ctx.getPlugin() return types.
 //   ExtractPluginEvents<P>   Pulls the events phantom type from a PluginLike value.
-//                             Falls back to {} (identity) when no events declared.
+//                            Falls back to {} (identity) when no events declared.
+//
 //   DependencyEvents<Deps>   Intersects all events from a depends tuple into one map.
-//                             [authPlugin, routerPlugin] → AuthEvents & RouterEvents.
+//                            [authPlugin, routerPlugin] → AuthEvents & RouterEvents.
 //   MergedPluginEvents       GlobalEvents & PluginEvents & DependencyEvents — the
-//                             full event surface a plugin can emit/listen to.
+//                            full event surface a plugin can emit/listen to.
+//
 //   PluginExecutionContext    The ctx object. Provides global, config, state, emit,
-//                             require, getPlugin, has. Same shape for api/hooks/lifecycle.
+//                            require, getPlugin, has. Same shape for api/hooks/lifecycle.
+//
 //   EventDescriptor<T>       Returned by register<T>(). Carries payload type as phantom.
 //   RegisterFunction         <T>(description?) => EventDescriptor<T>. Passed to events().
+//
 //   CreatePluginSpec         The spec object shape with all optional fields: events,
-//                             config, depends, plugins, createState, api, onInit,
-//                             onStart, onStop, hooks. 7 generic parameters, all inferred.
+//                            config, depends, plugins, createState, api, onInit,
+//                            onStart, onStop, hooks. 7 generic parameters, all inferred.
+//
 //   BoundCreatePluginFunction  Overloaded createPlugin. Overload 1: zero explicit generics
-//                             (all inferred). Overload 2: one explicit generic (PluginEvents).
+//                            (all inferred). Overload 2: one explicit generic (PluginEvents).
+//
 //   LifecycleMethodName      "onInit" | "onStart" | "onStop" — for runtime validation.
 //   RuntimePluginSpec        Minimal runtime shape for assertion functions.
 //
-// Usage:
+// -----------------------------------------------------------------------------
+// Usage
+// -----------------------------------------------------------------------------
 //
 //   Simple plugin — state + API, no events, no deps:
 //
