@@ -112,25 +112,17 @@ const dashboardPlugin = createPlugin('dashboard', {
     'auth:login': (payload) => {
       console.log(`User ${payload.userId} logged in`);  // payload.userId is string
     },
-    // Unknown event -- payload is `unknown`, cast manually
-    'custom:event': (payload) => {
-      const data = payload as { value: number };
-    },
   },
 });
 ```
 
-**Typed hooks:** When a hook key matches a known event name (in global Events or dependency PluginEvents), the handler receives a typed payload. When the key is an unknown event name, the handler receives `unknown`.
+**Typed hooks:** Hook handlers receive fully typed payloads for known event names (global Events, own PluginEvents, and dependency events via `depends`). There is no `(payload: unknown)` fallback -- the type system maps each event key directly to its payload type.
 
 ```typescript
 hooks?: {
-  [K in string]?: K extends keyof AllEvents
-    ? (payload: AllEvents[K]) => void | Promise<void>
-    : (payload: unknown) => void | Promise<void>;
+  [K in string & keyof AllEvents]?: (payload: AllEvents[K]) => void | Promise<void>;
 };
 ```
-
-> **Note:** Due to a TypeScript mapped type limitation, hook payloads may appear as `unknown` at the type level in some IDE contexts. At call sites where the key is a string literal that matches a known event, the payload is correctly narrowed. In test code, an explicit `as` cast at the call site is the recommended workaround.
 
 **Execution order:** Handlers execute in plugin registration order, sequentially. Each handler is awaited before the next. No parallelism.
 
@@ -164,7 +156,7 @@ const dashboardPlugin = createPlugin('dashboard', {
   hooks: {
     'auth:login': (payload) => {
       // payload typed from auth's PluginEvents via depends
-      console.log(`User ${(payload as { userId: string }).userId} logged in`);
+      console.log(`User ${payload.userId} logged in`);  // payload.userId is string
     },
   },
   api: (ctx) => ({

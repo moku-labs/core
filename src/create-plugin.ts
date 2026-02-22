@@ -245,15 +245,10 @@ type CreatePluginSpec<
   ) => void | Promise<void>;
   onStop?: (context: { readonly global: Readonly<GlobalConfig> }) => void | Promise<void>;
   hooks?: {
-    [EventName in string]?: EventName extends keyof MergedPluginEvents<
-      GlobalEventMap,
-      PluginEventMap,
-      DependencyPlugins
-    >
-      ? (
-          payload: MergedPluginEvents<GlobalEventMap, PluginEventMap, DependencyPlugins>[EventName]
-        ) => void | Promise<void>
-      : (payload: unknown) => void | Promise<void>;
+    [EventName in string &
+      keyof MergedPluginEvents<GlobalEventMap, PluginEventMap, DependencyPlugins>]?: (
+      payload: MergedPluginEvents<GlobalEventMap, PluginEventMap, DependencyPlugins>[EventName]
+    ) => void | Promise<void>;
   };
 };
 

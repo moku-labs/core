@@ -70,6 +70,7 @@ Full specification: `specification/14-EVENT-REGISTRATION.md`
 - **Sequential async execution**: Within each phase, plugins run one at a time, awaited. No parallelism.
 - **Configs frozen, state mutable**: Configs are `Object.freeze`'d. Plugin state (`S`) is the mutable escape hatch.
 - **Strict emit, no escape hatch**: `emit` only accepts known event names with typed payloads.
+- **Strict hooks, typed payloads**: `hooks` handlers receive typed payloads (not `unknown`). The `(payload: unknown)` fallback branch is removed. Payloads flow from the merged event map (global + own + dependency events).
 - **Instance-only require/getPlugin**: `require(plugin)` and `getPlugin(plugin)` only accept PluginInstance references, not strings. Returns fully typed API. `has(name)` stays string-based (boolean check). No escape hatch.
 
 ## Error Message Format

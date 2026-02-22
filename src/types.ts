@@ -132,9 +132,9 @@ type PluginSpec<
   ) => void | Promise<void>;
   onStop?: (context: TeardownContext<Config>) => void | Promise<void>;
   hooks?: {
-    [K in string]?: K extends keyof (Events & PluginEvents & DepsEvents<Deps>)
-      ? (payload: (Events & PluginEvents & DepsEvents<Deps>)[K]) => void | Promise<void>
-      : (payload: unknown) => void | Promise<void>;
+    [K in string & keyof (Events & PluginEvents & DepsEvents<Deps>)]?: (
+      payload: (Events & PluginEvents & DepsEvents<Deps>)[K]
+    ) => void | Promise<void>;
   };
 };
 

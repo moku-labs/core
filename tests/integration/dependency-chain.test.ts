@@ -316,7 +316,7 @@ describe("4-level dependency chain: event propagation through hooks", () => {
       }),
       hooks: {
         "level0:action": payload => {
-          hookCalls.push(`level1-heard-level0:${(payload as { value: string }).value}`);
+          hookCalls.push(`level1-heard-level0:${payload.value}`);
         }
       }
     });
@@ -334,7 +334,7 @@ describe("4-level dependency chain: event propagation through hooks", () => {
       }),
       hooks: {
         "level1:action": payload => {
-          hookCalls.push(`level2-heard-level1:${(payload as { value: string }).value}`);
+          hookCalls.push(`level2-heard-level1:${payload.value}`);
         }
       }
     });
@@ -348,7 +348,7 @@ describe("4-level dependency chain: event propagation through hooks", () => {
       }),
       hooks: {
         "level2:action": payload => {
-          hookCalls.push(`level3-heard-level2:${(payload as { value: string }).value}`);
+          hookCalls.push(`level3-heard-level2:${payload.value}`);
         }
       }
     });

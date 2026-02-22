@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { createCoreConfig } from "../../src";
 import { createPlugin } from "./demo/moku-web/config";
-import { createApp, routerPlugin } from "./demo/moku-web/index";
+import { createApp, rendererPlugin, routerPlugin } from "./demo/moku-web/index";
 
 // ---------------------------------------------------------------------------
 // Global events (from createCoreConfig Events)
@@ -15,8 +15,7 @@ describe("global events (from createCoreConfig Events)", () => {
     const listenerPlugin = createPlugin("listener", {
       hooks: {
         "page:render": payload => {
-          // Hook payload is unknown due to mapped type limitation; cast at call site
-          received.push(payload as { path: string; html: string });
+          received.push(payload);
         }
       }
     });
@@ -79,10 +78,10 @@ describe("per-plugin events (PluginEvents)", () => {
     const received: Array<{ path: string; duration: number }> = [];
 
     const listenerPlugin = createPlugin("render-listener", {
-      depends: [routerPlugin] as const,
+      depends: [rendererPlugin] as const,
       hooks: {
         "renderer:complete": payload => {
-          received.push(payload as { path: string; duration: number });
+          received.push(payload);
         }
       }
     });
@@ -117,8 +116,7 @@ describe("event merging via depends", () => {
       depends: [routerPlugin] as const,
       hooks: {
         "router:navigate": payload => {
-          // Hook payload is unknown due to mapped type limitation; cast at call site
-          navigations.push(payload as { from: string; to: string });
+          navigations.push(payload);
         }
       }
     });
@@ -154,8 +152,7 @@ describe("event merging via depends", () => {
       depends: [pluginA] as const,
       hooks: {
         "pluginA:action": payload => {
-          // payload should be typed from PluginAEvents via depends
-          received.push(payload as { value: number });
+          received.push(payload);
         }
       }
     });
@@ -203,6 +200,90 @@ describe("event merging via depends", () => {
 
     expect(authPlugin.name).toBe("auth");
     expect(dashboardPlugin.name).toBe("dashboard");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Strict hooks typing (no escape hatch)
+// ---------------------------------------------------------------------------
+
+describe("strict hooks typing (no escape hatch)", () => {
+  it("hook payloads are typed for global events (no cast needed)", async () => {
+    const received: Array<{ path: string; html: string }> = [];
+
+    const plugin = createPlugin("typed-hook-check", {
+      hooks: {
+        "page:render": payload => {
+          // payload is typed as { path: string; html: string } -- no cast needed
+          received.push(payload);
+        }
+      }
+    });
+
+    const app = await createApp({ plugins: [plugin] });
+    app.emit("page:render", { path: "/typed", html: "<h1>Typed</h1>" });
+
+    expect(received).toHaveLength(1);
+    expect(received[0]?.path).toBe("/typed");
+  });
+
+  it("hook payloads are typed for dependency events (no cast needed)", async () => {
+    const received: Array<{ value: number }> = [];
+
+    const pluginA = createPlugin("event-source", {
+      events: register => ({
+        "source:action": register<{ value: number }>("Source action")
+      }),
+      api: ctx => ({
+        fire: (value: number) => {
+          ctx.emit("source:action", { value });
+        }
+      })
+    });
+
+    const pluginB = createPlugin("typed-dep-hook", {
+      depends: [pluginA] as const,
+      hooks: {
+        "source:action": payload => {
+          // payload is typed as { value: number } -- no cast needed
+          received.push(payload);
+        }
+      }
+    });
+
+    const cc = createCoreConfig<{ siteName: string }, Record<string, never>>("test", {
+      config: { siteName: "Test" }
+    });
+
+    const framework = cc.createCore(cc, { plugins: [pluginA, pluginB] });
+    const app = await framework.createApp();
+
+    app.require(pluginA).fire(42);
+
+    expect(received).toHaveLength(1);
+    expect(received[0]?.value).toBe(42);
+  });
+
+  it("rejects wrong payload types in hooks at type level", () => {
+    const pluginA = createPlugin("event-source-2", {
+      events: register => ({
+        "source:action": register<{ value: number }>("Source action")
+      }),
+      api: () => ({})
+    });
+
+    const pluginB = createPlugin("wrong-hook-payload", {
+      depends: [pluginA] as const,
+      hooks: {
+        "source:action": payload => {
+          // @ts-expect-error -- payload.value is number, not assignable to string
+          expect(payload.value satisfies string).toBeDefined();
+        }
+      }
+    });
+
+    expect(pluginA.name).toBe("event-source-2");
+    expect(pluginB.name).toBe("wrong-hook-payload");
   });
 });
 

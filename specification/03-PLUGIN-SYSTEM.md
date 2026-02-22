@@ -35,11 +35,9 @@ The plugin spec is a plain object that describes a plugin's behavior. All fields
   /** Teardown. REVERSE order during app.stop(). */
   onStop?: (ctx: { global: Readonly<Config> }) => void | Promise<void>,
 
-  /** Event subscriptions. Known events get typed payloads. */
+  /** Event subscriptions. Only known events accepted; payloads fully typed. */
   hooks?: {
-    [K in string]?: K extends keyof MergedEvents
-      ? (payload: MergedEvents[K]) => void | Promise<void>
-      : (payload: unknown) => void | Promise<void>;
+    [K in string & keyof MergedEvents]?: (payload: MergedEvents[K]) => void | Promise<void>;
   },
 }
 ```

@@ -1,4 +1,5 @@
 import { createPlugin } from "../config";
+import { rendererPlugin } from "./renderer";
 import { routerPlugin } from "./router";
 import { seoPlugin } from "./seo";
 
@@ -11,7 +12,7 @@ export const sitemapPlugin = createPlugin("sitemap", {
       "Triggered when a new entry is added to the sitemap"
     )
   }),
-  depends: [seoPlugin, routerPlugin],
+  depends: [seoPlugin, routerPlugin, rendererPlugin],
   config: {
     baseUrl: "https://example.com",
     changeFreq: "weekly" as string
