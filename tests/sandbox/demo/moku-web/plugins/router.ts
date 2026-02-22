@@ -15,6 +15,7 @@ export const routerPlugin = createPlugin("router", {
       ctx.state.history.push(from);
       ctx.state.currentPath = path;
       ctx.emit("router:navigate", { from, to: path });
+      return ctx.state.history;
     },
     current: () => ctx.state.currentPath
   }),
