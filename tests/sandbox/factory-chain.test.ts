@@ -83,6 +83,10 @@ describe("createApp (Step 3)", () => {
     expectTypeOf(app.renderer.render).toBeFunction();
     expectTypeOf(app.seo.setTitle).toBeFunction();
     expectTypeOf(app.seo.getDefaultTitle).toBeFunction();
+    expectTypeOf(app.sitemap.addEntry).toBeFunction();
+    expectTypeOf(app.sitemap.generate).toBeFunction();
+    expectTypeOf(app.sitemap.getEntries).toBeFunction();
+    expectTypeOf(app.sitemap.getEntryCount).toBeFunction();
 
     // Type-level: start/stop return Promise<void>, not any
     expectTypeOf(app.start).toBeFunction();
@@ -96,6 +100,7 @@ describe("createApp (Step 3)", () => {
     expect(app.router).toBeDefined();
     expect(app.renderer).toBeDefined();
     expect(app.seo).toBeDefined();
+    expect(app.sitemap).toBeDefined();
   });
 
   it("app object is frozen", async () => {

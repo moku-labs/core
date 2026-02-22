@@ -41,6 +41,7 @@ describe("3-layer flow (SAND-04)", () => {
     expect(app.router).toBeDefined();
     expect(app.renderer).toBeDefined();
     expect(app.seo).toBeDefined();
+    expect(app.sitemap).toBeDefined();
   });
 
   it("consumer can add extra plugins via createApp", async () => {

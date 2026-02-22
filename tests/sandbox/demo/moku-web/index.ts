@@ -2,9 +2,10 @@ import { coreConfig, createCore } from "./config";
 import { rendererPlugin } from "./plugins/renderer";
 import { routerPlugin } from "./plugins/router";
 import { seoPlugin } from "./plugins/seo";
+import { sitemapPlugin } from "./plugins/sitemap";
 
 const framework = createCore(coreConfig, {
-  plugins: [routerPlugin, rendererPlugin, seoPlugin],
+  plugins: [routerPlugin, rendererPlugin, seoPlugin, sitemapPlugin],
   pluginConfigs: {
     renderer: { template: "default" }
   },
@@ -22,3 +23,4 @@ export { authPlugin } from "./plugins/auth";
 export { rendererPlugin } from "./plugins/renderer";
 export { routerPlugin } from "./plugins/router";
 export { seoPlugin } from "./plugins/seo";
+export { sitemapPlugin } from "./plugins/sitemap";
