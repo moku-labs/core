@@ -365,7 +365,7 @@ type CreatePluginSpec<
 > = {
   /**
    * Declare plugin-specific events via a register callback.
-   * The kernel calls this at startup to build the event catalog.
+   * Used for compile-time type inference only — the kernel does not call this at runtime.
    * @example
    * ```ts
    * events: (register) => ({
@@ -574,6 +574,7 @@ type LifecycleMethodName = "onInit" | "onStart" | "onStop";
  * ```
  */
 type RuntimePluginSpec = Record<string, unknown> & {
+  readonly events?: unknown;
   readonly onInit?: unknown;
   readonly onStart?: unknown;
   readonly onStop?: unknown;
@@ -671,6 +672,31 @@ function assertValidLifecycleHandlers(
 }
 
 /**
+ * Validates that events is a function (the register callback factory) if provided.
+ * The kernel does not call events at runtime — it exists for compile-time type inference.
+ * This validation catches typos like `events: { ... }` instead of `events: register => ({ ... })`.
+ * @param frameworkId - Framework identifier used in error messages.
+ * @param pluginName - Validated plugin name.
+ * @param events - Candidate events value from plugin spec.
+ * @example
+ * ```ts
+ * assertValidEvents("my-app", "auth", register => ({ "auth:login": register<{ userId: string }>() }));
+ * ```
+ */
+function assertValidEvents(frameworkId: string, pluginName: string, events: unknown): void {
+  if (events === undefined) {
+    return;
+  }
+
+  if (typeof events !== "function") {
+    throw new TypeError(
+      `[${frameworkId}] Plugin "${pluginName}" has invalid events: expected a function.\n` +
+        `  Provide a function like: events: register => ({ "event:name": register<PayloadType>() })`
+    );
+  }
+}
+
+/**
  * Validates that hooks is a function (the context-receiving factory).
  * The return value (handler map) is validated at kernel time when hooks(ctx) is called.
  * @param frameworkId - Framework identifier used in error messages.
@@ -733,6 +759,7 @@ function createPluginFactory<
     assertValidPluginName(frameworkId, name);
     assertValidPluginSpec(frameworkId, name, spec);
     assertValidLifecycleHandlers(frameworkId, name, spec);
+    assertValidEvents(frameworkId, name, spec.events);
     assertValidHooks(frameworkId, name, spec.hooks);
 
     return {
