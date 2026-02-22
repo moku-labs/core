@@ -306,7 +306,12 @@ async function createApp(consumerOptions?: {
   async function dispatch(eventName: string, payload: any) {
     const handlers = hookMap.get(eventName) ?? [];
     for (const handler of handlers) {
-      await handler(payload);
+      try {
+        await handler(payload);
+      } catch (err) {
+        // One failing hook does not stop other hooks (same pattern as executeStop).
+        if (options.onError) options.onError(err as Error);
+      }
     }
   }
 

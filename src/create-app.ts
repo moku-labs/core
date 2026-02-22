@@ -144,15 +144,19 @@ function createPluginStates(
  * Build event bus: hookMap with async dispatch, fire-and-forget emit, and registerHook.
  * The hookMap starts empty — hooks are registered separately in Step 8b after
  * the context factory is created, so that hooks(ctx) receives PluginContext.
+ *
+ * Hook errors are caught per-handler and reported via `onError`. One failing hook
+ * does not prevent other hooks from running (same resilience pattern as `executeStop`).
+ * @param onError - Optional error handler called when a hook throws.
  * @returns Object with emit and registerHook functions.
  * @example
  * ```ts
- * const { emit, registerHook } = buildEventBus();
+ * const { emit, registerHook } = buildEventBus(onError);
  * registerHook("page:render", payload => console.log(payload));
  * emit("page:render", { path: "/", html: "<h1>Home</h1>" });
  * ```
  */
-function buildEventBus(): {
+function buildEventBus(onError: ((error: Error) => void) | undefined): {
   // biome-ignore lint/suspicious/noExplicitAny: event payloads are dynamically typed
   emit: (eventName: string, payload?: any) => void;
   // biome-ignore lint/suspicious/noExplicitAny: event payloads are dynamically typed
@@ -175,7 +179,11 @@ function buildEventBus(): {
     const handlers = hookMap.get(eventName);
     if (!handlers) return;
     for (const handler of handlers) {
-      await handler(payload);
+      try {
+        await handler(payload);
+      } catch (error) {
+        if (onError) onError(error as Error);
+      }
     }
   }
 
@@ -599,7 +607,7 @@ async function kernel(parameters: KernelParameters): Promise<any> {
   const states = createPluginStates(flatPlugins, globalConfig, resolvedConfigs);
 
   // Step 8a: Build event bus (empty -- hooks registered in Step 8b)
-  const { emit, registerHook } = buildEventBus();
+  const { emit, registerHook } = buildEventBus(onError);
 
   // Build context factory (needed by hooks and APIs)
   // biome-ignore lint/suspicious/noExplicitAny: API values are plugin-specific

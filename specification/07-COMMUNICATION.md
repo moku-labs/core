@@ -94,6 +94,8 @@ ctx.emit('unknown:event', { anything: true });                         // ERROR 
 
 **For frameworks that want untyped events:** Set `Events = Record<string, unknown>` in `createCoreConfig`. This makes all event names valid with `unknown` payload.
 
+**Hook error resilience.** `emit` is fire-and-forget (returns `void`). Hooks run sequentially via an internal async `dispatch`. If a hook throws, the error is reported via the `onError` callback (if provided to `createCore`). One failing hook does not prevent other hooks from running -- the same best-effort resilience pattern used by `onStop`.
+
 ---
 
 ## 4. Hooks

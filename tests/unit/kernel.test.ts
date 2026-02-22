@@ -726,6 +726,56 @@ describe("best-effort stop", () => {
     expect(errors).toHaveLength(1);
     expect(errors[0]?.message).toBe("stop failed");
   });
+
+  it("onError callback receives errors from async hooks", async () => {
+    const errors: Error[] = [];
+    const hookCalls: string[] = [];
+    const cc = createTestCore();
+
+    const a = cc.createPlugin("a", {
+      hooks: _ctx => ({
+        "test:event": () => {
+          hookCalls.push("a");
+        }
+      })
+    });
+    const b = cc.createPlugin("b", {
+      hooks: _ctx => ({
+        "test:event": async () => {
+          hookCalls.push("b");
+          throw new Error("hook b failed");
+        }
+      })
+    });
+    const c = cc.createPlugin("c", {
+      hooks: _ctx => ({
+        "test:event": () => {
+          hookCalls.push("c");
+        }
+      })
+    });
+
+    const { createApp } = cc.createCore(cc, {
+      plugins: [a, b, c],
+      onError: error => {
+        errors.push(error);
+      }
+    });
+    const app = await createApp();
+
+    app.emit("test:event", {});
+
+    // emit is fire-and-forget. Allow microtasks to settle.
+    await new Promise(resolve => {
+      setTimeout(resolve, 0);
+    });
+
+    // All hooks ran despite b throwing
+    expect(hookCalls).toEqual(["a", "b", "c"]);
+    // onError received the error from hook b
+    expect(errors).toHaveLength(1);
+    expect(errors[0]?.message).toBe("hook b failed");
+  });
 });
 
 // ---------------------------------------------------------------------------
