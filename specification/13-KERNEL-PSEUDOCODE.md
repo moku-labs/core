@@ -13,7 +13,7 @@ Every significant "why" in the v3 architecture:
 |---|----------|----------------------|-----------------|
 | 1 | 3-step factory chain (createCoreConfig -> createCore -> createApp) | Single createCore with all generics | Breaks the circular dependency between config.ts (where generics live) and plugin files (which need those generics). Each step captures its context in a closure. |
 | 2 | 2 generics on createCoreConfig (Config, Events) | 3 generics (adding State) | State is deferred. 2 generics keep the surface minimal. The signature can expand to 3 later without breaking existing code. |
-| 3 | 0-1 generics on createPlugin | 4-7 explicit generics (N, C, S, A, Events, Deps) | All types inferred from the spec object. PluginEvents is the only explicit generic because it defines new events that have no existing value to infer from. Config and Events flow in from the closure. |
+| 3 | 0 generics on createPlugin | 4-7 explicit generics (N, C, S, A, Events, Deps) | All types inferred from the spec object. PluginEvents inferred from the `events` register callback. Config and Events flow in from the closure. Zero manual generics anywhere. |
 | 4 | 3 lifecycle phases (init, start, stop) | Many phases with pre/after hooks | Covers all real use cases. Pre/after hooks add complexity for marginal benefit. Plugins that need cross-cutting notification use the event system. |
 | 5 | Flat createApp object | Separate createConfig + createApp two-step | Single-call consumer API. The type system discriminates config keys from plugin config keys from reserved keys. Simpler for consumers. |
 | 6 | Sequential async execution | Parallel execution within phases | Deterministic, easy to reason about. No parallel footgun. Plugin A's onInit resolves before Plugin B's begins. |
@@ -51,7 +51,7 @@ function createCoreConfig<
 
   const configDefaults: Config = options.config;
 
-  function createPlugin<PluginEvents = {}>(...) { /* see Section 3 */ }
+  function createPlugin(...) { /* see Section 3 */ }
   function createCore(...) { /* see Section 4 */ }
 
   return { createPlugin, createCore };
@@ -67,33 +67,36 @@ function createCoreConfig<
 ## 3. createPlugin (Bound to Framework Types)
 
 ```pseudo-typescript
-function createPlugin<PluginEvents extends Record<string, any> = {}>(
+function createPlugin(
   name: N,  // N is a literal string type, inferred from the argument
   spec: {
-    defaultConfig?: C,                                    // C inferred from value
-    depends?: readonly [...PluginInstance[]],              // tuple of instances
-    plugins?: PluginInstance[],                            // sub-plugins
-    createState?: (ctx: MinimalContext<Config, C>) => S,   // S inferred from return
+    events?: (register: RegisterFn) => EventDescriptorMap,  // PluginEvents inferred from return
+    defaultConfig?: C,                                       // C inferred from value
+    depends?: readonly [...PluginInstance[]],                 // tuple of instances
+    plugins?: PluginInstance[],                               // sub-plugins
+    createState?: (ctx: MinimalContext<Config, C>) => S,      // S inferred from return
     api?: (ctx: PluginContext<Config, Events & PluginEvents & DepsEvents, C, S>) => A,  // A inferred
     onInit?: (ctx: PluginContext<...>) => void | Promise<void>,
     onStart?: (ctx: PluginContext<...>) => void | Promise<void>,
     onStop?: (ctx: TeardownContext<Config>) => void | Promise<void>,
     hooks?: Partial<EventHandlers<Events & PluginEvents & DepsEvents>>,
   },
-): PluginInstance<N, C, S, A, Events, PluginEvents> {
-  // RATIONALE: All generics (N, C, S, A) are inferred from the spec object.
+): PluginInstance<N, C, S, A, PluginEvents> {
+  // RATIONALE: All generics (N, C, S, A, PluginEvents) are inferred from the spec object.
   // The framework doesn't pass them. The plugin author doesn't write them.
   // TypeScript infers N from the name string literal, C from defaultConfig,
-  // S from createState return, A from api return.
+  // S from createState return, A from api return, PluginEvents from events callback return.
   //
-  // PluginEvents is the ONLY explicit generic because it defines new events
-  // that don't exist anywhere to infer from.
+  // The events register callback solves the "infer from type position" problem:
+  // register<T>(desc) returns EventDescriptor<T>, and TypeScript infers T from the
+  // generic argument. The return type of the callback builds the full event map.
   //
   // Config and Events come from the closure -- captured when createCoreConfig
   // returned this createPlugin function. The plugin author never sees them.
 
-  // DepsEvents is the union of PluginEvents from all plugins in depends.
-  // TypeScript computes this from the phantom types on the PluginInstance objects.
+  // DepsEvents is the intersection of PluginEvents from all plugins in depends.
+  // TypeScript computes this from the phantom types on the PluginInstance objects
+  // via UnionToIntersection.
 
   return {
     name,
@@ -115,8 +118,8 @@ function createPlugin<PluginEvents extends Record<string, any> = {}>(
 - `C` -- inferred from `defaultConfig` value
 - `S` -- inferred from `createState` return type
 - `A` -- inferred from `api` return type
-- `PluginEvents` -- explicit generic (only if plugin declares new events)
-- `DepsEvents` -- computed from `depends` tuple phantom types
+- `PluginEvents` -- inferred from `events` register callback return type
+- `DepsEvents` -- intersection of dependency phantom types via `UnionToIntersection`
 
 ---
 
@@ -553,8 +556,9 @@ Framework config.ts:
     -> returns { createPlugin, createCore }
 
 Framework plugin files:
-  createPlugin('name', { defaultConfig, createState, api, onInit, onStart, onStop, hooks })
+  createPlugin('name', { events, defaultConfig, createState, api, onInit, onStart, onStop, hooks })
     -> all types inferred from spec; Config + Events from closure
+    -> PluginEvents inferred from events register callback
     -> returns PluginInstance with phantom types
 
 Framework index.ts:

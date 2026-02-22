@@ -46,24 +46,22 @@ The plugin spec is a plain object that describes a plugin's behavior. All fields
 
 **Type inference:** `C` is inferred from `defaultConfig`, `S` from `createState` return value, `A` from `api` return value. The framework's `Config` and `Events` types flow in from `createCoreConfig` via closures. No manual annotation needed.
 
-**MergedEvents:** The union of global `Events` (from `createCoreConfig`) + any `PluginEvents` declared on this plugin + events from plugins in `depends`. This determines what event names are typed in `hooks` and `ctx.emit`.
+**MergedEvents:** The intersection of global `Events` (from `createCoreConfig`) + any `PluginEvents` declared via the `events` register callback on this plugin + events from plugins in `depends`. This determines what event names are typed in `hooks` and `ctx.emit`. See [14-EVENT-REGISTRATION](./14-EVENT-REGISTRATION.md) for the register callback pattern.
 
 ---
 
 ## 2. createPlugin
 
 ```typescript
-function createPlugin<
-  PluginEvents extends Record<string, any> = {},
->(
+function createPlugin(
   name: string,
   spec: PluginSpec,
 ): PluginInstance;
 ```
 
-**0-1 generic.** The only optional generic is `PluginEvents` -- per-plugin typed events this plugin declares. All other types (config, state, API) are inferred from the spec object.
+**Zero generics.** All types are inferred from the spec object -- config from `defaultConfig`, state from `createState`, API from `api`, and events from the `events` register callback. Config and Events flow in from the `createCoreConfig` closure.
 
-### Example 1: Zero Generics (Most Common)
+### Example 1: Zero Events (Most Common)
 
 ```typescript
 // my-framework/src/plugins/router/index.ts
@@ -82,7 +80,7 @@ export const routerPlugin = createPlugin('router', {
     navigate: (path: string) => {
       ctx.state.history.push(ctx.state.currentPath);
       ctx.state.currentPath = path;
-      void ctx.emit('router:navigate', { from: ctx.state.history.at(-1)!, to: path });
+      ctx.emit('router:navigate', { from: ctx.state.history.at(-1)!, to: path });
     },
     current: () => ctx.state.currentPath,
     back: () => {
@@ -107,39 +105,38 @@ TypeScript infers:
 - State type from `createState` return: `{ currentPath: string; history: string[] }`
 - API type from `api` return: `{ navigate(path: string): void; current(): string; back(): void }`
 
-### Example 2: One Generic (PluginEvents)
+### Example 2: Plugin with Events (Register Callback)
 
 ```typescript
 // my-framework/src/plugins/renderer/index.ts
 import { createPlugin } from '../../config';
 
-type RendererEvents = {
-  'renderer:render': { path: string; html: string };
-  'renderer:error':  { path: string; error: Error };
-};
-
-export const rendererPlugin = createPlugin<RendererEvents>('renderer', {
+export const rendererPlugin = createPlugin('renderer', {
+  events: (register) => ({
+    'renderer:render': register<{ path: string; html: string }>('Triggered after render'),
+    'renderer:error':  register<{ path: string; error: Error }>('Triggered on render error'),
+  }),
   defaultConfig: {
     template: 'default',
   },
   api: (ctx) => ({
     render: (path: string, data: Record<string, unknown>) => {
       const html = `<div>${JSON.stringify(data)}</div>`;
-      // ctx.emit is typed: knows about RendererEvents + global Events
-      void ctx.emit('renderer:render', { path, html });
+      // ctx.emit is typed: knows about renderer events + global Events
+      ctx.emit('renderer:render', { path, html });
       return html;
     },
   }),
   hooks: {
     // Can listen to global events defined in createCoreConfig
     'page:render': (payload) => {
-      // payload typed as { path: string; html: string } from global Events
+      // payload typed from global Events
     },
   },
 });
 ```
 
-The `PluginEvents` generic makes `ctx.emit('renderer:render', ...)` typed for this plugin. Other plugins that declare `depends: [rendererPlugin]` also get these events typed in their `hooks` and `ctx.emit`.
+The `events` register callback declares per-plugin events. `ctx.emit('renderer:render', ...)` is fully typed. Other plugins that declare `depends: [rendererPlugin]` also get these events typed in their `hooks` and `ctx.emit`. See [14-EVENT-REGISTRATION](./14-EVENT-REGISTRATION.md) for the full pattern specification.
 
 ### Example 3: Plugin with depends
 
@@ -175,7 +172,7 @@ export const seoPlugin = createPlugin('seo', {
 
 Because `depends: [routerPlugin, rendererPlugin]` is declared:
 - `ctx.require(routerPlugin)` returns the router API, fully typed
-- `hooks` can listen to events from both global Events and RendererEvents
+- `hooks` can listen to events from both global Events and renderer's plugin events
 - Dependency validation ensures router and renderer are registered before seo
 
 ---

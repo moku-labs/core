@@ -41,10 +41,7 @@ type FullPluginContext<
   readonly global: Readonly<Config>;
   readonly config: Readonly<C>;
   state: S;
-  emit: {
-    <K extends string & keyof MergedEvents>(name: K, payload: MergedEvents[K]): void;
-    (name: string, payload?: unknown): void;
-  };
+  emit: <K extends string & keyof MergedEvents>(name: K, payload: MergedEvents[K]) => void;
   getPlugin: {
     <P extends AnyPluginInstance>(
       plugin: P
@@ -63,12 +60,24 @@ type FullPluginContext<
 };
 
 /**
- * The spec shape passed to createPlugin. Separate named type to reduce duplication
- * between overloads.
- * @example
- * ```ts
- * type Spec = CreatePluginSpec<SiteConfig, SiteEvents, Record<string, never>, { basePath: string }, { currentPath: string }, { navigate: (p: string) => void }, readonly []>;
- * ```
+ * Descriptor returned by register<T>(). Carries the payload type T
+ * and an optional description string for runtime event catalogs.
+ */
+type EventDescriptor<T = unknown> = {
+  readonly description: string;
+  /** Phantom field — carries T for type inference. Never set at runtime. */
+  readonly _type?: T;
+};
+
+/**
+ * The register function passed to the events callback.
+ * `register<{ userId: string }>("desc")` returns an EventDescriptor
+ * that carries both the payload type and description.
+ */
+type RegisterFunction = <T>(description?: string) => EventDescriptor<T>;
+
+/**
+ * The spec shape passed to createPlugin.
  */
 type CreatePluginSpec<
   Config extends Record<string, unknown>,
@@ -81,13 +90,19 @@ type CreatePluginSpec<
   Deps extends AnyDeps
 > = {
   /**
-   * Phantom field to declare plugin-specific events for type inference.
-   * Use: `events: {} as MyPluginEvents` -- the value is never read at runtime.
-   * This enables full type inference without explicit type arguments:
-   * `createPlugin("renderer", { events: {} as RendererEvents, ... })`
-   * instead of `createPlugin<RendererEvents>("renderer", { ... })`.
+   * Declare plugin-specific events via a register callback.
+   * The kernel calls this at startup to build the event catalog.
+   * @example
+   * ```ts
+   * events: (register) => ({
+   *   "auth:login": register<{ userId: string }>("Triggered after user login"),
+   *   "auth:logout": register<{ userId: string }>("Triggered after user logout"),
+   * })
+   * ```
    */
-  events?: PluginEvents;
+  events?: (register: RegisterFunction) => {
+    [K in keyof PluginEvents]: EventDescriptor<PluginEvents[K]>;
+  };
   defaultConfig?: C;
   depends?: Deps;
   plugins?: AnyPluginInstance[];
@@ -136,7 +151,8 @@ type BoundCreatePluginFunction<
     // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability
     A extends Record<string, any> = Record<string, never>,
     Deps extends AnyDeps = readonly [],
-    PluginEvents extends Record<string, unknown> = Record<string, never>
+    // biome-ignore lint/complexity/noBannedTypes: {} is the identity element for intersection; Record<string, never> poisons event maps
+    PluginEvents extends Record<string, unknown> = {}
   >(
     name: N,
     spec: CreatePluginSpec<Config, Events, PluginEvents, C, S, A, Deps>

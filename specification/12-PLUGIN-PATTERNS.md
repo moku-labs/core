@@ -294,8 +294,9 @@ CREATING PLUGINS:
     },
   });
 
-  Optional generic: createPlugin<PluginEvents>('name', { ... })
-  for per-plugin typed events. All other types are inferred.
+  Per-plugin events via register callback:
+  events: (register) => ({ 'event:name': register<PayloadType>('description') })
+  Zero explicit generics. All types are inferred.
 
 CONTEXT RULES:
   createState: only { global, config }. NO getPlugin/require/emit.
@@ -315,9 +316,9 @@ LIFECYCLE (3 phases):
 EVENT SYSTEM:
   Two sources of typed events:
   1. Global events from createCoreConfig<Config, Events> -- available to all plugins.
-  2. Per-plugin events from createPlugin<PluginEvents> -- scoped to plugin.
+  2. Per-plugin events from events register callback -- scoped to plugin + dependents.
 
-  ctx.emit('eventName', payload) -- fire event (typed for known names, untyped fallback).
+  ctx.emit('eventName', payload) -- fire event (strictly typed, no escape hatch).
   hooks: { 'eventName': (payload) => { ... } } -- listen to events.
   Events are notifications. Use ctx.require('name') for request/response.
 

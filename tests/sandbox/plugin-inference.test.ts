@@ -80,12 +80,12 @@ describe("createPlugin infers all types from spec (SAND-02)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// createPlugin<PluginEvents> preserves inference (SAND-03)
+// createPlugin with events register callback preserves inference (SAND-03)
 // ---------------------------------------------------------------------------
 
-describe("createPlugin with events phantom field preserves inference (SAND-03)", () => {
+describe("createPlugin with events register callback preserves inference (SAND-03)", () => {
   it("adds typed events without breaking config/state/API inference", () => {
-    // Renderer uses `events: {} as RendererEvents` in the spec to declare plugin events.
+    // Renderer uses `events: (register) => ({ ... })` to declare plugin events.
     // This approach preserves the literal name type and full API inference.
     expectTypeOf(rendererPlugin.name).toEqualTypeOf<"renderer">();
 
@@ -93,9 +93,9 @@ describe("createPlugin with events phantom field preserves inference (SAND-03)",
     expect(rendererPlugin.name).toBe("renderer");
   });
 
-  it("events phantom field preserves full type inference", () => {
-    // The renderer plugin uses `events: {} as RendererEvents` instead of
-    // `createPlugin<RendererEvents>(...)`. This allows full type inference:
+  it("events register callback preserves full type inference", () => {
+    // The renderer plugin uses `events: (register) => ({ ... })` to declare
+    // plugin-specific events. This enables full type inference:
     // name (N), config (C), state (S), and API (A) are all inferred from spec.
     expect(rendererPlugin.name).toBe("renderer");
 
@@ -104,7 +104,7 @@ describe("createPlugin with events phantom field preserves inference (SAND-03)",
   });
 
   it("plugin without PluginEvents defaults to empty events", () => {
-    // Router has no PluginEvents generic -- it only has access to global SiteEvents
+    // Router has no events field -- it only has access to global SiteEvents
     // through the closure-bound Events type from createCoreConfig.
     // The router still emits "router:navigate" because that's in the global SiteEvents.
     expectTypeOf(routerPlugin.name).toEqualTypeOf<"router">();

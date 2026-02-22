@@ -11,7 +11,7 @@ describe("full lifecycle integration", () => {
     const order: string[] = [];
 
     // Step 1: createCoreConfig
-    const cc = createCoreConfig<{ siteName: string; mode: string }, Record<string, never>>(
+    const cc = createCoreConfig<{ siteName: string; mode: string }, Record<string, unknown>>(
       "lifecycle-test",
       {
         config: { siteName: "Integration Test", mode: "test" }
@@ -233,7 +233,7 @@ describe("full lifecycle integration", () => {
   });
 
   it("terminal state after stop prevents further operations", async () => {
-    const cc = createCoreConfig<{ siteName: string }, Record<string, never>>("terminal-test", {
+    const cc = createCoreConfig<{ siteName: string }, Record<string, unknown>>("terminal-test", {
       config: { siteName: "Terminal Test" }
     });
 

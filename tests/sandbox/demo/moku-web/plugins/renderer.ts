@@ -1,12 +1,12 @@
 import { createPlugin } from "../config";
 import { templateEnginePlugin } from "./template-engine";
 
-export type RendererEvents = {
-  "renderer:complete": { path: string; duration: number };
-};
-
 export const rendererPlugin = createPlugin("renderer", {
-  events: {} as RendererEvents,
+  events: register => ({
+    "renderer:complete": register<{ path: string; duration: number }>(
+      "Triggered after render completes"
+    )
+  }),
   defaultConfig: {
     template: "default"
   },

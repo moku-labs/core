@@ -1,13 +1,11 @@
 import { createPlugin } from "../config";
 import { routerPlugin } from "./router";
 
-export type AuthEvents = {
-  "auth:login": { userId: string };
-  "auth:logout": { userId: string };
-};
-
 export const authPlugin = createPlugin("auth", {
-  events: {} as AuthEvents,
+  events: register => ({
+    "auth:login": register<{ userId: string }>("Triggered after user login"),
+    "auth:logout": register<{ userId: string }>("Triggered after user logout")
+  }),
   depends: [routerPlugin] as const,
   defaultConfig: {
     loginPath: "/login",
@@ -29,6 +27,8 @@ export const authPlugin = createPlugin("auth", {
       ctx.state.isAuthenticated = false;
       if (userId) {
         ctx.emit("auth:logout", { userId });
+        // @ts-expect-error -- wrong payload shape: { ctx } is not { userId: string }
+        ctx.emit("auth:logout", { ctx });
       }
     },
     currentUser: () => ctx.state.currentUser,

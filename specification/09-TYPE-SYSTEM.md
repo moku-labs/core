@@ -10,11 +10,11 @@
 Types flow through closures, not explicit generics. The v3 architecture captures types at each step of the factory chain:
 
 - `createCoreConfig<Config, Events>` captures the global type contract
-- `createPlugin(name, spec)` infers everything from the spec object -- config, state, API types
+- `createPlugin(name, spec)` infers everything from the spec object -- config, state, API, and event types
 - `createCore(coreConfig, { plugins })` captures all plugin instances
 - `createApp(options)` returns `App<Config, AllPlugins>` with full type inference
 
-Plugin authors never write generic parameters (except the optional `PluginEvents`). The type system does the heavy lifting at compile time.
+Plugin authors never write generic parameters. Event types are inferred from the `events` register callback (see [14-EVENT-REGISTRATION](./14-EVENT-REGISTRATION.md)). The type system does the heavy lifting at compile time.
 
 ---
 
@@ -26,23 +26,24 @@ The internal type created by `createPlugin`:
 interface PluginInstance<
   N extends string = string,
   C = void,
-  A extends Record<string, any> = {},
   S = void,
-  Events extends Record<string, unknown> = {},
+  A extends Record<string, any> = Record<string, never>,
   PluginEvents extends Record<string, unknown> = {},
 > {
-  readonly kind: 'plugin';
   readonly name: N;
-  readonly _types: { config: C; api: A; state: S };       // phantom, never read at runtime
-  readonly _events: PluginEvents;                           // phantom, per-plugin events
-  readonly _hasDefaults: boolean;                            // phantom, set by createPlugin
-  readonly spec: PluginSpec<N, C, A, S>;
+  readonly spec: PluginSpec<...>;
+  readonly _phantom: {
+    config: C;
+    state: S;
+    api: A;
+    events: PluginEvents;
+  };
 }
 ```
 
-`N` = name literal, `C` = config, `S` = state, `A` = api, `Events` = global events (from closure), `PluginEvents` = per-plugin events.
+`N` = name literal, `C` = config, `S` = state, `A` = api, `PluginEvents` = per-plugin events (from register callback).
 
-All inferred -- plugin authors never write this type. The `_types` and `_events` fields carry generic parameters through the type system and are never accessed at runtime.
+All inferred -- plugin authors never write this type. The `_phantom` field carries generic parameters through the type system and is never accessed at runtime. `PluginEvents` defaults to `{}` (empty object, not `Record<string, never>`) because `{}` is the identity element for intersection -- it does not poison merged event maps.
 
 ---
 
@@ -130,14 +131,10 @@ type App<
   stop: () => Promise<void>;
 
   /**
-   * Fire an event. Overloaded:
-   *   - Known names (in Events): typed required payload.
-   *   - Unknown names: untyped optional payload (escape hatch).
+   * Fire an event. Strictly typed:
+   * Only known names (in Events) accepted with typed required payload.
    */
-  emit: {
-    <K extends string & keyof Events>(name: K, payload: Events[K]): Promise<void>;
-    (name: string, payload?: unknown): Promise<void>;
-  };
+  emit: <K extends string & keyof Events>(name: K, payload: Events[K]) => void;
 
   /**
    * Get plugin API by name. Typed -- constrained to registered plugin names.
@@ -188,8 +185,8 @@ Step 1: createCoreConfig<Config, Events>('framework-id', { config })
 Step 2: createPlugin(name, spec)
   | Infers N (name literal), C (config), S (state), A (api) from spec
   | Config + Events already bound from Step 1 closure
-  | PluginEvents optionally provided as generic: createPlugin<PluginEvents>(name, spec)
-  | Returns: PluginInstance<N, C, A, S, Events, PluginEvents>
+  | PluginEvents inferred from events register callback: events: (register) => ({...})
+  | Returns: PluginInstance<N, C, S, A, PluginEvents>
 
 Step 3: createCore(coreConfig, { plugins: [routerPlugin, loggerPlugin] })
   | Captures all plugin instances as a union type

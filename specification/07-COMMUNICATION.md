@@ -15,7 +15,7 @@ The kernel provides exactly two communication mechanisms:
 
 **Channel 2: Events -- `emit(name, payload)` (broadcast)**
 
-A single `emit` method handles all event communication. Known event names get fully typed payloads. Unknown event names are allowed as an untyped escape hatch.
+A single `emit` method handles all event communication. Known event names get fully typed payloads. Only known events are accepted -- there is no untyped escape hatch.
 
 ---
 
@@ -43,64 +43,56 @@ Every plugin created from this `coreConfig` sees these events in `emit` and `hoo
 
 ### Per-Plugin Events
 
-Defined via the `PluginEvents` generic on `createPlugin`. Available to the declaring plugin and any plugin that lists it in `depends`:
+Defined via the `events` register callback on the plugin spec. Available to the declaring plugin and any plugin that lists it in `depends`:
 
 ```typescript
-type AuthEvents = {
-  'auth:login':  { userId: string };
-  'auth:logout': {};
-};
-
-const authPlugin = createPlugin<AuthEvents>('auth', {
+const authPlugin = createPlugin('auth', {
+  events: (register) => ({
+    'auth:login':  register<{ userId: string }>('Triggered after user login'),
+    'auth:logout': register<{ userId: string }>('Triggered after user logout'),
+  }),
   api: (ctx) => ({
     login: (userId: string) => {
-      // ctx.emit knows about AuthEvents because this plugin declared them
-      void ctx.emit('auth:login', { userId });
+      // ctx.emit knows about auth:login because this plugin declared them
+      ctx.emit('auth:login', { userId });
     },
   }),
 });
 ```
 
-If no per-plugin events are needed, omit the generic entirely:
+If no per-plugin events are needed, omit the `events` field entirely:
 
 ```typescript
 const simplePlugin = createPlugin('simple', {
-  // no PluginEvents generic -- only global events available
+  // no events field -- only global events available
   api: (ctx) => ({ /* ... */ }),
 });
 ```
 
+See [14-EVENT-REGISTRATION](./14-EVENT-REGISTRATION.md) for the full register callback pattern specification.
+
 ---
 
-## 3. emit -- Unified Event Dispatch
+## 3. emit -- Strictly Typed Event Dispatch
 
 ```typescript
-emit: {
-  // Overload 1: known event name -- typed required payload
-  <K extends string & keyof AllEvents>(name: K, payload: AllEvents[K]): Promise<void>;
-  // Overload 2: unknown event name -- untyped optional payload (escape hatch)
-  (name: string, payload?: unknown): Promise<void>;
-};
+emit: <K extends string & keyof AllEvents>(name: K, payload: AllEvents[K]) => void;
 ```
 
 Where `AllEvents` = `Events` (global) + `PluginEvents` (own) + dependency events (from `depends` chain).
 
-**Known events** get strict type checking -- payload type and presence are enforced at compile time:
+**Only known event names are accepted.** Payload type and presence are enforced at compile time:
 
 ```typescript
-// In a plugin with access to Events and AuthEvents:
-ctx.emit('page:render', { path: '/about', html: '<h1>About</h1>' });  // typed
-ctx.emit('auth:login', { userId: '123' });                             // typed
+ctx.emit('page:render', { path: '/about', html: '<h1>About</h1>' });  // OK -- typed
+ctx.emit('auth:login', { userId: '123' });                             // OK -- typed
+ctx.emit('auth:login', { wrongKey: true });                            // ERROR -- wrong payload
+ctx.emit('unknown:event', { anything: true });                         // ERROR -- unknown event
 ```
 
-**Unknown events** fall through to the untyped overload -- payload is optional `unknown`:
+**No escape hatch.** There is no untyped overload. If an event name is not in the merged event map, it is a compile error. This prevents accidental bypassing of the type system.
 
-```typescript
-ctx.emit('my:custom:event', { anything: true });  // untyped escape hatch
-ctx.emit('my:custom:event');                       // payload optional for unknown events
-```
-
-One method, two behaviors. When `Events` is `{}` (the default), the first overload matches nothing. All events are untyped. Zero cost for frameworks that don't define events.
+**For frameworks that want untyped events:** Set `Events = Record<string, unknown>` in `createCoreConfig`. This makes all event names valid with `unknown` payload.
 
 ---
 
@@ -138,6 +130,8 @@ hooks?: {
 };
 ```
 
+> **Note:** Due to a TypeScript mapped type limitation, hook payloads may appear as `unknown` at the type level in some IDE contexts. At call sites where the key is a string literal that matches a known event, the payload is correctly narrowed. In test code, an explicit `as` cast at the call site is the recommended workaround.
+
 **Execution order:** Handlers execute in plugin registration order, sequentially. Each handler is awaited before the next. No parallelism.
 
 ---
@@ -147,37 +141,36 @@ hooks?: {
 When Plugin B declares `depends: [pluginA]`, Plugin B's `hooks` and `emit` see `Events & PluginAEvents`. This means B can listen to A's events and emit A's events.
 
 ```typescript
-// authPlugin declares per-plugin events:
-type AuthEvents = {
-  'auth:login':  { userId: string };
-  'auth:logout': {};
-};
-
-const authPlugin = createPlugin<AuthEvents>('auth', {
+// authPlugin declares per-plugin events via register callback:
+const authPlugin = createPlugin('auth', {
+  events: (register) => ({
+    'auth:login':  register<{ userId: string }>('Triggered after user login'),
+    'auth:logout': register<{ userId: string }>('Triggered after user logout'),
+  }),
   api: (ctx) => ({
     login: (userId: string) => {
-      void ctx.emit('auth:login', { userId });
+      ctx.emit('auth:login', { userId });
     },
-    logout: () => {
-      void ctx.emit('auth:logout', {});
+    logout: (userId: string) => {
+      ctx.emit('auth:logout', { userId });
     },
   }),
 });
 
 // dashboardPlugin depends on authPlugin:
 const dashboardPlugin = createPlugin('dashboard', {
-  depends: [authPlugin],
-  // dashboard now sees: Events & AuthEvents
+  depends: [authPlugin] as const,
+  // dashboard now sees: Events & AuthPlugin's events
   hooks: {
     'auth:login': (payload) => {
-      // payload is typed as { userId: string } -- from AuthEvents via depends
-      console.log(`User ${payload.userId} logged in`);
+      // payload typed from auth's PluginEvents via depends
+      console.log(`User ${(payload as { userId: string }).userId} logged in`);
     },
   },
   api: (ctx) => ({
     refresh: () => {
       // dashboard can also EMIT auth events because of depends
-      void ctx.emit('auth:logout', {});
+      ctx.emit('auth:logout', { userId: 'from-dashboard' });
     },
   }),
 });
@@ -197,7 +190,7 @@ Regardless of what the framework puts in `Events`, the kernel always emits these
 | `app:start` | Before plugin onStart calls | `{ config }` |
 | `app:stop` | After plugin onStop calls | `{ config }` |
 
-If the framework's `Events` includes these keys, the payload type is enforced. If not, they still fire with the default payload via the untyped overload.
+The framework should include these keys in its `Events` type so that payload types are enforced at compile time.
 
 ---
 

@@ -38,7 +38,7 @@ function createCoreConfig<
 | `Config` | Shape of global config every app of this framework needs | Framework author (Layer 2) | (required) |
 | `Events` | Map of event names to payload types (framework events + known plugin events) | Framework author (Layer 2) | `{}` |
 
-When `Events` is `{}` (the default), `emit()` is fully untyped -- all events use the untyped overload. When populated, `emit()` gains type checking for known event names via TypeScript overloads, while unknown event names still work untyped.
+When `Events` is `{}` (the default), `emit()` accepts no events (no valid keys). When populated, `emit()` strictly enforces event names and payload types. There is no untyped escape hatch -- only known event names are accepted.
 
 **`id`:** Human-readable framework name. Used in error messages: `"[moku-site] Duplicate plugin name: router"`
 
@@ -189,21 +189,19 @@ const app = await createApp();
 ## 5. createPlugin Signature
 
 ```typescript
-function createPlugin<
-  PluginEvents extends Record<string, any> = {},
->(
+function createPlugin(
   name: string,
   spec: PluginSpec,
 ): PluginInstance;
 ```
 
-**0-1 generic parameters:**
+**Zero generic parameters.** All types are inferred from the spec object:
+- Config shape (`C`) from `defaultConfig`
+- State shape (`S`) from `createState` return
+- API shape (`A`) from `api` return
+- Event map from the `events` register callback (see [14-EVENT-REGISTRATION](./14-EVENT-REGISTRATION.md))
 
-| Param | Purpose | Required? |
-|---|---|---|
-| `PluginEvents` | Per-plugin typed events this plugin declares | No (defaults to `{}`) |
-
-All other types -- config shape (`C`), state shape (`S`), API shape (`A`) -- are inferred from the `spec` object. The framework's `Config` and `Events` types are pre-bound from `createCoreConfig`.
+The framework's `Config` and `Events` types are pre-bound from `createCoreConfig`.
 
 Brief here -- see [03-PLUGIN-SYSTEM](./03-PLUGIN-SYSTEM.md) for full plugin spec details.
 
@@ -221,7 +219,7 @@ type App<Config, Events, Plugins> = Readonly<{
   /** Stop all plugins (reverse order). Returns when all onStop complete. */
   stop: () => Promise<void>;
 
-  /** Emit a typed event. Known events enforce payload types. */
+  /** Emit a typed event. Only known events accepted, payload strictly typed. */
   emit: EmitFn<Events>;
 
   /** Get a plugin by name or instance. Returns undefined if not found. */

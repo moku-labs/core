@@ -41,9 +41,8 @@ type PluginContext<Config, Events, C, S, Deps> = {
   /** This plugin's internal mutable state. Mutable by design. */
   state: S;
   /**
-   * Fire an event. Overloaded:
-   *   - Known names (in Events + PluginEvents + DepsEvents): typed required payload.
-   *   - Unknown names: untyped optional payload (escape hatch).
+   * Fire an event. Strictly typed:
+   * Only known names (in Events + PluginEvents + DepsEvents) accepted with typed required payload.
    */
   emit: EmitFunction;
   /**
@@ -222,14 +221,14 @@ if (ctx.has('analytics')) {
 
 ## 8. ctx.emit
 
-Dispatches typed events. See [07-COMMUNICATION](./07-COMMUNICATION.md) for the full event system documentation.
+Dispatches strictly typed events. Only known event names are accepted. See [07-COMMUNICATION](./07-COMMUNICATION.md) and [14-EVENT-REGISTRATION](./14-EVENT-REGISTRATION.md) for full documentation.
 
 ```typescript
 // Known event -- typed payload
 ctx.emit('page:render', { path: '/about', html: '<h1>About</h1>' });
 
-// Unknown event -- untyped escape hatch
-ctx.emit('my:custom:event', { anything: true });
+// Unknown event -- compile error (no escape hatch)
+ctx.emit('my:custom:event', { anything: true });  // ERROR
 ```
 
 ---

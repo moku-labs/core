@@ -6,13 +6,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **moku_core** is a micro-kernel plugin framework for TypeScript. One export (`createCore`), three layers (core -> framework -> consumer), each constraining the layer above. The entire API fits in an LLM context window by design.
 
-**Status:** Pre-implementation. Specification complete, no source code or build tooling yet.
+**Status:** Implementation in progress (v3 architecture).
 
 ## Architecture: Three Layers
 
 - **Layer 1 (moku_core):** Single export `createCore`. Zero domain knowledge. Pure machinery: lifecycle, plugin registry, event bus, config resolution, type inference.
-- **Layer 2 (Framework):** Calls `createCore<BaseConfig, BusContract, SignalRegistry>()`, gets back `{ createConfig, createApp, createPlugin, createComponent, createModule, createEventBus, createPluginFactory }`. Defines default plugins, base config shape, bus contract.
-- **Layer 3 (Consumer):** Imports from the framework. Two steps: `createConfig(globalOverrides, extraPlugins)` then `await createApp(config, pluginConfigs)`. Never sees `moku_core` directly.
+- **Layer 2 (Framework):** Calls `createCoreConfig<Config, Events>(id, { config })`, gets back `{ createPlugin, createCore }`. Defines default plugins, base config shape, event contract.
+- **Layer 3 (Consumer):** Imports from the framework. Single call: `await createApp({ plugins?, ...configOverrides, ...pluginConfigs })`. Never sees `moku_core` directly.
 
 The key constraint: each layer limits the layer above. Consumer code cannot break framework invariants. Framework code cannot break kernel invariants.
 
@@ -21,8 +21,8 @@ The key constraint: each layer limits the layer above. Consumer code cannot brea
 1. Collect and flatten plugins into ordered list
 2. Validate names (no duplicates) and dependencies
 3. Resolve config (shallow merge, no deep merge)
-4. Run 9 lifecycle phases in deterministic order (forward init, reverse teardown)
-5. Dispatch events: `emit` (typed bus) + `signal` (optionally typed)
+4. Run 3 lifecycle phases in deterministic order (forward init/start, reverse stop)
+5. Dispatch events: `emit` (strictly typed, no escape hatch)
 6. Freeze everything when done (`Object.freeze` on app, configs)
 
 ## Specification Map
@@ -33,39 +33,43 @@ The key constraint: each layer limits the layer above. Consumer code cannot brea
 | `specification/01-ARCHITECTURE.md` | Three-layer model, philosophy, design principles |
 | `specification/02-CORE-API.md` | All function signatures, createCore/createConfig/createApp |
 | `specification/03-PLUGIN-SYSTEM.md` | PluginSpec, PluginInstance, createPlugin, depends |
-| `specification/04-COMPONENT-MODULE.md` | ComponentSpec, ModuleSpec, flattening algorithm |
+| `specification/04-FACTORY-CHAIN.md` | 3-step factory chain: why, how, type flow |
 | `specification/05-CONFIG-SYSTEM.md` | Config resolution, defaults, BuildPluginConfigs |
-| `specification/06-LIFECYCLE.md` | All 9 phases, ordering, sync/async variants |
-| `specification/07-COMMUNICATION.md` | emit, signal, hooks, BusContract, SignalRegistry |
-| `specification/08-CONTEXT.md` | ctx object, BaseCtx, PluginCtx, phase-appropriate context |
+| `specification/06-LIFECYCLE.md` | 3 phases (init, start, stop), async model |
+| `specification/07-COMMUNICATION.md` | emit, hooks, global events, per-plugin events |
+| `specification/08-CONTEXT.md` | ctx object, 3 context tiers, phase-appropriate context |
 | `specification/09-TYPE-SYSTEM.md` | Phantom types, BuildPluginApis, App type |
-| `specification/10-TESTING.md` | createTestCtx patterns |
 | `specification/11-INVARIANTS.md` | Guarantees, error format, anti-patterns |
 | `specification/12-PLUGIN-PATTERNS.md` | Plugin = connection point, file structure |
 | `specification/13-KERNEL-PSEUDOCODE.md` | **Reference implementation** with all design decisions and rationale |
-| `specification/ROADMAP.md` | 8-phase technical development plan |
+| `specification/14-EVENT-REGISTRATION.md` | **Register callback pattern** for typed event declarations |
 
-## Open Design Variants (Decide During Implementation)
+## Event Registration Standard
 
-These are documented in `specification/README.md` and affect multiple spec files:
+All typed events use the **register callback pattern** -- a framework-wide standard:
 
-1. **createApp sync vs async** -- Variant B (async, `Promise<App>`) recommended
-2. **createCore generics** -- 2 vs 3 (adding SignalRegistry), Variant B recommended
-3. **CoreAPI function count** -- 6 vs 7 (adding createPluginFactory), Variant B recommended
-4. **App getPlugin/require typing** -- Loose vs constrained to registered names, Variant B recommended
-5. **Lifecycle method async support** -- Follows from the createApp decision
+```typescript
+events: (register) => ({
+  'auth:login':  register<{ userId: string }>('Triggered after user login'),
+  'auth:logout': register<{ userId: string }>('Triggered after user logout'),
+})
+```
 
-All spec recommendations favor Variant B. These are interconnected: async createApp implies async lifecycle methods; SignalRegistry implies 3 generics.
+- **No explicit generics on createPlugin.** Event types are inferred from `register<T>()` calls.
+- **No emit escape hatch.** Only known event names accepted. Wrong payloads are compile errors.
+- **`PluginEvents` defaults to `{}`** (not `Record<string, never>`). `{}` is the identity element for intersection.
+- **Dependency events use `UnionToIntersection`** to merge event maps from all deps.
+
+Full specification: `specification/14-EVENT-REGISTRATION.md`
 
 ## Critical Design Decisions to Preserve
 
-- **Two-step app creation** (`createConfig` then `createApp`): Required because TypeScript resolves generics left-to-right; pluginConfigs type depends on knowing all plugins first.
+- **3-step factory chain** (`createCoreConfig` -> `createCore` -> `createApp`): Each step captures types in a closure.
 - **No topological sort**: `depends` is validation-only. Plugin order is explicit in the array.
 - **Shallow merge only**: `{ ...defaultConfig, ...consumerConfig }`. No deep merge.
 - **Sequential async execution**: Within each phase, plugins run one at a time, awaited. No parallelism.
 - **Configs frozen, state mutable**: Configs are `Object.freeze`'d. Plugin state (`S`) is the mutable escape hatch.
-- **Component = plugin at runtime**: Components map `onMount`->`onStart`, `onUnmount`->`onStop`. Same runtime path.
-- **Module = flattening container**: No lifecycle, just organizational grouping.
+- **Strict emit, no escape hatch**: `emit` only accepts known event names with typed payloads.
 
 ## Error Message Format
 

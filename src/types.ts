@@ -69,14 +69,13 @@ type PluginContext<Config, Events extends Record<string, unknown>, C, S> = {
 // =============================================================================
 
 /**
- * Overloaded emit function.
- * - For known event names (keyof Events): require matching payload.
- * - For unknown strings: allow any payload (escape hatch).
+ * Strictly typed emit function.
+ * Only known event names are accepted, with matching payload required.
  */
-type EmitFunction<Events extends Record<string, unknown>> = {
-  <K extends string & keyof Events>(name: K, payload: Events[K]): void;
-  (name: string, payload?: unknown): void;
-};
+type EmitFunction<Events extends Record<string, unknown>> = <K extends string & keyof Events>(
+  name: K,
+  payload: Events[K]
+) => void;
 
 // =============================================================================
 // Section 3: Plugin Lookup Types
@@ -153,7 +152,8 @@ interface PluginInstance<
   S = void,
   // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability
   A extends Record<string, any> = Record<string, never>,
-  PluginEvents extends Record<string, unknown> = Record<string, never>
+  // biome-ignore lint/complexity/noBannedTypes: {} is the identity element for intersection; Record<string, never> poisons event maps
+  PluginEvents extends Record<string, unknown> = {}
 > {
   readonly name: N;
   // biome-ignore lint/suspicious/noExplicitAny: Spec uses any for framework generics since instances are decoupled
@@ -216,11 +216,18 @@ type ExtractName<P> =
     ? N
     : never;
 
-/** Union of all PluginEvents from a depends tuple. */
+/** Convert a union to an intersection via distributive conditional + contra-variance. */
+// biome-ignore lint/suspicious/noExplicitAny: Required for union-to-intersection inference trick
+type UnionToIntersection<U> = (U extends any ? (k: U) => void : never) extends (k: infer I) => void
+  ? I
+  : never;
+
+/** Intersection of all PluginEvents from a depends tuple. */
 type DepsEvents<
   // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability
   Deps extends ReadonlyArray<PluginInstance<string, any, any, any, any>>
-> = Deps[number] extends never ? Record<string, never> : ExtractEvents<Deps[number]>;
+  // biome-ignore lint/complexity/noBannedTypes: {} is the identity element for intersection; intentional empty events fallback
+> = Deps[number] extends never ? {} : UnionToIntersection<ExtractEvents<Deps[number]>>;
 
 // =============================================================================
 // Section 6: Aggregate Types

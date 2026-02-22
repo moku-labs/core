@@ -7,7 +7,7 @@ import { createCoreConfig } from "../../src";
 // ---------------------------------------------------------------------------
 
 function createTestCore() {
-  return createCoreConfig<{ siteName: string }, Record<string, never>>("test", {
+  return createCoreConfig<{ siteName: string }, Record<string, unknown>>("test", {
     config: { siteName: "Test" }
   });
 }
