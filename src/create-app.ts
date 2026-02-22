@@ -246,12 +246,12 @@ function createContextFactory(
     state: states.get(plugin.name),
     emit,
     /**
-     * Get plugin API by name or instance. Returns undefined if not found.
+     * Get plugin API by instance. Returns undefined if not found.
      * @param nameOrInstance - Plugin name string or PluginInstance.
      * @returns The plugin API or undefined.
      * @example
      * ```ts
-     * ctx.getPlugin("router");
+     * ctx.getPlugin(routerPlugin);
      * ```
      */
     getPlugin: (nameOrInstance: string | AnyPluginInstance) => {
@@ -259,7 +259,7 @@ function createContextFactory(
       return apis.get(name);
     },
     /**
-     * Get plugin API or throw if not found.
+     * Get plugin API by instance or throw if not found.
      * @param nameOrInstance - Plugin name string or PluginInstance.
      * @returns The plugin API.
      * @example
@@ -448,12 +448,12 @@ function buildApp(
     },
 
     /**
-     * Get plugin API by name or instance. Returns undefined if not found.
+     * Get plugin API by instance. Returns undefined if not found.
      * @param nameOrInstance - Plugin name string or PluginInstance object.
      * @returns The plugin API object or undefined.
      * @example
      * ```ts
-     * const routerApi = app.getPlugin("router");
+     * const routerApi = app.getPlugin(routerPlugin);
      * ```
      */
     getPlugin: (nameOrInstance: string | AnyPluginInstance) => {
@@ -468,7 +468,7 @@ function buildApp(
      * @throws {Error} If the plugin is not registered.
      * @example
      * ```ts
-     * const routerApi = app.require("router");
+     * const routerApi = app.require(routerPlugin);
      * ```
      */
     require: (nameOrInstance: string | AnyPluginInstance) => {

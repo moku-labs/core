@@ -81,19 +81,17 @@ type EmitFunction<Events extends Record<string, unknown>> = <K extends string & 
 // Section 3: Plugin Lookup Types
 // =============================================================================
 
-/** Get plugin API by instance or name. Returns API or undefined. */
-type GetPluginFunction = {
-  // biome-ignore lint/suspicious/noExplicitAny: PluginInstance uses any for generic instance matching
-  <P extends PluginInstance<string, any, any, any, any>>(plugin: P): ExtractApi<P> | undefined;
-  (name: string): unknown;
-};
+/** Get plugin API by instance. Returns API or undefined. */
+// biome-ignore lint/suspicious/noExplicitAny: PluginInstance uses any for generic instance matching
+type GetPluginFunction = <P extends PluginInstance<string, any, any, any, any>>(
+  plugin: P
+) => ExtractApi<P> | undefined;
 
-/** Get plugin API or throw. Same overloads as GetPluginFunction but without undefined. */
-type RequireFunction = {
-  // biome-ignore lint/suspicious/noExplicitAny: PluginInstance uses any for generic instance matching
-  <P extends PluginInstance<string, any, any, any, any>>(plugin: P): ExtractApi<P>;
-  (name: string): unknown;
-};
+/** Get plugin API or throw. Instance-only, fully typed. */
+// biome-ignore lint/suspicious/noExplicitAny: PluginInstance uses any for generic instance matching
+type RequireFunction = <P extends PluginInstance<string, any, any, any, any>>(
+  plugin: P
+) => ExtractApi<P>;
 
 /** Check if a plugin is registered by name. */
 type HasFunction = (name: string) => boolean;
@@ -337,6 +335,7 @@ export type {
   ExtractEvents,
   ExtractName,
   ExtractConfig,
+  UnionToIntersection,
   DepsEvents,
   // Aggregate types
   BuildPluginApis,

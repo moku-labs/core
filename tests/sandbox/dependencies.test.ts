@@ -42,7 +42,7 @@ describe("ctx.require returns typed API (SAND-05)", () => {
     expect(app.logger.logRoute()).toBe("/test");
   });
 
-  it("string-based require for declared dependency returns typed API", async () => {
+  it("instance-based require works for declared dependency", async () => {
     const cc = createCoreConfig<{ siteName: string }, Record<string, never>>("test", {
       config: { siteName: "Test" }
     });
@@ -58,8 +58,9 @@ describe("ctx.require returns typed API (SAND-05)", () => {
     const consumer = cc.createPlugin("consumer", {
       depends: [router] as const,
       api: ctx => {
-        // Tier 2: string-based require returns unknown (use instance-based for typed access)
-        const routerApi = ctx.require("router") as { current: () => string };
+        const routerApi = ctx.require(router);
+        // Type-level: routerApi.current is typed
+        expectTypeOf(routerApi.current).toBeFunction();
         capturedResult = routerApi.current();
         return { check: () => capturedResult };
       }
@@ -72,45 +73,25 @@ describe("ctx.require returns typed API (SAND-05)", () => {
     expect(app.consumer.check()).toBe("/home");
   });
 
-  it("string-based require for non-dependency returns unknown", async () => {
+  it("require throws when unregistered plugin instance is passed", async () => {
     const cc = createCoreConfig<{ siteName: string }, Record<string, never>>("test", {
       config: { siteName: "Test" }
     });
 
-    const router = cc.createPlugin("router", {
-      api: () => ({ current: () => "/" })
+    const unregistered = cc.createPlugin("unregistered", {
+      api: () => ({ noop: () => {} })
     });
 
     const probe = cc.createPlugin("probe", {
       api: ctx => {
-        // Tier 3: arbitrary string not in depends -> unknown
-        const result = ctx.require("some-dynamic-name");
-        expectTypeOf(result).toBeUnknown();
-        return { noop: () => {} };
-      }
-    });
-
-    const { createApp } = cc.createCore(cc, { plugins: [router, probe] });
-    // This will throw at runtime because "some-dynamic-name" is not registered,
-    // but the TYPE assertion above is the point of this test
-    await expect(createApp()).rejects.toThrow();
-  });
-
-  it("require throws when plugin is not registered", async () => {
-    const cc = createCoreConfig<{ siteName: string }, Record<string, never>>("test", {
-      config: { siteName: "Test" }
-    });
-
-    const probe = cc.createPlugin("probe", {
-      api: ctx => {
-        ctx.require("nonexistent");
+        ctx.require(unregistered);
         return {};
       }
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [probe] });
 
-    // Runtime: require should throw with framework error message
+    // Runtime: require should throw because unregistered is not in the plugin list
     await expect(createApp()).rejects.toThrow();
   });
 });
@@ -154,16 +135,20 @@ describe("ctx.getPlugin", () => {
     expect(app.consumer.check()).toBe("/home");
   });
 
-  it("returns undefined when plugin not registered", async () => {
+  it("returns undefined for unregistered plugin instance", async () => {
     const cc = createCoreConfig<{ siteName: string }, Record<string, never>>("test", {
       config: { siteName: "Test" }
+    });
+
+    const unregistered = cc.createPlugin("unregistered", {
+      api: () => ({ noop: () => {} })
     });
 
     let capturedResult: unknown;
 
     const probe = cc.createPlugin("probe", {
       api: ctx => {
-        capturedResult = ctx.getPlugin("nonexistent");
+        capturedResult = ctx.getPlugin(unregistered);
         return { noop: () => {} };
       }
     });
@@ -407,12 +392,142 @@ describe("cross-plugin API access via app object", () => {
 
   it("app.require works the same as ctx.require at app level", async () => {
     const { createApp } = await import("./demo/moku-web/index");
+    const { routerPlugin } = await import("./demo/moku-web/plugins/router");
 
     const app = await createApp();
 
-    // String-based require returns unknown; use type assertion for runtime check
-    const routerApi = app.require("router") as { current: () => string };
+    // Instance-based require returns fully typed API
+    const routerApi = app.require(routerPlugin);
     expect(routerApi).toBeDefined();
     expect(routerApi.current()).toBeDefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Multiple plugin dependencies
+// ---------------------------------------------------------------------------
+
+describe("multiple plugin dependencies", () => {
+  it("instance-based require returns typed API for each dependency", async () => {
+    const cc = createCoreConfig<{ siteName: string }, Record<string, never>>("test", {
+      config: { siteName: "Test" }
+    });
+
+    const router = cc.createPlugin("router", {
+      defaultConfig: { basePath: "/" },
+      createState: () => ({ currentPath: "/" }),
+      api: ctx => ({
+        navigate: (path: string) => {
+          ctx.state.currentPath = path;
+        },
+        current: () => ctx.state.currentPath
+      })
+    });
+
+    const auth = cc.createPlugin("auth", {
+      depends: [router] as const,
+      defaultConfig: { loginPath: "/login" },
+      createState: () => ({ user: undefined as string | undefined }),
+      api: ctx => ({
+        login: (userId: string) => {
+          ctx.state.user = userId;
+        },
+        logout: () => {
+          ctx.state.user = undefined;
+          ctx.require(router).navigate(ctx.config.loginPath);
+        },
+        currentUser: () => ctx.state.user
+      })
+    });
+
+    const dashboard = cc.createPlugin("dashboard", {
+      depends: [router, auth] as const,
+      api: ctx => {
+        const routerApi = ctx.require(router);
+        const authApi = ctx.require(auth);
+
+        // Type-level: both APIs are fully typed
+        expectTypeOf(routerApi.navigate).toBeFunction();
+        expectTypeOf(routerApi.current).toBeFunction();
+        expectTypeOf(authApi.login).toBeFunction();
+        expectTypeOf(authApi.logout).toBeFunction();
+        expectTypeOf(authApi.currentUser).toBeFunction();
+
+        return {
+          show: () => {
+            const user = authApi.currentUser();
+            if (!user) {
+              routerApi.navigate("/login");
+              return "redirected";
+            }
+            return `dashboard for ${user}`;
+          }
+        };
+      }
+    });
+
+    const { createApp } = cc.createCore(cc, { plugins: [router, auth, dashboard] });
+    const app = await createApp();
+
+    // No user: dashboard redirects
+    expect(app.dashboard.show()).toBe("redirected");
+    expect(app.router.current()).toBe("/login");
+
+    // Login: dashboard shows content
+    app.auth.login("alice");
+    app.router.navigate("/dashboard");
+    expect(app.dashboard.show()).toBe("dashboard for alice");
+
+    // Logout: router navigates to login path
+    app.auth.logout();
+    expect(app.router.current()).toBe("/login");
+    expect(app.auth.currentUser()).toBeUndefined();
+  });
+
+  it("getPlugin returns typed API | undefined for each dependency", async () => {
+    const cc = createCoreConfig<{ siteName: string }, Record<string, never>>("test", {
+      config: { siteName: "Test" }
+    });
+
+    const router = cc.createPlugin("router", {
+      api: () => ({
+        navigate: (path: string) => path,
+        current: () => "/"
+      })
+    });
+
+    const auth = cc.createPlugin("auth", {
+      depends: [router] as const,
+      api: () => ({
+        currentUser: () => "alice" as string | undefined
+      })
+    });
+
+    const dashboard = cc.createPlugin("dashboard", {
+      depends: [router, auth] as const,
+      api: ctx => {
+        const maybeRouter = ctx.getPlugin(router);
+        const maybeAuth = ctx.getPlugin(auth);
+
+        // Type-level: return type includes undefined (optional dep pattern)
+        expectTypeOf(maybeRouter).not.toBeUndefined();
+        expectTypeOf(maybeAuth).not.toBeUndefined();
+
+        return {
+          info: () => {
+            // After narrowing, methods are fully typed
+            if (maybeRouter && maybeAuth) {
+              return `${maybeAuth.currentUser()} at ${maybeRouter.current()}`;
+            }
+            return "unavailable";
+          }
+        };
+      }
+    });
+
+    const { createApp } = cc.createCore(cc, { plugins: [router, auth, dashboard] });
+    const app = await createApp();
+
+    expect(app.dashboard.info()).toBe("alice at /");
   });
 });

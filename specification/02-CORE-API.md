@@ -222,14 +222,14 @@ type App<Config, Events, Plugins> = Readonly<{
   /** Emit a typed event. Only known events accepted, payload strictly typed. */
   emit: EmitFn<Events>;
 
-  /** Get a plugin by name or instance. Returns undefined if not found. */
-  getPlugin: <N extends string>(nameOrInstance: N | PluginInstance) => PluginApi | undefined;
+  /** Get a plugin by instance. Returns fully typed API or undefined. */
+  getPlugin: <P extends PluginInstance>(plugin: P) => ExtractApi<P> | undefined;
 
-  /** Get a plugin or throw. For required dependencies. */
-  require: <N extends string>(nameOrInstance: N | PluginInstance) => PluginApi;
+  /** Get a plugin or throw. Instance-only, fully typed. */
+  require: <P extends PluginInstance>(plugin: P) => ExtractApi<P>;
 
-  /** Check if a plugin is registered. */
-  has: (nameOrInstance: string | PluginInstance) => boolean;
+  /** Check if a plugin is registered by name. */
+  has: (name: string) => boolean;
 
   /** Plugin APIs mounted directly. app.router.navigate() is typed. */
   [pluginName: string]: PluginApi;

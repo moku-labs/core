@@ -379,7 +379,7 @@ describe("app object shape", () => {
     expect(app.has("no-api")).toBe(true);
     // Plugin without api is excluded from App type surface (BuildPluginApis filters it out).
     // Use runtime check via getPlugin since bracket access is not typed for no-api plugins.
-    expect(app.getPlugin("no-api")).toBeUndefined();
+    expect(app.getPlugin(noApi)).toBeUndefined();
   });
 });
 
@@ -421,6 +421,8 @@ describe("idempotency", () => {
   it("app is terminal after stop -- no further operations", async () => {
     const cc = createTestCore();
 
+    const dummy = cc.createPlugin("dummy", {});
+
     const { createApp } = cc.createCore(cc, { plugins: [] });
     const app = await createApp();
 
@@ -431,8 +433,8 @@ describe("idempotency", () => {
     await expect(app.start()).rejects.toThrow("stopped");
     expect(() => app.emit("test", {})).toThrow("stopped");
     expect(() => app.has("router")).toThrow("stopped");
-    expect(() => app.getPlugin("router")).toThrow("stopped");
-    expect(() => app.require("router")).toThrow("stopped");
+    expect(() => app.getPlugin(dummy)).toThrow("stopped");
+    expect(() => app.require(dummy)).toThrow("stopped");
   });
 });
 
@@ -513,11 +515,13 @@ describe("kernel error messages", () => {
       config: {}
     });
 
+    const unregistered = cc.createPlugin("missing", {});
+
     const { createApp } = cc.createCore(cc, { plugins: [] });
     const app = await createApp();
 
     try {
-      app.require("missing");
+      app.require(unregistered);
       expect.unreachable("Should have thrown");
     } catch (error) {
       expect((error as Error).message).toMatch(/^\[my-app\]/);
@@ -541,19 +545,20 @@ describe("getPlugin, require, has", () => {
     const { createApp } = cc.createCore(cc, { plugins: [router] });
     const app = await createApp();
 
-    const api = app.getPlugin("router");
+    const api = app.getPlugin(router);
     expect(api).toBeDefined();
-    // String-based getPlugin returns unknown; use runtime assertion
-    expect((api as { current: () => string }).current()).toBe("/");
+    expect(api?.current()).toBe("/");
   });
 
   it("getPlugin returns undefined for unregistered plugin", async () => {
     const cc = createTestCore();
 
+    const unregistered = cc.createPlugin("unregistered", {});
+
     const { createApp } = cc.createCore(cc, { plugins: [] });
     const app = await createApp();
 
-    expect(app.getPlugin("nonexistent")).toBeUndefined();
+    expect(app.getPlugin(unregistered)).toBeUndefined();
   });
 
   it("require returns API for registered plugin", async () => {
@@ -566,18 +571,19 @@ describe("getPlugin, require, has", () => {
     const { createApp } = cc.createCore(cc, { plugins: [router] });
     const app = await createApp();
 
-    const api = app.require("router");
-    // String-based require returns unknown; use runtime assertion
-    expect((api as { current: () => string }).current()).toBe("/");
+    const api = app.require(router);
+    expect(api.current()).toBe("/");
   });
 
   it("require throws for unregistered plugin", async () => {
     const cc = createTestCore();
 
+    const unregistered = cc.createPlugin("missing", {});
+
     const { createApp } = cc.createCore(cc, { plugins: [] });
     const app = await createApp();
 
-    expect(() => app.require("missing")).toThrow();
+    expect(() => app.require(unregistered)).toThrow();
   });
 
   it("has returns true for registered plugins", async () => {
@@ -614,7 +620,7 @@ describe("getPlugin, require, has", () => {
     // Registered by name -> true
     expect(app.has("no-api")).toBe(true);
     // No API mounted -> getPlugin returns undefined
-    expect(app.getPlugin("no-api")).toBeUndefined();
+    expect(app.getPlugin(noApi)).toBeUndefined();
   });
 });
 

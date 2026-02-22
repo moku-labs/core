@@ -52,6 +52,29 @@ describe("createPlugin - name validation", () => {
 });
 
 // ---------------------------------------------------------------------------
+// createPlugin - spec validation
+// ---------------------------------------------------------------------------
+
+describe("createPlugin - spec validation", () => {
+  it("throws on non-object spec", () => {
+    const { createPlugin } = setup();
+
+    // @ts-expect-error -- testing runtime validation
+    expect(() => createPlugin("bad-spec", 42)).toThrow(TypeError);
+    // @ts-expect-error -- testing runtime validation
+    expect(() => createPlugin("bad-spec", 42)).toThrow("invalid spec");
+  });
+
+  it("throws on null spec", () => {
+    const { createPlugin } = setup();
+
+    // @ts-expect-error -- testing runtime validation
+    // eslint-disable-next-line unicorn/no-null -- testing runtime null rejection
+    expect(() => createPlugin("bad-spec", null)).toThrow(TypeError);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // createPlugin - lifecycle validation
 // ---------------------------------------------------------------------------
 

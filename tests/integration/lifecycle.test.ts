@@ -237,6 +237,8 @@ describe("full lifecycle integration", () => {
       config: { siteName: "Terminal Test" }
     });
 
+    const dummy = cc.createPlugin("dummy", {});
+
     const { createApp } = cc.createCore(cc, { plugins: [] });
     const app = await createApp();
     await app.start();
@@ -246,7 +248,7 @@ describe("full lifecycle integration", () => {
     await expect(app.start()).rejects.toThrow();
     expect(() => app.emit("any", {})).toThrow();
     expect(() => app.has("any")).toThrow();
-    expect(() => app.getPlugin("any")).toThrow();
-    expect(() => app.require("any")).toThrow();
+    expect(() => app.getPlugin(dummy)).toThrow();
+    expect(() => app.require(dummy)).toThrow();
   });
 });

@@ -338,22 +338,23 @@ async function createApp(consumerOptions?: {
       config: resolvedConfigs.get(plugin.name),
       state: states.get(plugin.name),
       emit,
-      getPlugin: (nameOrInstance: string | PluginInstance) => {
-        const n = typeof nameOrInstance === 'string' ? nameOrInstance : nameOrInstance.name;
-        return apis.get(n);
+      // Instance-only: accepts PluginInstance, extracts name at runtime
+      getPlugin: (pluginInstance: PluginInstance) => {
+        return apis.get(pluginInstance.name);
       },
-      require: (nameOrInstance: string | PluginInstance) => {
-        const n = typeof nameOrInstance === 'string' ? nameOrInstance : nameOrInstance.name;
-        const api = apis.get(n);
+      // Instance-only: accepts PluginInstance, throws if not registered
+      require: (pluginInstance: PluginInstance) => {
+        const api = apis.get(pluginInstance.name);
         if (!api) {
           throw new Error(
-            `[${id}] Plugin "${plugin.name}" requires "${n}", ` +
-            `but "${n}" is not registered.\n` +
-            `  Add "${n}" to your plugin list.`
+            `[${id}] Plugin "${plugin.name}" requires "${pluginInstance.name}", ` +
+            `but "${pluginInstance.name}" is not registered.\n` +
+            `  Add "${pluginInstance.name}" to your plugin list.`
           );
         }
         return api;
       },
+      // has stays string-based (boolean check)
       has: (name: string) => apis.has(name),
     };
   }
@@ -403,25 +404,26 @@ async function createApp(consumerOptions?: {
       emit(eventName, payload);
     },
 
-    getPlugin: (nameOrInstance: string | PluginInstance) => {
+    // Instance-only: accepts PluginInstance, extracts name at runtime
+    getPlugin: (pluginInstance: PluginInstance) => {
       guardStopped();
-      const n = typeof nameOrInstance === 'string' ? nameOrInstance : nameOrInstance.name;
-      return apis.get(n);
+      return apis.get(pluginInstance.name);
     },
 
-    require: (nameOrInstance: string | PluginInstance) => {
+    // Instance-only: accepts PluginInstance, throws if not registered
+    require: (pluginInstance: PluginInstance) => {
       guardStopped();
-      const n = typeof nameOrInstance === 'string' ? nameOrInstance : nameOrInstance.name;
-      const api = apis.get(n);
+      const api = apis.get(pluginInstance.name);
       if (!api) {
         throw new Error(
-          `[${id}] app.require("${n}") failed: "${n}" is not registered.\n` +
+          `[${id}] app.require("${pluginInstance.name}") failed: "${pluginInstance.name}" is not registered.\n` +
           `  Check your plugin list.`
         );
       }
       return api;
     },
 
+    // has stays string-based (boolean check)
     has: (name: string) => {
       guardStopped();
       return apis.has(name);

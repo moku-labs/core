@@ -30,6 +30,11 @@ export const authPlugin = createPlugin("auth", {
         // @ts-expect-error -- wrong payload shape: { ctx } is not { userId: string }
         ctx.emit("auth:logout", { ctx });
       }
+
+      ctx.require(routerPlugin).navigate(ctx.config.loginPath);
+
+      // @ts-expect-error -- wrong payload shape: { ctx } is not { from: string, to: string }
+      ctx.emit("router:navigate", { ctx });
     },
     currentUser: () => ctx.state.currentUser,
     isAuthenticated: () => ctx.state.isAuthenticated
