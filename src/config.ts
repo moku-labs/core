@@ -20,7 +20,7 @@
 // =============================================================================
 
 import { type BoundCreateCoreFunction, createCoreFactory } from "./core";
-import { type BoundCreatePluginFunction, createPluginFactory } from "./create-plugin";
+import { type BoundCreatePluginFunction, createPluginFactory } from "./plugin";
 
 // =============================================================================
 // Section 1: Config Result Type

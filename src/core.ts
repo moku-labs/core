@@ -6,7 +6,7 @@
 //
 // createApp (Step 3) is defined inside createCore. It merges consumer options
 // with framework defaults, flattens and validates plugins, then delegates to
-// the kernel (create-app.ts).
+// the kernel (app.ts).
 //
 // -----------------------------------------------------------------------------
 // Sections
@@ -24,9 +24,9 @@
 //
 // =============================================================================
 
-import { kernel } from "./create-app";
-import type { BoundCreatePluginFunction } from "./create-plugin";
+import { kernel } from "./app";
 import { flattenPlugins, validatePlugins } from "./flatten";
+import type { BoundCreatePluginFunction } from "./plugin";
 import type { AnyPluginInstance } from "./type-utilities";
 import type { App, CreateAppOptions } from "./types";
 
