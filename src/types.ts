@@ -279,25 +279,50 @@ type App<
 } & BuildPluginApis<P>;
 
 /**
- * Options for createApp (Step 3), typed to accept only valid keys:
- * global config keys, plugin name keys (for plugin config overrides),
- * and 'plugins' for extra plugins.
- *
- * Uses a mapped type over Config keys plus plugin names to get excess
- * property checking from TypeScript.
+ * Context passed to consumer lifecycle callbacks (onReady, onStart, onStop).
+ * Includes frozen config, event emission, plugin lookup, and mounted plugin APIs.
+ */
+type AppCallbackContext<
+  Config extends Record<string, unknown>,
+  Events extends Record<string, unknown>,
+  // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability
+  P extends PluginInstance<string, any, any, any, any>
+> = {
+  readonly config: Readonly<Config>;
+  readonly emit: EmitFunction<Events>;
+  readonly getPlugin: GetPluginFunction;
+  readonly require: RequireFunction;
+  readonly has: HasFunction;
+} & BuildPluginApis<P>;
+
+/**
+ * Options for createApp (Step 3). Structured namespaces replace flat key discrimination:
+ * - `plugins`: extra consumer plugins
+ * - `config`: global config overrides (shallow-merged with framework defaults)
+ * - `pluginConfigs`: per-plugin config overrides keyed by plugin name
+ * - `onReady/onError/onStart/onStop`: consumer lifecycle callbacks
  */
 type CreateAppOptions<
   Config extends Record<string, unknown>,
+  Events extends Record<string, unknown>,
   // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability
   P extends PluginInstance<string, any, any, any, any>,
   // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability
   ExtraPlugins extends readonly PluginInstance<string, any, any, any, any>[]
 > = {
-  [K in keyof Config]?: Config[K];
-} & {
-  [K in ExtractName<P> as IsLiteralString<K> extends true ? K : never]?: unknown;
-} & {
   plugins?: ExtraPlugins;
+  config?: { [K in keyof Config]?: Config[K] };
+  pluginConfigs?: {
+    [K in P as ExtractConfig<K> extends void
+      ? never
+      : IsLiteralString<ExtractName<K>> extends true
+        ? ExtractName<K>
+        : never]?: Partial<ExtractConfig<K>>;
+  };
+  onReady?: (context: AppCallbackContext<Config, Events, P>) => void | Promise<void>;
+  onError?: (error: Error, context: AppCallbackContext<Config, Events, P>) => void;
+  onStart?: (context: AppCallbackContext<Config, Events, P>) => void | Promise<void>;
+  onStop?: (context: AppCallbackContext<Config, Events, P>) => void | Promise<void>;
 };
 
 // =============================================================================
@@ -326,6 +351,7 @@ export type {
   DepsEvents,
   // Aggregate types
   BuildPluginApis,
+  AppCallbackContext,
   App,
   CreateAppOptions
 };

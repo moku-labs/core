@@ -73,7 +73,12 @@ interface CreateCoreResult<
    * @returns A promise that resolves to the frozen, fully typed App object.
    */
   readonly createApp: <const ExtraPlugins extends readonly AnyPluginInstance[] = readonly []>(
-    options?: CreateAppOptions<Config, Plugins[number] | ExtraPlugins[number], [...ExtraPlugins]>
+    options?: CreateAppOptions<
+      Config,
+      Events,
+      Plugins[number] | ExtraPlugins[number],
+      [...ExtraPlugins]
+    >
   ) => Promise<App<Config, Events, Plugins[number] | ExtraPlugins[number]>>;
   /** Re-exported createPlugin for consumer convenience. */
   readonly createPlugin: BoundCreatePluginFunction<Config, Events>;
@@ -167,8 +172,15 @@ function createCoreConfig<
      */
     // biome-ignore lint/suspicious/noExplicitAny: createApp options and return are dynamically typed; type safety at boundary via CreateCoreResult
     const createApp = async (consumerOptions?: any): Promise<any> => {
-      // Extract extra plugins from consumer options
-      const { plugins: extraPlugins, ...rest } = consumerOptions ?? {};
+      const {
+        plugins: extraPlugins,
+        config: consumerConfig,
+        pluginConfigs: consumerPluginConfigOverrides,
+        onReady: consumerOnReady,
+        onError: consumerOnError,
+        onStart: consumerOnStart,
+        onStop: consumerOnStop
+      } = consumerOptions ?? {};
 
       // Merge plugin lists: framework defaults first, consumer extras second
       const allPlugins = [...defaultPlugins, ...(extraPlugins ?? [])];
@@ -179,17 +191,22 @@ function createCoreConfig<
       // Validate: reserved names, duplicates, dependency existence and order
       validatePlugins(_frameworkId, flatPlugins);
 
-      // Delegate to kernel function (create-app.ts).
-      // The kernel receives all captured context and handles:
-      // config resolution, state creation, event bus, API building, lifecycle.
+      // Delegate to kernel function with pre-separated config and plugin configs
       return kernel({
         id: _frameworkId,
         configDefaults,
         frameworkPluginConfigs,
         flatPlugins,
-        consumerOverrides: rest,
+        configOverrides: consumerConfig ?? {},
+        consumerPluginConfigs: consumerPluginConfigOverrides ?? {},
         onReady,
-        onError
+        onError,
+        consumer: {
+          onReady: consumerOnReady,
+          onError: consumerOnError,
+          onStart: consumerOnStart,
+          onStop: consumerOnStop
+        }
       });
     };
 

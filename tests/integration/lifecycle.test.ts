@@ -88,8 +88,8 @@ describe("full lifecycle integration", () => {
 
     // Step 3: createApp (init phase)
     const app = await createApp({
-      siteName: "My App",
-      database: { port: 3306 }
+      config: { siteName: "My App" },
+      pluginConfigs: { database: { port: 3306 } }
     });
 
     // Verify init phase completed

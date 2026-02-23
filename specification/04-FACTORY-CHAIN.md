@@ -18,7 +18,7 @@ Step 2: createCore(coreConfig, { plugins, pluginConfigs })
   -> Returns: { createApp, createPlugin }
   -> Captures: default plugins, default plugin configs, framework callbacks
 
-Step 3: createApp({ plugins?, ...configOverrides, ...pluginConfigs })
+Step 3: createApp({ plugins?, config?, pluginConfigs?, onReady?, onError?, onStart?, onStop? })
   -> Returns: Promise<App>
   -> Captures: everything from steps 1 and 2, plus consumer additions
 ```
@@ -163,6 +163,7 @@ export const { createApp, createPlugin } = framework;
 - Consumer's extra plugins
 - Consumer's config overrides
 - Consumer's plugin configs
+- Consumer's lifecycle callbacks (`onReady`, `onError`, `onStart`, `onStop`)
 
 **What it returns:**
 - `Promise<App>` with full type inference on all plugin APIs
@@ -182,12 +183,17 @@ const blogPlugin = createPlugin('blog', {
 // Step 3: Create the app
 const app = await createApp({
   plugins: [blogPlugin],
-  // Config overrides (typed from Config: siteName, mode)
-  siteName: 'My Blog',
-  mode: 'production',
-  // Plugin configs (typed from plugin names: router, blog, etc.)
-  router: { basePath: '/blog' },
-  blog: { postsPerPage: 5 },
+  config: {
+    siteName: 'My Blog',
+    mode: 'production',
+  },
+  pluginConfigs: {
+    router: { basePath: '/blog' },
+    blog: { postsPerPage: 5 },
+  },
+  onReady: (ctx) => {
+    console.log(`${ctx.config.siteName} ready`);
+  },
 });
 
 // Full type inference on plugin APIs
@@ -197,12 +203,7 @@ app.blog.listPosts();           // typed: blog is a consumer plugin
 await app.stop();
 ```
 
-**Flat object parsing:** At runtime, `createApp` parses the flat object by:
-1. Extracting reserved keys (`plugins`)
-2. Extracting plugin config keys (matching registered plugin names)
-3. Treating remaining keys as `Config` overrides
-
-TypeScript provides compile-time enforcement: `siteName` is typed as `string`, `mode` is typed as `'development' | 'production'`, `router` is typed as `Partial<RouterConfig>`, etc.
+**Structured namespaces:** The `createApp` options use explicit namespaces — `config` for global overrides, `pluginConfigs` for per-plugin overrides, and callback fields for consumer lifecycle hooks. No runtime key discrimination is needed.
 
 ---
 
@@ -228,10 +229,10 @@ createCoreConfig<Config, Events>
               |
               |  DefaultPlugins = [typeof routerPlugin, typeof rendererPlugin]
               |
-              +---> createApp({ plugins?, ...Partial<Config>, ...BuildPluginConfigs })
+              +---> createApp({ plugins?, config?, pluginConfigs?, onReady?, ... })
                       |
                       |  AllPlugins = [...DefaultPlugins, ...ConsumerPlugins]
-                      |  Options type = { plugins? } & Partial<Config> & BuildPluginConfigs<AllPlugins>
+                      |  config typed as Partial<Config>, pluginConfigs keyed by plugin name
                       |
                       +---> App<Config, Events, AllPlugins>
                               |
@@ -348,10 +349,14 @@ const dashboardPlugin = createPlugin('dashboard', {
 
 const app = await createApp({
   plugins: [dashboardPlugin],
-  appName: 'My Dashboard',    // typed as string (from Config)
-  debug: true,                // typed as boolean (from Config)
-  dashboard: {                // typed from dashboardPlugin's config
-    refreshInterval: 1000,
+  config: {
+    appName: 'My Dashboard',    // typed as string (from Config)
+    debug: true,                // typed as boolean (from Config)
+  },
+  pluginConfigs: {
+    dashboard: {                // typed from dashboardPlugin's config
+      refreshInterval: 1000,
+    },
   },
 });
 

@@ -60,7 +60,7 @@ describe("3-layer flow (SAND-04)", () => {
   it("cross-file import chain preserves types", async () => {
     const { createApp } = await import("./demo/moku-web/index");
 
-    const app = await createApp({ siteName: "Test Blog" });
+    const app = await createApp({ config: { siteName: "Test Blog" } });
 
     // Verify specific API methods are typed (would FAIL on `any`)
     expectTypeOf(app.router.navigate).toBeFunction();
@@ -319,7 +319,7 @@ describe("config resolution", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [probe] });
-    await createApp({ siteName: "Blog", mode: "production" });
+    await createApp({ config: { siteName: "Blog", mode: "production" } });
 
     expect(capturedGlobal.siteName).toBe("Blog");
     expect(capturedGlobal.mode).toBe("production");
@@ -340,7 +340,7 @@ describe("config resolution", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [router] });
-    await createApp({ router: { basePath: "/blog" } });
+    await createApp({ pluginConfigs: { router: { basePath: "/blog" } } });
 
     expect(capturedConfig.basePath).toBe("/blog");
     expect(capturedConfig.trailingSlash).toBe(false);

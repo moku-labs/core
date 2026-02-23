@@ -73,7 +73,7 @@ describe("global config overrides via createApp", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [probe] });
-    await createApp({ siteName: "Blog" });
+    await createApp({ config: { siteName: "Blog" } });
 
     expect(capturedGlobal.siteName).toBe("Blog");
     // mode should retain default
@@ -91,7 +91,7 @@ describe("global config overrides via createApp", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [probe] });
-    await createApp({ siteName: "New Site", mode: "production" });
+    await createApp({ config: { siteName: "New Site", mode: "production" } });
 
     expect(capturedGlobal.siteName).toBe("New Site");
     expect(capturedGlobal.mode).toBe("production");
@@ -155,7 +155,7 @@ describe("plugin config overrides via createApp", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [router] });
-    await createApp({ router: { basePath: "/blog" } });
+    await createApp({ pluginConfigs: { router: { basePath: "/blog" } } });
 
     expect(capturedConfig.basePath).toBe("/blog");
     expect(capturedConfig.trailingSlash).toBe(false);
@@ -202,7 +202,7 @@ describe("3-level config merge", () => {
       plugins: [router],
       pluginConfigs: { router: { basePath: "/framework", retries: 5 } }
     });
-    await createApp({ router: { basePath: "/consumer" } });
+    await createApp({ pluginConfigs: { router: { basePath: "/consumer" } } });
 
     // consumer overrides basePath (from /framework -> /consumer)
     expect(capturedConfig.basePath).toBe("/consumer");
@@ -296,7 +296,7 @@ describe("shallow merge only", () => {
 
     const { createApp } = cc.createCore(cc, { plugins: [probe] });
     // Shallow merge: entire nested object replaced
-    await createApp({ nested: { a: 99, b: 2 } });
+    await createApp({ config: { nested: { a: 99, b: 2 } } });
 
     const nested = capturedGlobal.nested as { a: number; b: number };
     expect(nested.a).toBe(99);
@@ -305,11 +305,11 @@ describe("shallow merge only", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Key discrimination: config keys vs plugin config keys
+// Structured config namespaces
 // ---------------------------------------------------------------------------
 
-describe("key discrimination", () => {
-  it("keys matching plugin names go to plugin config, rest to global", async () => {
+describe("structured config namespaces", () => {
+  it("config goes to global, pluginConfigs goes to per-plugin", async () => {
     let capturedGlobal: Record<string, unknown> = {};
     let capturedPluginConfig: Record<string, unknown> = {};
     const cc = createTestCore();
@@ -324,8 +324,8 @@ describe("key discrimination", () => {
 
     const { createApp } = cc.createCore(cc, { plugins: [router] });
     await createApp({
-      siteName: "Blog",
-      router: { basePath: "/blog" }
+      config: { siteName: "Blog" },
+      pluginConfigs: { router: { basePath: "/blog" } }
     });
 
     // siteName goes to global config

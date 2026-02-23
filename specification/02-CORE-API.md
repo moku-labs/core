@@ -129,21 +129,29 @@ export const { createApp, createPlugin } = framework;
 function createApp(
   options?: {
     plugins?: PluginInstance[];
-    // ...Partial<Config> keys (global config overrides)
-    // ...BuildPluginConfigs<AllPlugins> keys (per-plugin configs)
+    config?: Partial<Config>;
+    pluginConfigs?: { [pluginName: string]?: PluginConfig };
+    onReady?: (context: { config: Readonly<Config> }) => void | Promise<void>;
+    onError?: (error: Error, context?: unknown) => void;
+    onStart?: (context: { config: Readonly<Config> }) => void | Promise<void>;
+    onStop?: (context: { config: Readonly<Config> }) => void | Promise<void>;
   },
 ): Promise<App<Config, Events, AllPlugins>>;
 ```
 
-**Single flat object.** The `options` parameter is a flat object that combines three kinds of keys:
+**Structured namespaces.** The `options` parameter uses explicit namespaces:
 
-| Key type | How identified | Example |
+| Key | Purpose | Example |
 |---|---|---|
-| Reserved keys | `plugins` | `plugins: [blogPlugin]` |
-| Config keys | Matches a key in `Config` type | `siteName: 'My Blog'` |
-| Plugin config keys | Matches a registered plugin name | `router: { basePath: '/' }` |
+| `plugins` | Extra consumer plugins | `plugins: [blogPlugin]` |
+| `config` | Global config overrides (typed from `Config`) | `config: { siteName: 'My Blog' }` |
+| `pluginConfigs` | Per-plugin config overrides (keyed by plugin name) | `pluginConfigs: { router: { basePath: '/' } }` |
+| `onReady` | Called after all plugin `onInit` and framework `onReady` | `onReady: (ctx) => {}` |
+| `onError` | Error handler for hook dispatch and stop errors | `onError: (error) => {}` |
+| `onStart` | Called after all plugin `onStart` (inside `app.start()`) | `onStart: (ctx) => {}` |
+| `onStop` | Called after all plugin `onStop` (inside `app.stop()`), even if a plugin threw | `onStop: (ctx) => {}` |
 
-The runtime separates these at startup: reserved keys are extracted first, then plugin config keys (matching registered plugin names), and remaining keys are treated as config overrides.
+Consumer callbacks are additive to framework-level callbacks set in `createCore`.
 
 **Returns:** `Promise<App>`. The app is fully initialized -- all plugins have completed their `onInit` phase. Consumers call `app.start()` and `app.stop()` to control the running lifecycle.
 
@@ -158,12 +166,17 @@ import { blogPlugin } from './plugins/blog';
 
 const app = await createApp({
   plugins: [blogPlugin],
-  // Config overrides (typed from Config)
-  siteName: 'My Blog',
-  mode: 'production',
-  // Plugin configs (typed by plugin name)
-  router: { basePath: '/' },
-  blog: { postsPerPage: 5 },
+  config: {
+    siteName: 'My Blog',
+    mode: 'production',
+  },
+  pluginConfigs: {
+    router: { basePath: '/' },
+    blog: { postsPerPage: 5 },
+  },
+  onReady: (ctx) => {
+    console.log(`${ctx.config.siteName} ready`);
+  },
 });
 ```
 
@@ -172,8 +185,10 @@ const app = await createApp({
 ```typescript
 // Minimal: framework defaults only, just config overrides
 const app = await createApp({
-  siteName: 'Simple Site',
-  mode: 'production',
+  config: {
+    siteName: 'Simple Site',
+    mode: 'production',
+  },
 });
 ```
 
@@ -339,16 +354,21 @@ const blogPlugin = createPlugin('blog', {
   }),
 });
 
-// Single call -- flat object with everything
+// Single call -- structured namespaces
 const app = await createApp({
   plugins: [analyticsPlugin, blogPlugin],
-  // Config overrides
-  siteName: 'My Personal Blog',
-  description: 'Thoughts on code and life',
-  mode: 'production',
-  // Plugin configs
-  analytics: { trackingId: 'G-XXXXX' },
-  blog: { postsPerPage: 5 },
+  config: {
+    siteName: 'My Personal Blog',
+    description: 'Thoughts on code and life',
+    mode: 'production',
+  },
+  pluginConfigs: {
+    analytics: { trackingId: 'G-XXXXX' },
+    blog: { postsPerPage: 5 },
+  },
+  onReady: (ctx) => {
+    console.log(`${ctx.config.siteName} initialized`);
+  },
 });
 
 // App is fully initialized. All async init complete.

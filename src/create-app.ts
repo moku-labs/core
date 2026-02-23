@@ -6,7 +6,7 @@
 // pseudocode (specification/13-KERNEL-PSEUDOCODE.md):
 //
 //   Step 1-3: (handled by createCore -- merge, flatten, validate)
-//   Step 4: Key discrimination (separate config overrides from plugin configs)
+//   Step 4: Build plugin name set
 //   Step 5: Resolve global config (shallow merge, freeze)
 //   Step 6: Resolve per-plugin config (3-level merge, freeze)
 //   Step 7: Create state (MinimalContext)
@@ -24,42 +24,21 @@ interface KernelParameters {
   readonly configDefaults: Record<string, unknown>;
   readonly frameworkPluginConfigs: Record<string, unknown>;
   readonly flatPlugins: AnyPluginInstance[];
-  readonly consumerOverrides: Record<string, unknown>;
+  readonly configOverrides: Record<string, unknown>;
+  readonly consumerPluginConfigs: Record<string, unknown>;
   // biome-ignore lint/suspicious/noExplicitAny: onReady callback uses framework Config which varies
   readonly onReady?: ((context: { config: Readonly<any> }) => void | Promise<void>) | undefined;
   readonly onError?: ((error: Error) => void) | undefined;
-}
-
-/**
- * Separate consumer overrides into global config overrides and plugin config overrides.
- * Keys matching a registered plugin name go to plugin configs; the rest are global.
- * @param pluginNameSet - Set of registered plugin names.
- * @param consumerOverrides - Flat consumer options (excluding 'plugins' key).
- * @returns Separated config overrides and plugin config overrides.
- * @example
- * ```ts
- * const { configOverrides, consumerPluginConfigs } = discriminateKeys(
- *   new Set(["router", "seo"]),
- *   { siteName: "Blog", router: { basePath: "/blog" } }
- * );
- * ```
- */
-function discriminateKeys(
-  pluginNameSet: Set<string>,
-  consumerOverrides: Record<string, unknown>
-): { configOverrides: Record<string, unknown>; consumerPluginConfigs: Record<string, unknown> } {
-  const configOverrides: Record<string, unknown> = {};
-  const consumerPluginConfigs: Record<string, unknown> = {};
-
-  for (const [key, value] of Object.entries(consumerOverrides)) {
-    if (pluginNameSet.has(key)) {
-      consumerPluginConfigs[key] = value;
-    } else {
-      configOverrides[key] = value;
-    }
-  }
-
-  return { configOverrides, consumerPluginConfigs };
+  readonly consumer?: {
+    // biome-ignore lint/suspicious/noExplicitAny: callback context is dynamically typed; type safety enforced by CreateAppOptions
+    readonly onReady?: ((context: any) => void | Promise<void>) | undefined;
+    // biome-ignore lint/suspicious/noExplicitAny: callback context is dynamically typed; type safety enforced by CreateAppOptions
+    readonly onError?: ((error: Error, context?: any) => void) | undefined;
+    // biome-ignore lint/suspicious/noExplicitAny: callback context is dynamically typed; type safety enforced by CreateAppOptions
+    readonly onStart?: ((context: any) => void | Promise<void>) | undefined;
+    // biome-ignore lint/suspicious/noExplicitAny: callback context is dynamically typed; type safety enforced by CreateAppOptions
+    readonly onStop?: ((context: any) => void | Promise<void>) | undefined;
+  };
 }
 
 /**
@@ -118,7 +97,6 @@ function resolvePluginConfigs(
  * const states = createPluginStates(flatPlugins, globalConfig, resolvedConfigs);
  * ```
  */
-// biome-ignore lint/suspicious/noExplicitAny: state values are plugin-specific
 function createPluginStates(
   flatPlugins: AnyPluginInstance[],
   globalConfig: Readonly<Record<string, unknown>>,
@@ -367,6 +345,80 @@ async function executeStop(
 }
 
 /**
+ * Build callback context for consumer lifecycle callbacks (onReady, onStart, onStop).
+ * Includes frozen config, emit, getPlugin, require, has, and mounted plugin APIs.
+ * @param id - Framework identifier for error messages.
+ * @param globalConfig - Frozen global config.
+ * @param emit - Event emit function.
+ * @param apis - Map of plugin name to API object.
+ * @param pluginNameSet - Set of all registered plugin names.
+ * @returns A context object matching AppCallbackContext.
+ * @example
+ * ```ts
+ * const ctx = buildCallbackContext(id, globalConfig, emit, apis, pluginNameSet);
+ * consumer.onReady(ctx);
+ * ```
+ */
+function buildCallbackContext(
+  id: string,
+  globalConfig: Readonly<Record<string, unknown>>,
+  // biome-ignore lint/suspicious/noExplicitAny: event payloads are dynamically typed
+  emit: (eventName: string, payload?: any) => void,
+  // biome-ignore lint/suspicious/noExplicitAny: API values are plugin-specific
+  apis: Map<string, any>,
+  pluginNameSet: Set<string>
+  // biome-ignore lint/suspicious/noExplicitAny: context is dynamically constructed with plugin APIs
+): any {
+  /**
+   * Look up a plugin API by instance reference.
+   * @param instance - The plugin instance to look up.
+   * @returns The plugin API, or undefined if not registered.
+   * @example
+   * ```ts
+   * const api = getPlugin(routerPlugin);
+   * ```
+   */
+  const getPlugin = (instance: AnyPluginInstance) => apis.get(instance.name);
+
+  /**
+   * Look up a plugin API by instance reference, throwing if not found.
+   * @param instance - The plugin instance to require.
+   * @returns The plugin API.
+   * @example
+   * ```ts
+   * const api = requirePlugin(routerPlugin);
+   * ```
+   */
+  const requirePlugin = (instance: AnyPluginInstance) => {
+    const api = apis.get(instance.name);
+    if (!api) {
+      throw new Error(
+        `[${id}] Plugin "${instance.name}" is not registered.\n  Add "${instance.name}" to your plugin list.`
+      );
+    }
+    return api;
+  };
+
+  /**
+   * Check if a plugin is registered by name.
+   * @param name - The plugin name to check.
+   * @returns True if the plugin is registered.
+   * @example
+   * ```ts
+   * const exists = has("router");
+   * ```
+   */
+  const has = (name: string) => pluginNameSet.has(name);
+
+  // biome-ignore lint/suspicious/noExplicitAny: context is dynamically constructed with plugin APIs
+  const context: any = { config: globalConfig, emit, getPlugin, require: requirePlugin, has };
+  for (const [name, api] of apis) {
+    context[name] = api;
+  }
+  return context;
+}
+
+/**
  * Build the frozen app object with start, stop, emit, require, getPlugin, has methods.
  * Plugin APIs are mounted directly on the app object (e.g., app.router, app.seo).
  * @param id - Framework identifier for error messages.
@@ -377,6 +429,7 @@ async function executeStop(
  * @param apis - Map of plugin name to API object.
  * @param pluginNameSet - Set of all registered plugin names.
  * @param onError - Optional error handler for best-effort stop.
+ * @param consumer - Optional consumer lifecycle callbacks.
  * @returns The frozen app object.
  * @example
  * ```ts
@@ -384,7 +437,6 @@ async function executeStop(
  * await app.start();
  * ```
  */
-// biome-ignore lint/suspicious/noExplicitAny: app object is dynamically constructed with plugin APIs
 function buildApp(
   id: string,
   flatPlugins: AnyPluginInstance[],
@@ -396,7 +448,8 @@ function buildApp(
   // biome-ignore lint/suspicious/noExplicitAny: API values are plugin-specific
   apis: Map<string, any>,
   pluginNameSet: Set<string>,
-  onError: ((error: Error) => void) | undefined
+  onError: ((error: Error) => void) | undefined,
+  consumer?: KernelParameters["consumer"]
   // biome-ignore lint/suspicious/noExplicitAny: app object is dynamically constructed with plugin APIs
 ): any {
   let started = false;
@@ -441,6 +494,10 @@ function buildApp(
           await plugin.spec.onStart(buildPluginContext(plugin));
         }
       }
+
+      if (consumer?.onStart) {
+        await consumer.onStart(buildCallbackContext(id, globalConfig, emit, apis, pluginNameSet));
+      }
     },
 
     /**
@@ -458,7 +515,18 @@ function buildApp(
         throw new Error(`[${id}] App not started.\n  Call start() before stop().`);
       }
       stopped = true;
-      await executeStop(flatPlugins, globalConfig, onError);
+      let stopError: Error | undefined;
+      try {
+        await executeStop(flatPlugins, globalConfig, onError);
+      } catch (error) {
+        stopError = error as Error;
+      }
+
+      if (consumer?.onStop) {
+        await consumer.onStop(buildCallbackContext(id, globalConfig, emit, apis, pluginNameSet));
+      }
+
+      if (stopError) throw stopError;
     },
 
     /**
@@ -541,7 +609,7 @@ function buildApp(
  * createCore. Performs config resolution, state creation, event bus setup,
  * API building, lifecycle execution, and returns a frozen app object.
  * @param parameters - All context captured by createCore: id, config defaults,
- *   framework plugin configs, flattened plugins, consumer overrides, callbacks.
+ *   framework plugin configs, flattened plugins, config overrides, plugin configs, callbacks.
  * @returns A promise that resolves to the frozen App object.
  * @example
  * ```ts
@@ -550,7 +618,8 @@ function buildApp(
  *   configDefaults: { siteName: "Untitled" },
  *   frameworkPluginConfigs: {},
  *   flatPlugins: [],
- *   consumerOverrides: { siteName: "Blog" },
+ *   configOverrides: { siteName: "Blog" },
+ *   consumerPluginConfigs: {},
  * });
  * ```
  */
@@ -561,17 +630,30 @@ async function kernel(parameters: KernelParameters): Promise<any> {
     configDefaults,
     frameworkPluginConfigs,
     flatPlugins,
-    consumerOverrides,
+    configOverrides,
+    consumerPluginConfigs,
     onReady,
-    onError
+    onError,
+    consumer
   } = parameters;
 
-  // Step 4: Key discrimination
+  // Step 4: Build plugin name set
   const pluginNameSet = new Set(flatPlugins.map(plugin => plugin.name));
-  const { configOverrides, consumerPluginConfigs } = discriminateKeys(
-    pluginNameSet,
-    consumerOverrides
-  );
+
+  // Combine framework + consumer onError into a single handler.
+  // Consumer onError receives the full callback context (config, plugin APIs, etc.).
+  // References to globalConfig/emit/apis are resolved at call time, not definition time.
+  const combinedOnError =
+    onError || consumer?.onError
+      ? (error: Error): void => {
+          if (onError) onError(error);
+          if (consumer?.onError)
+            consumer.onError(
+              error,
+              buildCallbackContext(id, globalConfig, emit, apis, pluginNameSet)
+            );
+        }
+      : undefined;
 
   // Step 5: Resolve global config (shallow merge, freeze)
   const globalConfig: Readonly<Record<string, unknown>> = Object.freeze({
@@ -590,7 +672,7 @@ async function kernel(parameters: KernelParameters): Promise<any> {
   const states = createPluginStates(flatPlugins, globalConfig, resolvedConfigs);
 
   // Step 8a: Build event bus (empty -- hooks registered in Step 8b)
-  const { emit, registerHook } = buildEventBus(onError);
+  const { emit, registerHook } = buildEventBus(combinedOnError);
 
   // Build context factory (needed by hooks and APIs)
   // biome-ignore lint/suspicious/noExplicitAny: API values are plugin-specific
@@ -627,6 +709,11 @@ async function kernel(parameters: KernelParameters): Promise<any> {
     await onReady({ config: globalConfig });
   }
 
+  // Call consumer onReady callback after framework onReady
+  if (consumer?.onReady) {
+    await consumer.onReady(buildCallbackContext(id, globalConfig, emit, apis, pluginNameSet));
+  }
+
   // Step 11: Build and freeze app
   return buildApp(
     id,
@@ -636,7 +723,8 @@ async function kernel(parameters: KernelParameters): Promise<any> {
     emit,
     apis,
     pluginNameSet,
-    onError
+    combinedOnError,
+    consumer
   );
 }
 

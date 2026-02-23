@@ -15,7 +15,7 @@ Every significant "why" in the v3 architecture:
 | 2 | 2 generics on createCoreConfig (Config, Events) | 3 generics (adding State) | State is deferred. 2 generics keep the surface minimal. The signature can expand to 3 later without breaking existing code. |
 | 3 | 0 generics on createPlugin | 4-7 explicit generics (N, C, S, A, Events, Deps) | All types inferred from the spec object. PluginEvents inferred from the `events` register callback. Config and Events flow in from the closure. Zero manual generics anywhere. |
 | 4 | 3 lifecycle phases (init, start, stop) | Many phases with pre/after hooks | Covers all real use cases. Pre/after hooks add complexity for marginal benefit. Plugins that need cross-cutting notification use the event system. |
-| 5 | Flat createApp object | Separate createConfig + createApp two-step | Single-call consumer API. The type system discriminates config keys from plugin config keys from reserved keys. Simpler for consumers. |
+| 5 | Structured createApp namespaces (`config`, `pluginConfigs`, callbacks) | Flat object with runtime key discrimination | Explicit namespaces eliminate ambiguity. No runtime key discrimination needed. Consumer lifecycle callbacks (`onReady`, `onError`, `onStart`, `onStop`) are additive to framework-level callbacks. |
 | 6 | Sequential async execution | Parallel execution within phases | Deterministic, easy to reason about. No parallel footgun. Plugin A's onInit resolves before Plugin B's begins. |
 | 7 | Shallow merge only | Deep merge with library | One rule: `{ ...defaults, ...overrides }`. Predictable. No surprises with nested objects. |
 | 8 | Instance-based depends | String-based depends | Importing a plugin instance gives TypeScript the phantom types. Enables fully typed ctx.require(pluginInstance). |
@@ -166,18 +166,28 @@ This is the longest section. It covers the entire init phase.
 ```pseudo-typescript
 async function createApp(consumerOptions?: {
   plugins?: PluginInstance[];
-  // ...Partial<Config>           -- config overrides (matching Config keys)
-  // ...BuildPluginConfigs<All>   -- plugin configs (matching plugin names)
+  config?: Partial<Config>;
+  pluginConfigs?: Record<string, any>;
+  onReady?: (context: { config: Readonly<Config> }) => void | Promise<void>;
+  onError?: (error: Error, context?: unknown) => void;
+  onStart?: (context: { config: Readonly<Config> }) => void | Promise<void>;
+  onStop?: (context: { config: Readonly<Config> }) => void | Promise<void>;
 }): Promise<App<Config, Events, AllPlugins>> {
 
   // =========================================================================
-  // Step 1: Parse flat options
+  // Step 1: Destructure structured options
   // =========================================================================
-  // RATIONALE: Single flat object is ergonomic for consumers.
-  // Runtime separates: reserved keys (plugins), plugin config keys
-  // (matching registered plugin names), and remaining keys (config overrides).
-  const { plugins: extraPlugins, ...rest } = consumerOptions ?? {};
-  // Deferred: actual key separation happens after we know all plugin names (Step 3)
+  // RATIONALE: Explicit namespaces eliminate ambiguity. No runtime key
+  // discrimination needed. config, pluginConfigs, and callbacks are separate.
+  const {
+    plugins: extraPlugins,
+    config: configOverrides,
+    pluginConfigs: consumerPluginConfigs,
+    onReady: consumerOnReady,
+    onError: consumerOnError,
+    onStart: consumerOnStart,
+    onStop: consumerOnStop,
+  } = consumerOptions ?? {};
 
   // =========================================================================
   // Step 2: Merge plugin lists
@@ -248,23 +258,13 @@ async function createApp(consumerOptions?: {
   // Config keys are identified from the Config type shape.
   // Plugin config keys are identified by matching registered plugin names.
 
-  // 6a. Separate config overrides from plugin configs
-  const pluginNameSet = new Set(names);
-  const configOverrides: Partial<Config> = {};
-  const consumerPluginConfigs: Record<string, any> = {};
-
-  for (const [key, value] of Object.entries(rest)) {
-    if (pluginNameSet.has(key)) {
-      consumerPluginConfigs[key] = value;
-    } else {
-      configOverrides[key] = value;
-    }
-  }
+  // 6a. Config overrides and plugin configs are already separated by the
+  // structured options (no runtime key discrimination needed).
 
   // 6b. Global config: framework defaults <- consumer overrides
   const globalConfig: Readonly<Config> = Object.freeze({
     ...configDefaults,
-    ...configOverrides,
+    ...(configOverrides ?? {}),
   });
 
   // 6c. Per-plugin config: plugin defaults <- framework overrides <- consumer overrides
@@ -273,7 +273,7 @@ async function createApp(consumerOptions?: {
     const merged = Object.freeze({
       ...plugin.spec.config,
       ...frameworkPluginConfigs[plugin.name],
-      ...consumerPluginConfigs[plugin.name],
+      ...(consumerPluginConfigs ?? {})[plugin.name],
     });
     resolvedConfigs.set(plugin.name, merged);
   }
@@ -303,6 +303,12 @@ async function createApp(consumerOptions?: {
   // invariant that hooks are registered before APIs and onInit run.
   const hookMap = new Map<string, Array<(payload: any) => void | Promise<void>>>();
 
+  // Combined onError: calls both framework and consumer handlers
+  const combinedOnError = (err: Error) => {
+    if (options.onError) options.onError(err);
+    if (consumerOnError) consumerOnError(err);
+  };
+
   async function dispatch(eventName: string, payload: any) {
     const handlers = hookMap.get(eventName) ?? [];
     for (const handler of handlers) {
@@ -310,7 +316,7 @@ async function createApp(consumerOptions?: {
         await handler(payload);
       } catch (err) {
         // One failing hook does not stop other hooks (same pattern as executeStop).
-        if (options.onError) options.onError(err as Error);
+        combinedOnError(err as Error);
       }
     }
   }
@@ -403,6 +409,11 @@ async function createApp(consumerOptions?: {
     await options.onReady({ config: globalConfig });
   }
 
+  // Call consumer onReady if provided (after framework onReady)
+  if (consumerOnReady) {
+    await consumerOnReady({ config: globalConfig });
+  }
+
   // =========================================================================
   // Step 11: Build and freeze app
   // =========================================================================
@@ -480,6 +491,11 @@ async start() {
       await plugin.spec.onStart(ctx);
     }
   }
+
+  // Consumer onStart fires after all plugin onStart
+  if (consumerOnStart) {
+    await consumerOnStart({ config: globalConfig });
+  }
 }
 ```
 
@@ -494,7 +510,8 @@ async stop() {
   // during its own cleanup.
   //
   // Best-effort: if a plugin's onStop throws, capture the error but
-  // continue stopping remaining plugins. Re-throw the first error after all done.
+  // continue stopping remaining plugins. Consumer onStop fires even if
+  // a plugin threw (via try/finally). Re-throw the first error after all done.
 
   guardStopped();
 
@@ -505,15 +522,28 @@ async stop() {
 
   let firstError: Error | null = null;
 
-  for (const plugin of [...flatPlugins].reverse()) {
-    if (plugin.spec.onStop) {
-      try {
-        await plugin.spec.onStop({ global: globalConfig });
-      } catch (err) {
-        if (!firstError) firstError = err as Error;
-        // Continue stopping remaining plugins (best-effort teardown)
-        if (options.onError) options.onError(err as Error);
+  // Combined onError: calls both framework and consumer handlers
+  const combinedOnError = (err: Error) => {
+    if (options.onError) options.onError(err);
+    if (consumerOnError) consumerOnError(err);
+  };
+
+  try {
+    for (const plugin of [...flatPlugins].reverse()) {
+      if (plugin.spec.onStop) {
+        try {
+          await plugin.spec.onStop({ global: globalConfig });
+        } catch (err) {
+          if (!firstError) firstError = err as Error;
+          // Continue stopping remaining plugins (best-effort teardown)
+          combinedOnError(err as Error);
+        }
       }
+    }
+  } finally {
+    // Consumer onStop fires even if a plugin's onStop threw
+    if (consumerOnStop) {
+      await consumerOnStop({ config: globalConfig });
     }
   }
 
@@ -589,7 +619,8 @@ Framework index.ts:
     -> returns { createApp, createPlugin }
 
 Consumer main.ts:
-  await createApp({ plugins, ...configOverrides, ...pluginConfigs })
+  await createApp({ plugins?, config?, pluginConfigs?, onReady?, onError?, onStart?, onStop? })
+    -> destructure structured options (no key discrimination)
     -> merge plugins: [...defaults, ...extras]
     -> flatten sub-plugins (depth-first)
     -> validate names (no duplicates)
@@ -601,13 +632,16 @@ Consumer main.ts:
     -> register hooks (hooks(ctx), context-aware)
     -> build APIs (PluginContext)
     -> run onInit (PluginContext, forward, sequential)
+    -> call framework onReady, then consumer onReady
     -> freeze and return app
 
   await app.start()
     -> run onStart (PluginContext, forward, sequential)
+    -> call consumer onStart
 
   await app.stop()
     -> run onStop (TeardownContext, REVERSE, sequential, best-effort)
+    -> call consumer onStop (even if a plugin threw, via try/finally)
     -> app enters terminal state
 ```
 

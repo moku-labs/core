@@ -1,6 +1,6 @@
 # 05 - Config System
 
-**Domain:** Config resolution, defaults, BuildPluginConfigs, flat createApp object
+**Domain:** Config resolution, defaults, BuildPluginConfigs, structured createApp namespaces
 **Version:** v3 (3-step architecture)
 
 ---
@@ -9,9 +9,9 @@
 
 The system has two levels of configuration:
 
-**Global Config:** Defined via `createCoreConfig<Config, Events>(id, { config })`. The framework provides defaults; the consumer can override any field in the flat `createApp` object.
+**Global Config:** Defined via `createCoreConfig<Config, Events>(id, { config })`. The framework provides defaults; the consumer can override any field via `createApp({ config: { ... } })`.
 
-**Per-Plugin Config:** Defined via `config` on each plugin's spec. The consumer can override any field by passing a keyed object in the flat `createApp` object.
+**Per-Plugin Config:** Defined via `config` on each plugin's spec. The consumer can override any field via `createApp({ pluginConfigs: { pluginName: { ... } } })`.
 
 Both levels use the same resolution strategy: **shallow merge**.
 
@@ -50,24 +50,23 @@ If `config` has a nested object `{ database: { host: 'localhost', port: 5432 } }
 
 ## 4. Per-Plugin Config in createApp
 
-In v3, consumers pass plugin configs in the flat `createApp` object, keyed by plugin name:
+In v3, consumers pass plugin configs in the `pluginConfigs` namespace, keyed by plugin name:
 
 ```typescript
 const app = await createApp({
-  // Global config overrides
-  siteName: 'My Blog',
-  mode: 'production',
-
-  // Extra plugins
   plugins: [blogPlugin],
-
-  // Per-plugin configs (keyed by plugin name)
-  router: { basePath: '/blog' },
-  blog: { postsPerPage: 5 },
+  config: {
+    siteName: 'My Blog',
+    mode: 'production',
+  },
+  pluginConfigs: {
+    router: { basePath: '/blog' },
+    blog: { postsPerPage: 5 },
+  },
 });
 ```
 
-The type system discriminates between global config keys (from `Config`), the reserved `plugins` key, and plugin config keys (from plugin names in the registered set). Each plugin name becomes a key in the flat object whose value type is the plugin's config type `C`.
+The `config` namespace holds global config overrides (typed from `Config`). The `pluginConfigs` namespace holds per-plugin config overrides, keyed by plugin name. Each plugin name becomes a key whose value type is the plugin's config type `C`.
 
 ---
 
@@ -79,7 +78,7 @@ Global config resolution follows the same shallow merge pattern:
 resolvedGlobal = { ...coreConfig.config, ...consumerOverrides }
 ```
 
-The global config defaults come from `createCoreConfig`'s `options.config`. Consumer overrides are top-level keys in the `createApp` flat object that match `Config` property names.
+The global config defaults come from `createCoreConfig`'s `options.config`. Consumer overrides are passed via the `config` namespace in `createApp`.
 
 ```typescript
 // Framework config.ts
@@ -92,8 +91,10 @@ const coreConfig = createCoreConfig<Config, Events>('my-framework', {
 
 // Consumer main.ts
 const app = await createApp({
-  siteName: 'My Blog',    // overrides 'Untitled'
-  // mode not provided -- stays 'development' from defaults
+  config: {
+    siteName: 'My Blog',    // overrides 'Untitled'
+    // mode not provided -- stays 'development' from defaults
+  },
 });
 ```
 

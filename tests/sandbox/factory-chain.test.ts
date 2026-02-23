@@ -118,8 +118,7 @@ describe("config overrides in createApp", () => {
   it("accepts typed config overrides", async () => {
     // Global config keys from SiteConfig: siteName, mode
     const app = await createApp({
-      siteName: "Test Blog",
-      mode: "production"
+      config: { siteName: "Test Blog", mode: "production" }
     });
 
     expect(app).toBeDefined();
@@ -128,7 +127,7 @@ describe("config overrides in createApp", () => {
   it("accepts typed plugin config overrides", async () => {
     // Plugin config keyed by plugin name
     const app = await createApp({
-      router: { basePath: "/blog" }
+      pluginConfigs: { router: { basePath: "/blog" } }
     });
 
     expect(app).toBeDefined();
@@ -139,6 +138,111 @@ describe("config overrides in createApp", () => {
     const app = await createApp({ invalidKey: "boom" });
 
     // Runtime assertion to satisfy sonarjs/assertions-in-tests
+    expect(app).toBeDefined();
+  });
+
+  it("pluginConfigs values are typed by plugin config shape", async () => {
+    const app = await createApp({
+      pluginConfigs: {
+        // router config has { basePath: string; trailingSlash: boolean }
+        router: { basePath: "/typed" },
+        // @ts-expect-error -- basePath must be string, not number
+        seo: { defaultTitle: 123 }
+      }
+    });
+
+    expect(app).toBeDefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Consumer lifecycle callback context
+// ---------------------------------------------------------------------------
+
+describe("consumer lifecycle callback context", () => {
+  it("onReady context has plugin APIs, getPlugin, require, has, emit", async () => {
+    let contextReceived = false;
+
+    const app = await createApp({
+      onReady: ctx => {
+        contextReceived = true;
+
+        // Type-level: context has plugin APIs
+        expectTypeOf(ctx.router.navigate).toBeFunction();
+        expectTypeOf(ctx.seo.getDefaultTitle).toBeFunction();
+
+        // Type-level: context has plugin lookup methods
+        expectTypeOf(ctx.getPlugin).toBeFunction();
+        expectTypeOf(ctx.require).toBeFunction();
+        expectTypeOf(ctx.has).toBeFunction();
+        expectTypeOf(ctx.emit).toBeFunction();
+        expectTypeOf(ctx.config).toMatchTypeOf<{ siteName: string; mode: string }>();
+
+        // Runtime: plugin APIs are accessible
+        expect(ctx.router.current()).toBe("/");
+        expect(ctx.has("router")).toBe(true);
+        expect(typeof ctx.emit).toBe("function");
+      }
+    });
+
+    expect(contextReceived).toBe(true);
+    expect(app).toBeDefined();
+  });
+
+  it("onStart context has plugin APIs", async () => {
+    let startContextReceived = false;
+
+    const app = await createApp({
+      onStart: ctx => {
+        startContextReceived = true;
+
+        // Type-level: plugin APIs present
+        expectTypeOf(ctx.router.navigate).toBeFunction();
+
+        // Runtime: plugin APIs work
+        expect(ctx.has("seo")).toBe(true);
+      }
+    });
+
+    await app.start();
+    expect(startContextReceived).toBe(true);
+    await app.stop();
+  });
+
+  it("onStop context has plugin APIs", async () => {
+    let stopContextReceived = false;
+
+    const app = await createApp({
+      onStop: ctx => {
+        stopContextReceived = true;
+
+        // Type-level: plugin APIs present
+        expectTypeOf(ctx.router.current).toBeFunction();
+        expectTypeOf(ctx.config).toMatchTypeOf<{ siteName: string }>();
+      }
+    });
+
+    await app.start();
+    await app.stop();
+    expect(stopContextReceived).toBe(true);
+  });
+
+  it("onError context has plugin APIs and is typed (not unknown)", async () => {
+    const app = await createApp({
+      onError: (_error, ctx) => {
+        // Type-level: ctx has plugin APIs (not unknown)
+        expectTypeOf(ctx.config).toMatchTypeOf<{ siteName: string }>();
+        expectTypeOf(ctx.has).toBeFunction();
+        expectTypeOf(ctx.require).toBeFunction();
+        expectTypeOf(ctx.getPlugin).toBeFunction();
+        expectTypeOf(ctx.emit).toBeFunction();
+        expectTypeOf(ctx.router.navigate).toBeFunction();
+        expectTypeOf(ctx.seo.getDefaultTitle).toBeFunction();
+      }
+    });
+
+    // onError is only called when hooks/stop throw at runtime;
+    // the type assertions above prevent the `unknown` regression
     expect(app).toBeDefined();
   });
 });

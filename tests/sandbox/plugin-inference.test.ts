@@ -148,7 +148,7 @@ describe("plugin config is typed and flows through ctx (SAND-04)", () => {
   it("ctx.config.sessionTimeout is typed as number and receives default value", async () => {
     const app = await createApp({
       plugins: [authPlugin],
-      auth: { loginPath: "/login", sessionTimeout: 3600 }
+      pluginConfigs: { auth: { loginPath: "/login", sessionTimeout: 3600 } }
     });
 
     // Type-level: auth API is accessible and typed
