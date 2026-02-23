@@ -907,3 +907,111 @@ describe("async lifecycle", () => {
     expect(order).toEqual(["b:stop", "a:stop"]);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Consumer lifecycle callbacks (passed via createApp options)
+// ---------------------------------------------------------------------------
+
+describe("consumer lifecycle callbacks", () => {
+  it("consumer onReady fires after framework onReady", async () => {
+    const order: string[] = [];
+    const cc = createTestCore();
+
+    const { createApp } = cc.createCore(cc, {
+      plugins: [],
+      onReady: () => {
+        order.push("framework:onReady");
+      }
+    });
+
+    await createApp({
+      onReady: () => {
+        order.push("consumer:onReady");
+      }
+    });
+
+    expect(order).toEqual(["framework:onReady", "consumer:onReady"]);
+  });
+
+  it("consumer onStart fires after all plugin onStart", async () => {
+    const order: string[] = [];
+    const cc = createTestCore();
+
+    const plugin = cc.createPlugin("probe", {
+      onStart: () => {
+        order.push("plugin:onStart");
+      }
+    });
+
+    const { createApp } = cc.createCore(cc, { plugins: [plugin] });
+    const app = await createApp({
+      onStart: () => {
+        order.push("consumer:onStart");
+      }
+    });
+
+    await app.start();
+    expect(order).toEqual(["plugin:onStart", "consumer:onStart"]);
+  });
+
+  it("consumer onStop fires after all plugin onStop", async () => {
+    const order: string[] = [];
+    const cc = createTestCore();
+
+    const plugin = cc.createPlugin("probe", {
+      onStop: () => {
+        order.push("plugin:onStop");
+      }
+    });
+
+    const { createApp } = cc.createCore(cc, { plugins: [plugin] });
+    const app = await createApp({
+      onStop: () => {
+        order.push("consumer:onStop");
+      }
+    });
+
+    await app.start();
+    await app.stop();
+    expect(order).toEqual(["plugin:onStop", "consumer:onStop"]);
+  });
+
+  it("consumer onError receives errors from hooks", async () => {
+    const errors: string[] = [];
+    const cc = createCoreConfig<{ siteName: string }, { "test:event": { value: number } }>("test", {
+      config: { siteName: "Test" }
+    });
+
+    const plugin = cc.createPlugin("faulty", {
+      events: register => ({
+        "test:event": register<{ value: number }>("test event")
+      }),
+      hooks: () => ({
+        "test:event": () => {
+          throw new Error("hook failed");
+        }
+      }),
+      api: ctx => ({
+        trigger: () => {
+          ctx.emit("test:event", { value: 1 });
+        }
+      })
+    });
+
+    const { createApp } = cc.createCore(cc, { plugins: [plugin] });
+    const app = await createApp({
+      onError: error => {
+        errors.push(error.message);
+      }
+    });
+
+    app.faulty.trigger();
+
+    // emit is fire-and-forget (void dispatch). Allow microtasks to settle.
+    await new Promise(resolve => {
+      setTimeout(resolve, 0);
+    });
+
+    expect(errors).toEqual(["hook failed"]);
+  });
+});

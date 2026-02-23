@@ -9,7 +9,7 @@
 
 ```typescript
 // This is the ENTIRE public API of moku_core
-export { createCoreConfig } from './core-config';
+export { createCoreConfig } from './config';
 ```
 
 One function at the main entry point. That's the package.

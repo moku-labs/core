@@ -5,4 +5,4 @@
 // Consumers use: import { createCoreConfig } from "moku_core";
 // =============================================================================
 
-export { createCoreConfig } from "./create-core-config";
+export { createCoreConfig } from "./config";

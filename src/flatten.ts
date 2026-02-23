@@ -6,7 +6,7 @@
 //   2. validatePlugins: Duplicate names, dependency order, reserved names.
 //
 // Both operate on the PluginInstance type from types.ts. They are called by
-// createCore (create-core-config.ts) during app initialization.
+// createCore (core.ts) during app initialization.
 // =============================================================================
 
 import type { AnyPluginInstance } from "./type-utilities";
