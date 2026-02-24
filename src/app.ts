@@ -2,21 +2,64 @@
 // moku_core v3 - createApp Kernel
 // =============================================================================
 // The runtime heart of the framework. Called by createCore's createApp wrapper
-// after flatten + validate have run. Implements all 11 steps from the kernel
-// pseudocode (specification/13-KERNEL-PSEUDOCODE.md):
+// after flatten + validate have run.
 //
-//   Step 1-3: (handled by createCore -- merge, flatten, validate)
-//   Step 4: Build plugin name set
-//   Step 5: Resolve global config (shallow merge, freeze)
-//   Step 6: Resolve per-plugin config (3-level merge, freeze)
-//   Step 7: Create state (MinimalContext)
-//   Step 8: Build event bus (hookMap, dispatch, emit)
-//   Step 9: Build APIs (PluginContext, forward order)
-//   Step 10: Run onInit (PluginContext, forward order, sequential async)
-//   Step 11: Build and freeze app (start/stop/emit/require/has)
+// Sections:
+//   §1 Runtime Boundary Types    — Type aliases, KernelParameters, KernelRuntime
+//   §2 Shared Primitives         — asRecord, createRequire, createHas
+//   §3 Config Resolution         — resolvePluginConfigs, createPluginStates
+//   §4 Event Bus                 — buildEventBus, registerPluginHooks
+//   §5 Context Factories         — createContextFactory, buildCallbackContext
+//   §6 App Builder               — executeStop, buildApp
+//   §7 Kernel Orchestrator       — kernel
 // =============================================================================
 
 import type { AnyPluginInstance } from "./type-utilities";
+
+// =============================================================================
+// Section 1: Runtime Boundary Types
+// =============================================================================
+// At the kernel layer, plugin APIs, states, event payloads, and contexts are
+// dynamically constructed. Type safety is enforced at compile time by the
+// generic signatures in types.ts and plugin.ts. These aliases centralize
+// the lint suppression annotations for the runtime boundary.
+// =============================================================================
+
+/** Map of plugin names to their API objects (dynamically typed at runtime). */
+// biome-ignore lint/suspicious/noExplicitAny: plugin API objects vary per plugin; typed at compile-time boundary
+type ApiMap = Map<string, any>;
+
+/** Map of plugin names to their state objects (dynamically typed at runtime). */
+// biome-ignore lint/suspicious/noExplicitAny: plugin state values vary per plugin
+type StateMap = Map<string, any>;
+
+/** Fire-and-forget event emitter function (dynamically typed at runtime). */
+// biome-ignore lint/suspicious/noExplicitAny: event payloads vary per event; typed by EmitFunction<Events>
+type EmitFunction = (eventName: string, payload?: any) => void;
+
+/** Event hook handler that receives a payload and optionally returns a promise. */
+// biome-ignore lint/suspicious/noExplicitAny: hook handler payloads are dynamically typed per event
+type HookHandler = (payload: any) => void | Promise<void>;
+
+/** Factory that builds a PluginContext for a given plugin instance. */
+// biome-ignore lint/suspicious/noExplicitAny: context factory returns dynamically typed PluginContext
+type ContextFactory = (plugin: AnyPluginInstance) => any;
+
+/** Consumer lifecycle callback receiving a dynamically typed context. */
+// biome-ignore lint/suspicious/noExplicitAny: consumer callbacks receive dynamically typed context
+type ConsumerCallback = (context: any) => void | Promise<void>;
+
+/** Consumer error callback receiving an error and optional context. */
+// biome-ignore lint/suspicious/noExplicitAny: consumer error callback receives dynamically typed context
+type ConsumerErrorCallback = (error: Error, context?: any) => void;
+
+/** Framework onReady callback receiving a frozen config object. */
+// biome-ignore lint/suspicious/noExplicitAny: framework onReady receives Config which varies per framework
+type OnReadyCallback = (context: { config: Readonly<any> }) => void | Promise<void>;
+
+/** Dynamically constructed object used for app and callback contexts. */
+// biome-ignore lint/suspicious/noExplicitAny: dynamically constructed objects (app, callback context)
+type DynamicObject = Record<string, any>;
 
 /** Parameters for the kernel function. */
 interface KernelParameters {
@@ -26,29 +69,37 @@ interface KernelParameters {
   readonly flatPlugins: AnyPluginInstance[];
   readonly configOverrides: Record<string, unknown>;
   readonly consumerPluginConfigs: Record<string, unknown>;
-  // biome-ignore lint/suspicious/noExplicitAny: onReady callback uses framework Config which varies
-  readonly onReady?: ((context: { config: Readonly<any> }) => void | Promise<void>) | undefined;
+  readonly onReady?: OnReadyCallback | undefined;
   readonly onError?: ((error: Error) => void) | undefined;
   readonly consumer?: {
-    // biome-ignore lint/suspicious/noExplicitAny: callback context is dynamically typed; type safety enforced by CreateAppOptions
-    readonly onReady?: ((context: any) => void | Promise<void>) | undefined;
-    // biome-ignore lint/suspicious/noExplicitAny: callback context is dynamically typed; type safety enforced by CreateAppOptions
-    readonly onError?: ((error: Error, context?: any) => void) | undefined;
-    // biome-ignore lint/suspicious/noExplicitAny: callback context is dynamically typed; type safety enforced by CreateAppOptions
-    readonly onStart?: ((context: any) => void | Promise<void>) | undefined;
-    // biome-ignore lint/suspicious/noExplicitAny: callback context is dynamically typed; type safety enforced by CreateAppOptions
-    readonly onStop?: ((context: any) => void | Promise<void>) | undefined;
+    readonly onReady?: ConsumerCallback | undefined;
+    readonly onError?: ConsumerErrorCallback | undefined;
+    readonly onStart?: ConsumerCallback | undefined;
+    readonly onStop?: ConsumerCallback | undefined;
   };
 }
 
+/** Shared runtime state assembled by the kernel during initialization. */
+interface KernelRuntime {
+  readonly id: string;
+  readonly globalConfig: Readonly<Record<string, unknown>>;
+  readonly emit: EmitFunction;
+  readonly apis: ApiMap;
+  readonly pluginNameSet: Set<string>;
+}
+
+// =============================================================================
+// Section 2: Shared Primitives
+// =============================================================================
+
 /**
- * Safely cast a value to a Record if it is a non-null object.
- * @param value - The value to check.
- * @returns The value as Record or empty object.
+ * Cast a value to Record if it is a non-null object, or return empty object.
+ * @param value - The value to cast.
+ * @returns The value as a Record, or an empty object if not a non-null object.
  * @example
  * ```ts
- * asRecord({ basePath: "/" }) // { basePath: "/" }
- * asRecord(undefined) // {}
+ * asRecord({ a: 1 }); // => { a: 1 }
+ * asRecord(undefined); // => {}
  * ```
  */
 function asRecord(value: unknown): Record<string, unknown> {
@@ -59,14 +110,55 @@ function asRecord(value: unknown): Record<string, unknown> {
 }
 
 /**
- * Resolve per-plugin configs with 3-level merge: plugin defaults, framework, consumer.
- * @param flatPlugins - Flattened plugin list.
- * @param frameworkPluginConfigs - Framework-level plugin config overrides.
- * @param consumerPluginConfigs - Consumer-level plugin config overrides.
- * @returns Map of plugin name to frozen resolved config.
+ * Create a require function that looks up a plugin API by instance reference.
+ * @param runtime - The kernel runtime containing the API map.
+ * @param formatError - Formats the error message using the plugin instance name.
+ * @returns A function that returns the API for a given plugin instance or throws.
  * @example
  * ```ts
- * const configs = resolvePluginConfigs(flatPlugins, { router: { basePath: "/" } }, {});
+ * const require = createRequire(runtime, name => `Plugin "${name}" not found.`);
+ * const api = require(routerPlugin);
+ * ```
+ */
+function createRequire(
+  runtime: KernelRuntime,
+  formatError: (instanceName: string) => string
+): (instance: AnyPluginInstance) => unknown {
+  return (instance: AnyPluginInstance) => {
+    const api = runtime.apis.get(instance.name);
+    if (!api) throw new Error(formatError(instance.name));
+    return api;
+  };
+}
+
+/**
+ * Create a has function from the runtime's plugin name set.
+ * @param runtime - The kernel runtime containing the plugin name set.
+ * @returns A function that checks if a plugin name is registered.
+ * @example
+ * ```ts
+ * const has = createHas(runtime);
+ * has("router"); // => true or false
+ * ```
+ */
+function createHas(runtime: KernelRuntime): (name: string) => boolean {
+  return (name: string) => runtime.pluginNameSet.has(name);
+}
+
+// =============================================================================
+// Section 3: Config Resolution
+// =============================================================================
+
+/**
+ * Resolve per-plugin configs: 3-level merge (plugin defaults, framework, consumer), freeze.
+ * @param flatPlugins - The flattened plugin list.
+ * @param frameworkPluginConfigs - Framework-level plugin config overrides.
+ * @param consumerPluginConfigs - Consumer-level plugin config overrides.
+ * @returns A map of plugin names to their frozen resolved configs.
+ * @example
+ * ```ts
+ * const configs = resolvePluginConfigs(plugins, frameworkConfigs, consumerConfigs);
+ * configs.get("router"); // => { basePath: "/" }
  * ```
  */
 function resolvePluginConfigs(
@@ -88,72 +180,63 @@ function resolvePluginConfigs(
 
 /**
  * Create plugin state using MinimalContext (global + config only).
- * @param flatPlugins - Flattened plugin list.
- * @param globalConfig - Frozen global config.
- * @param resolvedConfigs - Map of plugin name to frozen config.
- * @returns Map of plugin name to state value.
+ * @param flatPlugins - The flattened plugin list.
+ * @param globalConfig - The frozen global config object.
+ * @param resolvedConfigs - The resolved per-plugin config map.
+ * @returns A map of plugin names to their initial state objects.
  * @example
  * ```ts
- * const states = createPluginStates(flatPlugins, globalConfig, resolvedConfigs);
+ * const states = createPluginStates(plugins, globalConfig, resolvedConfigs);
+ * states.get("counter"); // => { count: 0 }
  * ```
  */
 function createPluginStates(
   flatPlugins: AnyPluginInstance[],
   globalConfig: Readonly<Record<string, unknown>>,
   resolvedConfigs: Map<string, Readonly<Record<string, unknown>>>
-  // biome-ignore lint/suspicious/noExplicitAny: state values are plugin-specific
-): Map<string, any> {
-  // biome-ignore lint/suspicious/noExplicitAny: state values are plugin-specific
-  const states = new Map<string, any>();
+): StateMap {
+  const states: StateMap = new Map();
   for (const plugin of flatPlugins) {
     if (plugin.spec.createState) {
-      // biome-ignore lint/suspicious/noExplicitAny: runtime context matches MinimalContext shape
-      const minimalContext: any = {
-        global: globalConfig,
-        config: resolvedConfigs.get(plugin.name)
-      };
+      const pluginConfig = resolvedConfigs.get(plugin.name) ?? {};
+      const minimalContext = { global: globalConfig, config: pluginConfig };
       states.set(plugin.name, plugin.spec.createState(minimalContext));
     }
   }
   return states;
 }
 
+// =============================================================================
+// Section 4: Event Bus
+// =============================================================================
+
 /**
  * Build event bus: hookMap with async dispatch, fire-and-forget emit, and registerHook.
- * The hookMap starts empty — hooks are registered separately in Step 8b after
- * the context factory is created, so that hooks(ctx) receives PluginContext.
- *
- * Hook errors are caught per-handler and reported via `onError`. One failing hook
- * does not prevent other hooks from running (same resilience pattern as `executeStop`).
- * @param onError - Optional error handler called when a hook throws.
- * @returns Object with emit and registerHook functions.
+ * @param onError - Optional error handler for hook execution failures.
+ * @returns An object with emit and registerHook functions.
  * @example
  * ```ts
- * const { emit, registerHook } = buildEventBus(onError);
- * registerHook("page:render", payload => console.log(payload));
- * emit("page:render", { path: "/", html: "<h1>Home</h1>" });
+ * const { emit, registerHook } = buildEventBus(error => console.error(error));
+ * registerHook("page:view", payload => console.log(payload));
+ * emit("page:view", { path: "/" });
  * ```
  */
 function buildEventBus(onError: ((error: Error) => void) | undefined): {
-  // biome-ignore lint/suspicious/noExplicitAny: event payloads are dynamically typed
-  emit: (eventName: string, payload?: any) => void;
-  // biome-ignore lint/suspicious/noExplicitAny: event payloads are dynamically typed
-  registerHook: (eventName: string, handler: (payload: any) => void | Promise<void>) => void;
+  emit: EmitFunction;
+  registerHook: (eventName: string, handler: HookHandler) => void;
 } {
-  // biome-ignore lint/suspicious/noExplicitAny: event payloads are dynamically typed
-  const hookMap = new Map<string, Array<(payload: any) => void | Promise<void>>>();
+  const hookMap = new Map<string, HookHandler[]>();
 
   /**
    * Dispatch an event to all registered handlers sequentially.
-   * @param eventName - Name of the event to dispatch.
-   * @param payload - Event payload.
+   * @param eventName - The event name to dispatch.
+   * @param payload - The event payload.
    * @example
    * ```ts
-   * await dispatch("page:render", { path: "/" });
+   * await dispatch("page:view", { path: "/" });
    * ```
    */
-  // biome-ignore lint/suspicious/noExplicitAny: event payloads are dynamically typed
-  async function dispatch(eventName: string, payload: any): Promise<void> {
+  async function dispatch(eventName: string, payload: unknown): Promise<void> {
     const handlers = hookMap.get(eventName);
     if (!handlers) return;
     for (const handler of handlers) {
@@ -166,33 +249,28 @@ function buildEventBus(onError: ((error: Error) => void) | undefined): {
   }
 
   /**
-   * Emit an event (fire-and-forget).
-   * @param eventName - Name of the event to emit.
-   * @param payload - Optional event payload.
+   * Fire-and-forget emit that dispatches without awaiting.
+   * @param eventName - The event name to emit.
+   * @param payload - The optional event payload.
    * @example
    * ```ts
-   * emit("page:render", { path: "/", html: "<h1>Home</h1>" });
+   * emit("page:view", { path: "/" });
    * ```
    */
-  // biome-ignore lint/suspicious/noExplicitAny: event payloads are dynamically typed
-  const emit = (eventName: string, payload?: any): void => {
+  const emit: EmitFunction = (eventName, payload) => {
     void dispatch(eventName, payload);
   };
 
   /**
-   * Register a single hook handler for an event name.
-   * @param eventName - Name of the event to listen for.
-   * @param handler - Handler function to call when the event is emitted.
+   * Register a hook handler for a given event name.
+   * @param eventName - The event name to listen for.
+   * @param handler - The handler to invoke when the event fires.
    * @example
    * ```ts
-   * registerHook("page:render", payload => console.log(payload));
+   * registerHook("page:view", payload => console.log(payload));
    * ```
    */
-  const registerHook = (
-    eventName: string,
-    // biome-ignore lint/suspicious/noExplicitAny: event payloads are dynamically typed
-    handler: (payload: any) => void | Promise<void>
-  ): void => {
+  const registerHook = (eventName: string, handler: HookHandler): void => {
     let list = hookMap.get(eventName);
     if (!list) {
       list = [];
@@ -205,22 +283,18 @@ function buildEventBus(onError: ((error: Error) => void) | undefined): {
 }
 
 /**
- * Register hooks from all plugins. Each plugin's `hooks(ctx)` is called
- * to produce a handler map, then each handler is registered on the event bus.
- *
- * Called before APIs and onInit so events emitted during those phases are captured.
- * @param flatPlugins - Flattened plugin list in registration order.
- * @param buildPluginContext - Factory that builds PluginContext for a given plugin.
- * @param registerHook - Function to register a single hook handler on the event bus.
+ * Register hooks from all plugins. Each plugin's hooks(ctx) produces a handler map.
+ * @param flatPlugins - The flattened plugin list.
+ * @param buildPluginContext - Factory that builds context for a plugin.
+ * @param registerHook - Function to register a hook handler for an event.
  * @example
  * ```ts
- * registerPluginHooks(flatPlugins, buildPluginContext, registerHook);
+ * registerPluginHooks(plugins, contextFactory, registerHook);
  * ```
  */
 function registerPluginHooks(
   flatPlugins: AnyPluginInstance[],
-  // biome-ignore lint/suspicious/noExplicitAny: context factory returns dynamically typed PluginContext
-  buildPluginContext: (plugin: AnyPluginInstance) => any,
+  buildPluginContext: ContextFactory,
   registerHook: (eventName: string, handler: (payload: unknown) => void | Promise<void>) => void
 ): void {
   for (const plugin of flatPlugins) {
@@ -234,81 +308,84 @@ function registerPluginHooks(
   }
 }
 
+// =============================================================================
+// Section 5: Context Factories
+// =============================================================================
+
 /**
  * Create a factory that builds PluginContext for a given plugin.
- * @param id - Framework identifier for error messages.
- * @param globalConfig - Frozen global config.
- * @param resolvedConfigs - Map of plugin name to frozen config.
- * @param states - Map of plugin name to state.
- * @param emit - Event emit function.
- * @param apis - Map of plugin name to API object.
- * @param pluginNameSet - Set of all registered plugin names.
- * @returns A function that builds PluginContext for a given plugin.
+ * @param runtime - The kernel runtime with shared state.
+ * @param resolvedConfigs - The resolved per-plugin config map.
+ * @param states - The plugin state map.
+ * @returns A factory function that produces a PluginContext for any plugin.
  * @example
  * ```ts
- * const buildContext = createContextFactory(id, globalConfig, configs, states, emit, apis, names);
- * const ctx = buildContext(routerPlugin);
+ * const factory = createContextFactory(runtime, configs, states);
+ * const ctx = factory(routerPlugin);
  * ```
  */
 function createContextFactory(
-  id: string,
-  globalConfig: Readonly<Record<string, unknown>>,
+  runtime: KernelRuntime,
   resolvedConfigs: Map<string, Readonly<Record<string, unknown>>>,
-  // biome-ignore lint/suspicious/noExplicitAny: state values are plugin-specific
-  states: Map<string, any>,
-  // biome-ignore lint/suspicious/noExplicitAny: event payloads are dynamically typed
-  emit: (eventName: string, payload?: any) => void,
-  // biome-ignore lint/suspicious/noExplicitAny: API values are plugin-specific
-  apis: Map<string, any>,
-  pluginNameSet: Set<string>
-  // biome-ignore lint/suspicious/noExplicitAny: context is dynamically typed to match PluginContext shape
-): (plugin: AnyPluginInstance) => any {
+  states: StateMap
+): ContextFactory {
+  const has = createHas(runtime);
+
   return (plugin: AnyPluginInstance) => ({
-    global: globalConfig,
+    global: runtime.globalConfig,
     config: resolvedConfigs.get(plugin.name),
     state: states.get(plugin.name),
-    emit,
-    /**
-     * Get plugin API by instance or throw if not found.
-     * @param instance - The plugin instance to require.
-     * @returns The plugin API.
-     * @example
-     * ```ts
-     * ctx.require(routerPlugin);
-     * ```
-     */
-    require: (instance: AnyPluginInstance) => {
-      const api = apis.get(instance.name);
-      if (!api) {
-        throw new Error(
-          `[${id}] Plugin "${plugin.name}" requires "${instance.name}", but "${instance.name}" is not registered.\n` +
-            `  Add "${instance.name}" to your plugin list.`
-        );
-      }
-      return api;
-    },
-    /**
-     * Check if a plugin name is registered.
-     * @param name - The plugin name to check.
-     * @returns True if registered.
-     * @example
-     * ```ts
-     * ctx.has("router");
-     * ```
-     */
-    has: (name: string) => pluginNameSet.has(name)
+    emit: runtime.emit,
+    require: createRequire(
+      runtime,
+      name =>
+        `[${runtime.id}] Plugin "${plugin.name}" requires "${name}", but "${name}" is not registered.\n` +
+        `  Add "${name}" to your plugin list.`
+    ),
+    has
   });
 }
 
 /**
- * Run onStop for all plugins in reverse order with best-effort error handling.
- * @param flatPlugins - Flattened plugin list (will be reversed).
- * @param globalConfig - Frozen global config (passed as TeardownContext).
- * @param onError - Optional error handler called for each stop error.
- * @returns A promise that resolves when all plugins are stopped, or rejects with first error.
+ * Build callback context for consumer lifecycle callbacks (onReady, onStart, onStop).
+ * @param runtime - The kernel runtime with shared state and APIs.
+ * @returns A dynamic object with config, emit, require, has, and all plugin APIs.
  * @example
  * ```ts
- * await executeStop(flatPlugins, globalConfig, onError);
+ * const ctx = buildCallbackContext(runtime);
+ * ctx.config; // frozen global config
+ * ctx.router; // router plugin API (if registered)
+ * ```
+ */
+function buildCallbackContext(runtime: KernelRuntime): DynamicObject {
+  const context: DynamicObject = {
+    config: runtime.globalConfig,
+    emit: runtime.emit,
+    require: createRequire(
+      runtime,
+      name =>
+        `[${runtime.id}] Plugin "${name}" is not registered.\n  Add "${name}" to your plugin list.`
+    ),
+    has: createHas(runtime)
+  };
+  for (const [name, api] of runtime.apis) {
+    context[name] = api;
+  }
+  return context;
+}
+
+// =============================================================================
+// Section 6: App Builder
+// =============================================================================
+
+/**
+ * Run onStop for all plugins in reverse order with best-effort error handling.
+ * @param flatPlugins - The flattened plugin list.
+ * @param globalConfig - The frozen global config object.
+ * @param onError - Optional error handler for stop failures.
+ * @example
+ * ```ts
+ * await executeStop(plugins, globalConfig, error => console.error(error));
  * ```
  */
 async function executeStop(
@@ -333,108 +410,31 @@ async function executeStop(
 }
 
 /**
- * Build callback context for consumer lifecycle callbacks (onReady, onStart, onStop).
- * Includes frozen config, emit, require, has, and mounted plugin APIs.
- * @param id - Framework identifier for error messages.
- * @param globalConfig - Frozen global config.
- * @param emit - Event emit function.
- * @param apis - Map of plugin name to API object.
- * @param pluginNameSet - Set of all registered plugin names.
- * @returns A context object matching AppCallbackContext.
- * @example
- * ```ts
- * const ctx = buildCallbackContext(id, globalConfig, emit, apis, pluginNameSet);
- * consumer.onReady(ctx);
- * ```
- */
-function buildCallbackContext(
-  id: string,
-  globalConfig: Readonly<Record<string, unknown>>,
-  // biome-ignore lint/suspicious/noExplicitAny: event payloads are dynamically typed
-  emit: (eventName: string, payload?: any) => void,
-  // biome-ignore lint/suspicious/noExplicitAny: API values are plugin-specific
-  apis: Map<string, any>,
-  pluginNameSet: Set<string>
-  // biome-ignore lint/suspicious/noExplicitAny: context is dynamically constructed with plugin APIs
-): any {
-  /**
-   * Look up a plugin API by instance reference, throwing if not found.
-   * @param instance - The plugin instance to require.
-   * @returns The plugin API.
-   * @example
-   * ```ts
-   * const api = requirePlugin(routerPlugin);
-   * ```
-   */
-  const requirePlugin = (instance: AnyPluginInstance) => {
-    const api = apis.get(instance.name);
-    if (!api) {
-      throw new Error(
-        `[${id}] Plugin "${instance.name}" is not registered.\n  Add "${instance.name}" to your plugin list.`
-      );
-    }
-    return api;
-  };
-
-  /**
-   * Check if a plugin is registered by name.
-   * @param name - The plugin name to check.
-   * @returns True if the plugin is registered.
-   * @example
-   * ```ts
-   * const exists = has("router");
-   * ```
-   */
-  const has = (name: string) => pluginNameSet.has(name);
-
-  // biome-ignore lint/suspicious/noExplicitAny: context is dynamically constructed with plugin APIs
-  const context: any = { config: globalConfig, emit, require: requirePlugin, has };
-  for (const [name, api] of apis) {
-    context[name] = api;
-  }
-  return context;
-}
-
-/**
- * Build the frozen app object with start, stop, emit, require, has methods.
- * Plugin APIs are mounted directly on the app object (e.g., app.router, app.seo).
- * @param id - Framework identifier for error messages.
- * @param flatPlugins - Flattened plugin list.
- * @param globalConfig - Frozen global config.
- * @param buildPluginContext - Context factory function.
- * @param emit - Event emit function.
- * @param apis - Map of plugin name to API object.
- * @param pluginNameSet - Set of all registered plugin names.
- * @param onError - Optional error handler for best-effort stop.
+ * Build the frozen app object with start, stop, emit, require, has and mounted plugin APIs.
+ * @param runtime - The kernel runtime with shared state and APIs.
+ * @param flatPlugins - The flattened plugin list.
+ * @param buildPluginContext - Factory that builds context for a plugin.
+ * @param onError - Optional combined error handler.
  * @param consumer - Optional consumer lifecycle callbacks.
- * @returns The frozen app object.
+ * @returns A frozen app object with lifecycle methods and plugin APIs.
  * @example
  * ```ts
- * const app = buildApp(id, flatPlugins, globalConfig, buildCtx, emit, apis, names, onError);
+ * const app = buildApp(runtime, plugins, contextFactory, onError, consumer);
  * await app.start();
  * ```
  */
 function buildApp(
-  id: string,
+  runtime: KernelRuntime,
   flatPlugins: AnyPluginInstance[],
-  globalConfig: Readonly<Record<string, unknown>>,
-  // biome-ignore lint/suspicious/noExplicitAny: context factory returns dynamically typed PluginContext
-  buildPluginContext: (plugin: AnyPluginInstance) => any,
-  // biome-ignore lint/suspicious/noExplicitAny: event payloads are dynamically typed
-  emit: (eventName: string, payload?: any) => void,
-  // biome-ignore lint/suspicious/noExplicitAny: API values are plugin-specific
-  apis: Map<string, any>,
-  pluginNameSet: Set<string>,
+  buildPluginContext: ContextFactory,
   onError: ((error: Error) => void) | undefined,
   consumer?: KernelParameters["consumer"]
-  // biome-ignore lint/suspicious/noExplicitAny: app object is dynamically constructed with plugin APIs
-): any {
+): DynamicObject {
   let started = false;
   let stopped = false;
 
   /**
-   * Guard against operations on a stopped app.
-   * @throws {Error} If the app has been stopped.
+   * Throw if the app has been stopped.
    * @example
    * ```ts
    * guardStopped(); // throws if stopped
@@ -443,17 +443,21 @@ function buildApp(
   function guardStopped(): void {
     if (stopped) {
       throw new Error(
-        `[${id}] App is stopped. No further operations allowed.\n  Create a new app instance instead.`
+        `[${runtime.id}] App is stopped. No further operations allowed.\n  Create a new app instance instead.`
       );
     }
   }
 
-  // biome-ignore lint/suspicious/noExplicitAny: app object is dynamically constructed with plugin APIs
-  const app: any = {
+  const appRequire = createRequire(
+    runtime,
+    name =>
+      `[${runtime.id}] app.require("${name}") failed: "${name}" is not registered.\n  Check your plugin list.`
+  );
+  const appHas = createHas(runtime);
+
+  const app: DynamicObject = {
     /**
-     * Start all plugins in forward order (sequential async).
-     * @returns A promise that resolves when all plugins have started.
-     * @throws {Error} If already started or if stopped.
+     * Run onStart for all plugins, then consumer onStart.
      * @example
      * ```ts
      * await app.start();
@@ -462,7 +466,7 @@ function buildApp(
     start: async (): Promise<void> => {
       guardStopped();
       if (started) {
-        throw new Error(`[${id}] App already started.\n  start() can only be called once.`);
+        throw new Error(`[${runtime.id}] App already started.\n  start() can only be called once.`);
       }
       started = true;
 
@@ -473,14 +477,12 @@ function buildApp(
       }
 
       if (consumer?.onStart) {
-        await consumer.onStart(buildCallbackContext(id, globalConfig, emit, apis, pluginNameSet));
+        await consumer.onStart(buildCallbackContext(runtime));
       }
     },
 
     /**
-     * Stop all plugins in REVERSE order (sequential async, best-effort).
-     * @returns A promise that resolves when all plugins have stopped.
-     * @throws {Error} If not started, already stopped, or re-throws first onStop error.
+     * Run onStop for all plugins in reverse, then consumer onStop.
      * @example
      * ```ts
      * await app.stop();
@@ -489,43 +491,41 @@ function buildApp(
     stop: async (): Promise<void> => {
       guardStopped();
       if (!started) {
-        throw new Error(`[${id}] App not started.\n  Call start() before stop().`);
+        throw new Error(`[${runtime.id}] App not started.\n  Call start() before stop().`);
       }
       stopped = true;
       let stopError: Error | undefined;
       try {
-        await executeStop(flatPlugins, globalConfig, onError);
+        await executeStop(flatPlugins, runtime.globalConfig, onError);
       } catch (error) {
         stopError = error as Error;
       }
 
       if (consumer?.onStop) {
-        await consumer.onStop(buildCallbackContext(id, globalConfig, emit, apis, pluginNameSet));
+        await consumer.onStop(buildCallbackContext(runtime));
       }
 
       if (stopError) throw stopError;
     },
 
     /**
-     * Emit an event. Guards against use after stop.
-     * @param eventName - Name of the event to emit.
-     * @param payload - Optional event payload.
+     * Emit an event with an optional payload.
+     * @param eventName - The event name to emit.
+     * @param payload - The optional event payload.
      * @example
      * ```ts
-     * app.emit("page:render", { path: "/", html: "<h1>Home</h1>" });
+     * app.emit("page:view", { path: "/" });
      * ```
      */
-    // biome-ignore lint/suspicious/noExplicitAny: event payloads are dynamically typed
-    emit: (eventName: string, payload?: any): void => {
+    emit: (eventName: string, payload?: unknown): void => {
       guardStopped();
-      emit(eventName, payload);
+      runtime.emit(eventName, payload);
     },
 
     /**
-     * Get plugin API or throw if not found.
-     * @param instance - PluginInstance to require.
-     * @returns The plugin API object.
-     * @throws {Error} If the plugin is not registered.
+     * Look up a plugin API by instance reference.
+     * @param instance - The plugin instance to look up.
+     * @returns The plugin's API object.
      * @example
      * ```ts
      * const routerApi = app.require(routerPlugin);
@@ -533,61 +533,50 @@ function buildApp(
      */
     require: (instance: AnyPluginInstance) => {
       guardStopped();
-      const api = apis.get(instance.name);
-      if (!api) {
-        throw new Error(
-          `[${id}] app.require("${instance.name}") failed: "${instance.name}" is not registered.\n  Check your plugin list.`
-        );
-      }
-      return api;
+      return appRequire(instance);
     },
 
     /**
-     * Check if a plugin name is registered. Checks name registration, not API presence.
+     * Check if a plugin name is registered.
      * @param name - The plugin name to check.
-     * @returns True if the plugin name is registered.
+     * @returns True if the plugin is registered.
      * @example
      * ```ts
-     * app.has("router") // true
+     * app.has("router"); // => true or false
      * ```
      */
     has: (name: string): boolean => {
       guardStopped();
-      return pluginNameSet.has(name);
+      return appHas(name);
     }
   };
 
   // Mount plugin APIs directly on app: app.router, app.blog, etc.
-  for (const [name, api] of apis) {
+  for (const [name, api] of runtime.apis) {
     app[name] = api;
   }
 
   return Object.freeze(app);
 }
 
+// =============================================================================
+// Section 7: Kernel Orchestrator
+// =============================================================================
+
 /**
- * The kernel function -- creates and initializes the application.
+ * The kernel — creates and initializes the application.
  *
  * Receives pre-flattened, pre-validated plugins and all captured context from
- * createCore. Performs config resolution, state creation, event bus setup,
- * API building, lifecycle execution, and returns a frozen app object.
- * @param parameters - All context captured by createCore: id, config defaults,
- *   framework plugin configs, flattened plugins, config overrides, plugin configs, callbacks.
- * @returns A promise that resolves to the frozen App object.
+ * createCore. Performs: config resolution, state creation, event bus setup,
+ * API building, lifecycle execution, returns frozen app object.
+ * @param parameters - All kernel inputs captured from the factory chain.
+ * @returns A promise that resolves to the frozen app object.
  * @example
  * ```ts
- * const app = await kernel({
- *   id: "my-site",
- *   configDefaults: { siteName: "Untitled" },
- *   frameworkPluginConfigs: {},
- *   flatPlugins: [],
- *   configOverrides: { siteName: "Blog" },
- *   consumerPluginConfigs: {},
- * });
+ * const app = await kernel({ id: "my-app", configDefaults: {}, ... });
  * ```
  */
-// biome-ignore lint/suspicious/noExplicitAny: kernel return type is dynamically built from registered plugins
-async function kernel(parameters: KernelParameters): Promise<any> {
+async function kernel(parameters: KernelParameters): Promise<DynamicObject> {
   const {
     id,
     configDefaults,
@@ -603,21 +592,6 @@ async function kernel(parameters: KernelParameters): Promise<any> {
   // Step 4: Build plugin name set
   const pluginNameSet = new Set(flatPlugins.map(plugin => plugin.name));
 
-  // Combine framework + consumer onError into a single handler.
-  // Consumer onError receives the full callback context (config, plugin APIs, etc.).
-  // References to globalConfig/emit/apis are resolved at call time, not definition time.
-  const combinedOnError =
-    onError || consumer?.onError
-      ? (error: Error): void => {
-          if (onError) onError(error);
-          if (consumer?.onError)
-            consumer.onError(
-              error,
-              buildCallbackContext(id, globalConfig, emit, apis, pluginNameSet)
-            );
-        }
-      : undefined;
-
   // Step 5: Resolve global config (shallow merge, freeze)
   const globalConfig: Readonly<Record<string, unknown>> = Object.freeze({
     ...configDefaults,
@@ -631,24 +605,29 @@ async function kernel(parameters: KernelParameters): Promise<any> {
     consumerPluginConfigs
   );
 
-  // Step 7: Create state (MinimalContext -- global + config only)
+  // Step 7: Create state (MinimalContext — global + config only)
   const states = createPluginStates(flatPlugins, globalConfig, resolvedConfigs);
 
-  // Step 8a: Build event bus (empty -- hooks registered in Step 8b)
+  // Step 8a: Build event bus (empty — hooks registered in Step 8b)
+  const apis: ApiMap = new Map();
+
+  // Combine framework + consumer onError into a single handler.
+  // References to runtime are resolved at call time, not definition time.
+  const combinedOnError =
+    onError || consumer?.onError
+      ? (error: Error): void => {
+          if (onError) onError(error);
+          if (consumer?.onError) consumer.onError(error, buildCallbackContext(runtime));
+        }
+      : undefined;
+
   const { emit, registerHook } = buildEventBus(combinedOnError);
 
+  // Assemble runtime (apis Map is populated in Step 9; same reference shared)
+  const runtime: KernelRuntime = { id, globalConfig, emit, apis, pluginNameSet };
+
   // Build context factory (needed by hooks and APIs)
-  // biome-ignore lint/suspicious/noExplicitAny: API values are plugin-specific
-  const apis = new Map<string, any>();
-  const buildPluginContext = createContextFactory(
-    id,
-    globalConfig,
-    resolvedConfigs,
-    states,
-    emit,
-    apis,
-    pluginNameSet
-  );
+  const buildPluginContext = createContextFactory(runtime, resolvedConfigs, states);
 
   // Step 8b: Register hooks (context-aware)
   registerPluginHooks(flatPlugins, buildPluginContext, registerHook);
@@ -674,21 +653,11 @@ async function kernel(parameters: KernelParameters): Promise<any> {
 
   // Call consumer onReady callback after framework onReady
   if (consumer?.onReady) {
-    await consumer.onReady(buildCallbackContext(id, globalConfig, emit, apis, pluginNameSet));
+    await consumer.onReady(buildCallbackContext(runtime));
   }
 
   // Step 11: Build and freeze app
-  return buildApp(
-    id,
-    flatPlugins,
-    globalConfig,
-    buildPluginContext,
-    emit,
-    apis,
-    pluginNameSet,
-    combinedOnError,
-    consumer
-  );
+  return buildApp(runtime, flatPlugins, buildPluginContext, combinedOnError, consumer);
 }
 
 export { kernel };
