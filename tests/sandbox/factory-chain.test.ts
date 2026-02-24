@@ -160,7 +160,7 @@ describe("config overrides in createApp", () => {
 // ---------------------------------------------------------------------------
 
 describe("consumer lifecycle callback context", () => {
-  it("onReady context has plugin APIs, getPlugin, require, has, emit", async () => {
+  it("onReady context has plugin APIs, require, has, emit", async () => {
     let contextReceived = false;
 
     const app = await createApp({
@@ -172,7 +172,6 @@ describe("consumer lifecycle callback context", () => {
         expectTypeOf(ctx.seo.getDefaultTitle).toBeFunction();
 
         // Type-level: context has plugin lookup methods
-        expectTypeOf(ctx.getPlugin).toBeFunction();
         expectTypeOf(ctx.require).toBeFunction();
         expectTypeOf(ctx.has).toBeFunction();
         expectTypeOf(ctx.emit).toBeFunction();
@@ -234,7 +233,6 @@ describe("consumer lifecycle callback context", () => {
         expectTypeOf(ctx.config).toMatchTypeOf<{ siteName: string }>();
         expectTypeOf(ctx.has).toBeFunction();
         expectTypeOf(ctx.require).toBeFunction();
-        expectTypeOf(ctx.getPlugin).toBeFunction();
         expectTypeOf(ctx.emit).toBeFunction();
         expectTypeOf(ctx.router.navigate).toBeFunction();
         expectTypeOf(ctx.seo.getDefaultTitle).toBeFunction();

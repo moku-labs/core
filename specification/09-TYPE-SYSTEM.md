@@ -137,15 +137,9 @@ type App<
   emit: <K extends string & keyof Events>(name: K, payload: Events[K]) => void;
 
   /**
-   * Get plugin API by name. Typed -- constrained to registered plugin names.
-   * Returns undefined if not found.
+   * Get plugin API or throw with clear error. Instance-only, fully typed.
    */
-  getPlugin: <N extends PluginName<P>>(name: N) => PluginApiByName<P, N> | undefined;
-
-  /**
-   * Get plugin API or throw with clear error. Typed -- constrained to registered plugin names.
-   */
-  require: <N extends PluginName<P>>(name: N) => PluginApiByName<P, N>;
+  require: RequireFunction;
 
   /** Check if a plugin is registered. */
   has: (name: string) => boolean;
@@ -161,9 +155,8 @@ const app = await createApp({ ... });
 app.router.navigate('/about');           // typed: (path: string) => void
 app.logger.info('message');              // typed: (msg: string) => void
 
-// getPlugin/require also work
-const router = app.require('router');    // typed: RouterApi
-app.getPlugin('nonexistent');            // compile error: not a registered name
+// require also works with plugin instance references
+const router = app.require(routerPlugin);  // typed: RouterApi
 
 // Lifecycle
 await app.start();

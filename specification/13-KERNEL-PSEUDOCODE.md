@@ -348,10 +348,6 @@ async function createApp(consumerOptions?: {
       config: resolvedConfigs.get(plugin.name),
       state: states.get(plugin.name),
       emit,
-      // Instance-only: accepts PluginInstance, extracts name at runtime
-      getPlugin: (pluginInstance: PluginInstance) => {
-        return apis.get(pluginInstance.name);
-      },
       // Instance-only: accepts PluginInstance, throws if not registered
       require: (pluginInstance: PluginInstance) => {
         const api = apis.get(pluginInstance.name);
@@ -396,7 +392,7 @@ async function createApp(consumerOptions?: {
   // Step 10: Run onInit (forward order)
   // =========================================================================
   // RATIONALE: Sequential, each plugin awaited. All APIs are built,
-  // so onInit can safely call require() and getPlugin().
+  // so onInit can safely call require().
   for (const plugin of flatPlugins) {
     if (plugin.spec.onInit) {
       const ctx = buildPluginContext(plugin);
@@ -433,12 +429,6 @@ async function createApp(consumerOptions?: {
     emit: (eventName: string, payload?: any) => {
       guardStopped();
       emit(eventName, payload);
-    },
-
-    // Instance-only: accepts PluginInstance, extracts name at runtime
-    getPlugin: (pluginInstance: PluginInstance) => {
-      guardStopped();
-      return apis.get(pluginInstance.name);
     },
 
     // Instance-only: accepts PluginInstance, throws if not registered
@@ -583,7 +573,7 @@ See Section 5, Step 9 for the full implementation. Constructs the appropriate co
 - `config` -- frozen plugin config
 - `state` -- mutable plugin state
 - `emit` -- event dispatch function
-- `getPlugin` / `require` / `has` -- inter-plugin communication
+- `require` / `has` -- inter-plugin communication
 
 ### guardStopped
 

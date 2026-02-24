@@ -269,7 +269,6 @@ describe("context tiers", () => {
     expect(contextKeys).toContain("config");
     expect(contextKeys).not.toContain("emit");
     expect(contextKeys).not.toContain("require");
-    expect(contextKeys).not.toContain("getPlugin");
     expect(contextKeys).not.toContain("state");
   });
 
@@ -292,7 +291,6 @@ describe("context tiers", () => {
     expect(contextKeys).toContain("config");
     expect(contextKeys).toContain("state");
     expect(contextKeys).toContain("emit");
-    expect(contextKeys).toContain("getPlugin");
     expect(contextKeys).toContain("require");
     expect(contextKeys).toContain("has");
   });
@@ -324,7 +322,7 @@ describe("context tiers", () => {
 // ---------------------------------------------------------------------------
 
 describe("app object shape", () => {
-  it("app has start, stop, emit, getPlugin, require, has methods", async () => {
+  it("app has start, stop, emit, require, has methods", async () => {
     const cc = createTestCore();
 
     const { createApp } = cc.createCore(cc, { plugins: [] });
@@ -333,7 +331,6 @@ describe("app object shape", () => {
     expect(typeof app.start).toBe("function");
     expect(typeof app.stop).toBe("function");
     expect(typeof app.emit).toBe("function");
-    expect(typeof app.getPlugin).toBe("function");
     expect(typeof app.require).toBe("function");
     expect(typeof app.has).toBe("function");
   });
@@ -378,8 +375,8 @@ describe("app object shape", () => {
     // Plugin is registered (has returns true) but has no mounted API
     expect(app.has("no-api")).toBe(true);
     // Plugin without api is excluded from App type surface (BuildPluginApis filters it out).
-    // Use runtime check via getPlugin since bracket access is not typed for no-api plugins.
-    expect(app.getPlugin(noApi)).toBeUndefined();
+    // Plugin is registered but has no API to require.
+    expect(() => app.require(noApi)).toThrow();
   });
 });
 
@@ -433,7 +430,6 @@ describe("idempotency", () => {
     await expect(app.start()).rejects.toThrow("stopped");
     expect(() => app.emit("test", {})).toThrow("stopped");
     expect(() => app.has("router")).toThrow("stopped");
-    expect(() => app.getPlugin(dummy)).toThrow("stopped");
     expect(() => app.require(dummy)).toThrow("stopped");
   });
 });
@@ -531,36 +527,10 @@ describe("kernel error messages", () => {
 });
 
 // ---------------------------------------------------------------------------
-// getPlugin / require / has
+// require / has
 // ---------------------------------------------------------------------------
 
-describe("getPlugin, require, has", () => {
-  it("getPlugin returns API for registered plugin", async () => {
-    const cc = createTestCore();
-
-    const router = cc.createPlugin("router", {
-      api: () => ({ current: () => "/" })
-    });
-
-    const { createApp } = cc.createCore(cc, { plugins: [router] });
-    const app = await createApp();
-
-    const api = app.getPlugin(router);
-    expect(api).toBeDefined();
-    expect(api?.current()).toBe("/");
-  });
-
-  it("getPlugin returns undefined for unregistered plugin", async () => {
-    const cc = createTestCore();
-
-    const unregistered = cc.createPlugin("unregistered", {});
-
-    const { createApp } = cc.createCore(cc, { plugins: [] });
-    const app = await createApp();
-
-    expect(app.getPlugin(unregistered)).toBeUndefined();
-  });
-
+describe("require, has", () => {
   it("require returns API for registered plugin", async () => {
     const cc = createTestCore();
 
@@ -619,15 +589,14 @@ describe("getPlugin, require, has", () => {
 
     // Registered by name -> true
     expect(app.has("no-api")).toBe(true);
-    // No API mounted -> getPlugin returns undefined
-    expect(app.getPlugin(noApi)).toBeUndefined();
+    // No API mounted -> require throws
+    expect(() => app.require(noApi)).toThrow();
   });
 
-  it("ctx.require, ctx.getPlugin, ctx.has work inside plugin lifecycle", async () => {
+  it("ctx.require and ctx.has work inside plugin lifecycle", async () => {
     const cc = createTestCore();
-    const results: { api: unknown; optional: unknown; has: boolean; hasMissing: boolean } = {
+    const results: { api: unknown; has: boolean; hasMissing: boolean } = {
       api: undefined,
-      optional: undefined,
       has: false,
       hasMissing: false
     };
@@ -640,7 +609,6 @@ describe("getPlugin, require, has", () => {
       depends: [dep] as const,
       onInit: ctx => {
         results.api = ctx.require(dep);
-        results.optional = ctx.getPlugin(dep);
         results.has = ctx.has("dep");
         results.hasMissing = ctx.has("nonexistent");
       }
@@ -650,7 +618,6 @@ describe("getPlugin, require, has", () => {
     await createApp();
 
     expect(results.api).toEqual({ value: 42 });
-    expect(results.optional).toEqual({ value: 42 });
     expect(results.has).toBe(true);
     expect(results.hasMissing).toBe(false);
   });

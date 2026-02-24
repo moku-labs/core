@@ -299,9 +299,9 @@ CREATING PLUGINS:
   Zero explicit generics. All types are inferred.
 
 CONTEXT RULES:
-  createState: only { global, config }. NO getPlugin/require/emit.
+  createState: only { global, config }. NO require/emit.
   api, onInit, onStart: full PluginContext.
-    HAS global, config, state, emit, getPlugin, require, has.
+    HAS global, config, state, emit, require, has.
   onStop: TeardownContext. Only { global }. Minimal for cleanup.
 
 LIFECYCLE (3 phases):

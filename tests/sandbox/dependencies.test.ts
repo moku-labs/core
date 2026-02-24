@@ -97,70 +97,6 @@ describe("ctx.require returns typed API (SAND-05)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// ctx.getPlugin
-// ---------------------------------------------------------------------------
-
-describe("ctx.getPlugin", () => {
-  it("returns typed API | undefined for declared dependency", async () => {
-    const cc = createCoreConfig<{ siteName: string }, Record<string, never>>("test", {
-      config: { siteName: "Test" }
-    });
-
-    let capturedResult: string | undefined;
-
-    const router = cc.createPlugin("router", {
-      api: () => ({
-        current: () => "/home"
-      })
-    });
-
-    const consumer = cc.createPlugin("consumer", {
-      depends: [router] as const,
-      api: ctx => {
-        const routerApi = ctx.getPlugin(router);
-        // Type-level: result is RouterApi | undefined
-        expectTypeOf(routerApi).not.toBeUndefined();
-
-        if (routerApi) {
-          capturedResult = routerApi.current();
-        }
-        return { check: () => capturedResult };
-      }
-    });
-
-    const { createApp } = cc.createCore(cc, { plugins: [router, consumer] });
-    const app = await createApp();
-
-    expect(capturedResult).toBe("/home");
-    expect(app.consumer.check()).toBe("/home");
-  });
-
-  it("returns undefined for unregistered plugin instance", async () => {
-    const cc = createCoreConfig<{ siteName: string }, Record<string, never>>("test", {
-      config: { siteName: "Test" }
-    });
-
-    const unregistered = cc.createPlugin("unregistered", {
-      api: () => ({ noop: () => {} })
-    });
-
-    let capturedResult: unknown;
-
-    const probe = cc.createPlugin("probe", {
-      api: ctx => {
-        capturedResult = ctx.getPlugin(unregistered);
-        return { noop: () => {} };
-      }
-    });
-
-    const { createApp } = cc.createCore(cc, { plugins: [probe] });
-    await createApp();
-
-    expect(capturedResult).toBeUndefined();
-  });
-});
-
-// ---------------------------------------------------------------------------
 // ctx.has
 // ---------------------------------------------------------------------------
 
@@ -484,7 +420,7 @@ describe("multiple plugin dependencies", () => {
     expect(app.auth.currentUser()).toBeUndefined();
   });
 
-  it("getPlugin returns typed API | undefined for each dependency", async () => {
+  it("require returns typed API for each dependency", async () => {
     const cc = createCoreConfig<{ siteName: string }, Record<string, never>>("test", {
       config: { siteName: "Test" }
     });
@@ -506,21 +442,15 @@ describe("multiple plugin dependencies", () => {
     const dashboard = cc.createPlugin("dashboard", {
       depends: [router, auth] as const,
       api: ctx => {
-        const maybeRouter = ctx.getPlugin(router);
-        const maybeAuth = ctx.getPlugin(auth);
+        const routerApi = ctx.require(router);
+        const authApi = ctx.require(auth);
 
-        // Type-level: return type includes undefined (optional dep pattern)
-        expectTypeOf(maybeRouter).not.toBeUndefined();
-        expectTypeOf(maybeAuth).not.toBeUndefined();
+        // Type-level: return type is fully typed (not undefined)
+        expectTypeOf(routerApi.navigate).toBeFunction();
+        expectTypeOf(authApi.currentUser).toBeFunction();
 
         return {
-          info: () => {
-            // After narrowing, methods are fully typed
-            if (maybeRouter && maybeAuth) {
-              return `${maybeAuth.currentUser()} at ${maybeRouter.current()}`;
-            }
-            return "unavailable";
-          }
+          info: () => `${authApi.currentUser()} at ${routerApi.current()}`
         };
       }
     });

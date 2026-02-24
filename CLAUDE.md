@@ -71,7 +71,7 @@ Full specification: `specification/14-EVENT-REGISTRATION.md`
 - **Configs frozen, state mutable**: Configs are `Object.freeze`'d. Plugin state (`S`) is the mutable escape hatch.
 - **Strict emit, no escape hatch**: `emit` only accepts known event names with typed payloads.
 - **Hooks receive context**: `hooks: ctx => ({ ... })` follows the same closure pattern as `api`, `onInit`, `onStart`. Handlers can access `ctx.state`, `ctx.emit`, `ctx.require`, etc. Payloads are strictly typed from the merged event map (global + own + dependency events).
-- **Instance-only require/getPlugin**: `require(plugin)` and `getPlugin(plugin)` only accept PluginInstance references, not strings. Returns fully typed API. `has(name)` stays string-based (boolean check). No escape hatch.
+- **Instance-only require**: `require(plugin)` only accepts PluginInstance references, not strings. Returns fully typed API or throws. `has(name)` stays string-based (boolean check). No escape hatch.
 
 ## Error Message Format
 

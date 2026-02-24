@@ -46,11 +46,6 @@ type PluginContext<Config, Events, C, S, Deps> = {
    */
   emit: EmitFunction;
   /**
-   * Get plugin API by instance. Returns fully typed API | undefined.
-   * Instance-only -- no string overload.
-   */
-  getPlugin: GetPluginFunction;
-  /**
    * Get plugin API or throw. Instance-only, fully typed.
    */
   require: RequireFunction;
@@ -59,7 +54,7 @@ type PluginContext<Config, Events, C, S, Deps> = {
 };
 ```
 
-Used by: `api`, `onInit`, `onStart`. Everything is live. The plugin's mutable state is available. Other plugins' APIs are accessible via `getPlugin`/`require`. Events can be emitted.
+Used by: `api`, `onInit`, `onStart`. Everything is live. The plugin's mutable state is available. Other plugins' APIs are accessible via `require`. Events can be emitted.
 
 ### TeardownContext
 
@@ -89,11 +84,11 @@ Used by: `onStop`. During teardown, plugins are being stopped in reverse order. 
 ```
 createState:    { global, config }                            (minimal)
 api:            { global, config, state, emit,                (full)
-                  getPlugin, require, has }
+                  require, has }
 onInit:         { global, config, state, emit,                (full)
-                  getPlugin, require, has }
+                  require, has }
 onStart:        { global, config, state, emit,                (full)
-                  getPlugin, require, has }
+                  require, has }
 onStop:         { global }                                    (minimal)
 ```
 
@@ -101,7 +96,7 @@ onStop:         { global }                                    (minimal)
 
 ## 4. Phase-Appropriate Context Rules
 
-**Critical rule: `require`/`has`/`getPlugin`/`emit`/`state` are NOT available in `createState`.**
+**Critical rule: `require`/`has`/`emit`/`state` are NOT available in `createState`.**
 
 At that point, not all plugins have been created. Providing these methods would be a lie -- they would return incomplete data.
 
@@ -109,7 +104,7 @@ At that point, not all plugins have been created. Providing these methods would 
 
 This is a conscious design decision. The alternative -- providing the same full ctx everywhere -- would mean:
 
-- `createState` could call `getPlugin('other')` before `other` exists.
+- `createState` could call `require(otherPlugin)` before `other` exists.
 - Early lifecycle methods could call `emit('event')` when not all hooks are registered.
 - Errors would be mysterious and timing-dependent.
 
@@ -138,7 +133,7 @@ onInit: (ctx) => {
 
 ## 6. ctx.state
 
-Plugin-local mutable state. Created by `createState()`, private to the owning plugin. Other plugins cannot access it -- it is not exposed on the app object or through `getPlugin`/`require`.
+Plugin-local mutable state. Created by `createState()`, private to the owning plugin. Other plugins cannot access it -- it is not exposed on the app object or through `require`.
 
 ```typescript
 const counterPlugin = createPlugin('counter', {
@@ -154,7 +149,7 @@ const counterPlugin = createPlugin('counter', {
 
 ---
 
-## 7. ctx.require, ctx.getPlugin, and ctx.has
+## 7. ctx.require and ctx.has
 
 ### `require(plugin)` -- Instance-Only, Fully Typed
 
@@ -176,19 +171,6 @@ Error: [moku-site] Plugin "dashboard" requires "auth", but "auth" is not registe
   Add "auth" to your plugin list.
 ```
 
-### `getPlugin(plugin)` -- Instance-Only, Returns `API | undefined`
-
-Same as `require` but for **optional/soft dependencies**. Returns `undefined` instead of throwing when the plugin is not registered.
-
-```typescript
-// Optional dep (NOT in depends) -- may be undefined
-const analytics = ctx.getPlugin(analyticsPlugin);
-//    ^? AnalyticsApi | undefined
-if (analytics) {
-  analytics.track('pageview');  // typed after narrowing
-}
-```
-
 ### `has(name)`
 
 Returns `boolean`. Never throws. Stays string-based -- it's a boolean check with no type inference needed.
@@ -197,9 +179,8 @@ Returns `boolean`. Never throws. Stays string-based -- it's a boolean check with
 
 ```typescript
 if (ctx.has('analytics')) {
-  // Use getPlugin for typed access
-  const analytics = ctx.getPlugin(analyticsPlugin);
-  if (analytics) analytics.track('pageview');
+  const analytics = ctx.require(analyticsPlugin);
+  analytics.track('pageview');
 }
 ```
 

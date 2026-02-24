@@ -13,7 +13,7 @@
 //   Step 8: Build event bus (hookMap, dispatch, emit)
 //   Step 9: Build APIs (PluginContext, forward order)
 //   Step 10: Run onInit (PluginContext, forward order, sequential async)
-//   Step 11: Build and freeze app (start/stop/emit/require/getPlugin/has)
+//   Step 11: Build and freeze app (start/stop/emit/require/has)
 // =============================================================================
 
 import type { AnyPluginInstance } from "./type-utilities";
@@ -269,18 +269,6 @@ function createContextFactory(
     state: states.get(plugin.name),
     emit,
     /**
-     * Get plugin API by instance. Returns undefined if not found.
-     * @param instance - The plugin instance to look up.
-     * @returns The plugin API or undefined.
-     * @example
-     * ```ts
-     * ctx.getPlugin(routerPlugin);
-     * ```
-     */
-    getPlugin: (instance: AnyPluginInstance) => {
-      return apis.get(instance.name);
-    },
-    /**
      * Get plugin API by instance or throw if not found.
      * @param instance - The plugin instance to require.
      * @returns The plugin API.
@@ -346,7 +334,7 @@ async function executeStop(
 
 /**
  * Build callback context for consumer lifecycle callbacks (onReady, onStart, onStop).
- * Includes frozen config, emit, getPlugin, require, has, and mounted plugin APIs.
+ * Includes frozen config, emit, require, has, and mounted plugin APIs.
  * @param id - Framework identifier for error messages.
  * @param globalConfig - Frozen global config.
  * @param emit - Event emit function.
@@ -369,17 +357,6 @@ function buildCallbackContext(
   pluginNameSet: Set<string>
   // biome-ignore lint/suspicious/noExplicitAny: context is dynamically constructed with plugin APIs
 ): any {
-  /**
-   * Look up a plugin API by instance reference.
-   * @param instance - The plugin instance to look up.
-   * @returns The plugin API, or undefined if not registered.
-   * @example
-   * ```ts
-   * const api = getPlugin(routerPlugin);
-   * ```
-   */
-  const getPlugin = (instance: AnyPluginInstance) => apis.get(instance.name);
-
   /**
    * Look up a plugin API by instance reference, throwing if not found.
    * @param instance - The plugin instance to require.
@@ -411,7 +388,7 @@ function buildCallbackContext(
   const has = (name: string) => pluginNameSet.has(name);
 
   // biome-ignore lint/suspicious/noExplicitAny: context is dynamically constructed with plugin APIs
-  const context: any = { config: globalConfig, emit, getPlugin, require: requirePlugin, has };
+  const context: any = { config: globalConfig, emit, require: requirePlugin, has };
   for (const [name, api] of apis) {
     context[name] = api;
   }
@@ -419,7 +396,7 @@ function buildCallbackContext(
 }
 
 /**
- * Build the frozen app object with start, stop, emit, require, getPlugin, has methods.
+ * Build the frozen app object with start, stop, emit, require, has methods.
  * Plugin APIs are mounted directly on the app object (e.g., app.router, app.seo).
  * @param id - Framework identifier for error messages.
  * @param flatPlugins - Flattened plugin list.
@@ -542,20 +519,6 @@ function buildApp(
     emit: (eventName: string, payload?: any): void => {
       guardStopped();
       emit(eventName, payload);
-    },
-
-    /**
-     * Get plugin API by instance. Returns undefined if not found.
-     * @param instance - PluginInstance to look up.
-     * @returns The plugin API object or undefined.
-     * @example
-     * ```ts
-     * const routerApi = app.getPlugin(routerPlugin);
-     * ```
-     */
-    getPlugin: (instance: AnyPluginInstance) => {
-      guardStopped();
-      return apis.get(instance.name);
     },
 
     /**

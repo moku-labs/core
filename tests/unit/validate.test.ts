@@ -47,15 +47,6 @@ describe("validatePlugins - reserved names", () => {
     expect(() => validatePlugins("test", flat)).toThrow("reserved app method");
   });
 
-  it("throws on reserved name 'getPlugin'", () => {
-    const { createPlugin } = setup();
-
-    const plugin = createPlugin("getPlugin", {});
-    const flat = flattenPlugins([plugin]);
-
-    expect(() => validatePlugins("test", flat)).toThrow("reserved app method");
-  });
-
   it("throws on reserved name 'require'", () => {
     const { createPlugin } = setup();
 

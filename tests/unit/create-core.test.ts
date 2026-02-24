@@ -277,7 +277,6 @@ describe("type safety: consumer callback context", () => {
         expectTypeOf(ctx.emit).toBeFunction();
         expectTypeOf(ctx.has).toBeFunction();
         expectTypeOf(ctx.require).toBeFunction();
-        expectTypeOf(ctx.getPlugin).toBeFunction();
         expectTypeOf(ctx.probe.ping).toBeFunction();
       }
     });

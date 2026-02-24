@@ -38,7 +38,7 @@
 //   DependencyPluginTuple    readonly PluginLike[] — the depends array constraint.
 //
 //   ExtractPluginApi<P>      Pulls the API phantom type from a PluginLike value.
-//                            Used by ctx.require() and ctx.getPlugin() return types.
+//                            Used by ctx.require() return type.
 //   ExtractPluginEvents<P>   Pulls the events phantom type from a PluginLike value.
 //                            Falls back to {} (identity) when no events declared.
 //
@@ -48,7 +48,7 @@
 //                            full event surface a plugin can emit/listen to.
 //
 //   PluginExecutionContext    The ctx object. Provides global, config, state, emit,
-//                            require, getPlugin, has. Same shape for api/hooks/lifecycle.
+//                            require, has. Same shape for api/hooks/lifecycle.
 //
 //   EventDescriptor<T>       Returned by register<T>(). Carries payload type as phantom.
 //   RegisterFunction         <T>(description?) => EventDescriptor<T>. Passed to events().
@@ -271,18 +271,6 @@ type PluginExecutionContext<
    * ```
    */
   emit: EmitFunction<AllEvents>;
-  /**
-   * Get a dependency plugin's API, or `undefined` if not registered.
-   * Accepts only plugin instance references (not strings).
-   * @example
-   * ```ts
-   * const authApi = ctx.getPlugin(authPlugin);
-   * if (authApi) authApi.logout();
-   * ```
-   */
-  getPlugin: <PluginCandidate extends PluginLike>(
-    plugin: PluginCandidate
-  ) => ExtractPluginApi<PluginCandidate> | undefined;
   /**
    * Get a dependency plugin's API. Throws if the plugin is not registered.
    * Accepts only plugin instance references (not strings).

@@ -237,9 +237,6 @@ type App<Config, Events, Plugins> = Readonly<{
   /** Emit a typed event. Only known events accepted, payload strictly typed. */
   emit: EmitFn<Events>;
 
-  /** Get a plugin by instance. Returns fully typed API or undefined. */
-  getPlugin: <P extends PluginInstance>(plugin: P) => ExtractApi<P> | undefined;
-
   /** Get a plugin or throw. Instance-only, fully typed. */
   require: <P extends PluginInstance>(plugin: P) => ExtractApi<P>;
 

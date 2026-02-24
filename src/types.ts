@@ -7,7 +7,7 @@
 // Sections:
 //   1. Context Tiers (MinimalContext, PluginContext, TeardownContext)
 //   2. Emit Function Types
-//   3. Plugin Lookup Types (GetPluginFunction, RequireFunction, HasFunction)
+//   3. Plugin Lookup Types (RequireFunction, HasFunction)
 //   4. Plugin Types (PluginSpec, PluginInstance)
 //   5. Extraction Types (ExtractApi, ExtractEvents, ExtractName, ExtractConfig, DepsEvents)
 //   6. Aggregate Types (BuildPluginApis, App, CreateAppOptions)
@@ -42,7 +42,7 @@ type TeardownContext<Config> = {
  * Used by: createState
  *
  * At this stage, not all plugins have been created yet. Communication methods
- * (emit, getPlugin, require, has) are intentionally unavailable.
+ * (emit, require, has) are intentionally unavailable.
  */
 type MinimalContext<Config, C> = {
   readonly global: Readonly<Config>;
@@ -61,7 +61,6 @@ type PluginContext<Config, Events extends Record<string, unknown>, C, S> = {
   readonly config: Readonly<C>;
   state: S;
   emit: EmitFunction<Events>;
-  getPlugin: GetPluginFunction;
   require: RequireFunction;
   has: HasFunction;
 };
@@ -82,12 +81,6 @@ type EmitFunction<Events extends Record<string, unknown>> = <K extends string & 
 // =============================================================================
 // Section 3: Plugin Lookup Types
 // =============================================================================
-
-/** Get plugin API by instance. Returns API or undefined. */
-// biome-ignore lint/suspicious/noExplicitAny: PluginInstance uses any for generic instance matching
-type GetPluginFunction = <P extends PluginInstance<string, any, any, any, any>>(
-  plugin: P
-) => ExtractApi<P> | undefined;
 
 /** Get plugin API or throw. Instance-only, fully typed. */
 // biome-ignore lint/suspicious/noExplicitAny: PluginInstance uses any for generic instance matching
@@ -273,7 +266,6 @@ type App<
   readonly start: () => Promise<void>;
   readonly stop: () => Promise<void>;
   readonly emit: EmitFunction<Events>;
-  readonly getPlugin: GetPluginFunction;
   readonly require: RequireFunction;
   readonly has: HasFunction;
 } & BuildPluginApis<P>;
@@ -290,7 +282,6 @@ type AppCallbackContext<
 > = {
   readonly config: Readonly<Config>;
   readonly emit: EmitFunction<Events>;
-  readonly getPlugin: GetPluginFunction;
   readonly require: RequireFunction;
   readonly has: HasFunction;
 } & BuildPluginApis<P>;
@@ -337,7 +328,6 @@ export type {
   // Emit
   EmitFunction,
   // Plugin lookup
-  GetPluginFunction,
   RequireFunction,
   HasFunction,
   // Plugin types

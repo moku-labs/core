@@ -18,14 +18,13 @@ function createTestCtx<Config, C, S>(options?: {
   global?: Partial<Config>;     // Frozen global config mock
   config?: Partial<C>;          // Frozen plugin config mock
   state?: Partial<S>;           // Mutable plugin state mock
-  plugins?: Record<string, any>; // Mock plugin APIs for require/getPlugin
+  plugins?: Record<string, any>; // Mock plugin APIs for require
 }): {
   ctx: {
     global: Readonly<Config>;
     config: Readonly<C>;
     state: S;
     emit: (name: string, payload?: any) => void;
-    getPlugin: (name: string) => any;
     require: (name: string) => any;
     has: (name: string) => boolean;
   };
@@ -70,6 +69,6 @@ test('emit is captured for assertions', () => {
 ## Open Questions
 
 - Should `createTestCtx` be part of `moku_core/testing` (sub-path export) or a completely separate package?
-- What is the minimal viable `ctx` shape? Does it need `getPlugin`/`require`/`has`, or just `global`, `config`, `state`, `emit`?
+- What is the minimal viable `ctx` shape? Does it need `require`/`has`, or just `global`, `config`, `state`, `emit`?
 - Should `createTestCtx` accept a generic for the full plugin union (to enable typed `require` in tests)?
 - How should async lifecycle testing work? Should `createTestCtx` provide helpers for simulating init/start/stop phases?

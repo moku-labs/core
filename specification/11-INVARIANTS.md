@@ -95,12 +95,12 @@ Context is restricted based on what is safe to access at each point:
 | Method | Context Tier | Available |
 |--------|-------------|-----------|
 | `createState` | MinimalContext | `global`, `config` |
-| `api` | PluginContext | `global`, `config`, `state`, `emit`, `getPlugin`, `require`, `has` |
-| `onInit` | PluginContext | `global`, `config`, `state`, `emit`, `getPlugin`, `require`, `has` |
-| `onStart` | PluginContext | `global`, `config`, `state`, `emit`, `getPlugin`, `require`, `has` |
+| `api` | PluginContext | `global`, `config`, `state`, `emit`, `require`, `has` |
+| `onInit` | PluginContext | `global`, `config`, `state`, `emit`, `require`, `has` |
+| `onStart` | PluginContext | `global`, `config`, `state`, `emit`, `require`, `has` |
 | `onStop` | TeardownContext | `global` |
 
-`createState` does NOT have access to `getPlugin`, `require`, `has`, or `emit`. At that point, not all plugins have been created. Providing these methods would return incomplete data.
+`createState` does NOT have access to `require`, `has`, or `emit`. At that point, not all plugins have been created. Providing these methods would return incomplete data.
 
 `onStop` receives a minimal teardown context -- only `global` is available. Plugins should clean up their own resources without depending on other plugins (which may have already stopped in reverse order).
 
@@ -204,7 +204,7 @@ const auth = ctx.require('auth');
 const token = auth.getToken();
 ```
 
-Events are for notifications. `getPlugin`/`require` are for requests.
+Events are for notifications. `require` is for requests.
 
 ### 2.8 LLM Inventing New Primitives
 

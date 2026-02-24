@@ -122,7 +122,7 @@ const dashboardPlugin = createPlugin('dashboard', {
 });
 ```
 
-**Context-aware hooks:** The `hooks` function receives the same `PluginContext` as `api`, `onInit`, and `onStart`. Handlers can access `ctx.state`, `ctx.emit`, `ctx.require`, `ctx.getPlugin`, etc. via closure. This enables hooks to mutate plugin state and trigger cross-plugin communication.
+**Context-aware hooks:** The `hooks` function receives the same `PluginContext` as `api`, `onInit`, and `onStart`. Handlers can access `ctx.state`, `ctx.emit`, `ctx.require`, etc. via closure. This enables hooks to mutate plugin state and trigger cross-plugin communication.
 
 **Typed hooks:** Hook handlers receive fully typed payloads for known event names (global Events, own PluginEvents, and dependency events via `depends`). There is no `(payload: unknown)` fallback -- the type system maps each event key directly to its payload type.
 

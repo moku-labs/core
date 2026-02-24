@@ -201,7 +201,6 @@ The `depends` field accepts an array of plugin instances. Since you import a plu
 ### What `depends` Enables at Runtime
 
 - `ctx.require(plugin)` -- returns the typed API of the dependency, or throws if not found
-- `ctx.getPlugin(plugin)` -- returns the typed API or `undefined`
 - Typed `hooks` -- can listen to events declared by dependency plugins
 - Typed `ctx.emit` -- can emit events declared by dependency plugins
 

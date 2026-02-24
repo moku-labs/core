@@ -12,7 +12,7 @@
 import type { AnyPluginInstance } from "./type-utilities";
 
 /** Reserved app method names that cannot be used as plugin names. */
-const RESERVED_NAMES = new Set(["start", "stop", "emit", "getPlugin", "require", "has"]);
+const RESERVED_NAMES = new Set(["start", "stop", "emit", "require", "has"]);
 
 /**
  * Flatten a plugin list depth-first, children before parent.

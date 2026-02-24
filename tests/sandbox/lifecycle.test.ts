@@ -210,9 +210,6 @@ describe("lifecycle execution order", () => {
         // @ts-expect-error -- createState ctx has no require
         expect(ctx.require).toBeUndefined();
 
-        // @ts-expect-error -- createState ctx has no getPlugin
-        expect(ctx.getPlugin).toBeUndefined();
-
         // @ts-expect-error -- createState ctx has no state
         expect(ctx.state).toBeUndefined();
 
@@ -227,10 +224,9 @@ describe("lifecycle execution order", () => {
     expect(capturedCtx).toHaveProperty("global");
     expect(capturedCtx).toHaveProperty("config");
 
-    // Runtime: MinimalContext does NOT have emit, require, getPlugin, state
+    // Runtime: MinimalContext does NOT have emit, require, state
     expect(capturedCtx).not.toHaveProperty("emit");
     expect(capturedCtx).not.toHaveProperty("require");
-    expect(capturedCtx).not.toHaveProperty("getPlugin");
     expect(capturedCtx).not.toHaveProperty("state");
   });
 
