@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { createCoreConfig } from "../../src";
-import { flattenPlugins } from "../../src/flatten";
+import { validatePlugins } from "../../src/flatten";
 
 // ---------------------------------------------------------------------------
 // Shared setup
@@ -15,137 +15,84 @@ function setup() {
 }
 
 // ---------------------------------------------------------------------------
-// flattenPlugins - basic behavior
+// validatePlugins - reserved names
 // ---------------------------------------------------------------------------
 
-describe("flattenPlugins - basic behavior", () => {
-  it("returns empty array for empty input", () => {
-    const result = flattenPlugins([]);
-    expect(result).toEqual([]);
+describe("validatePlugins - reserved names", () => {
+  it("throws for reserved plugin name 'start'", () => {
+    const { createPlugin } = setup();
+    const plugin = createPlugin("start", {});
+    expect(() => validatePlugins("test", [plugin])).toThrow(/reserved/);
   });
 
-  it("returns same array for flat plugin list (no sub-plugins)", () => {
+  it("throws for reserved plugin name 'stop'", () => {
     const { createPlugin } = setup();
-
-    const a = createPlugin("a", {});
-    const b = createPlugin("b", {});
-    const c = createPlugin("c", {});
-
-    const result = flattenPlugins([a, b, c]);
-
-    expect(result).toHaveLength(3);
-    expect(result[0]?.name).toBe("a");
-    expect(result[1]?.name).toBe("b");
-    expect(result[2]?.name).toBe("c");
+    const plugin = createPlugin("stop", {});
+    expect(() => validatePlugins("test", [plugin])).toThrow(/reserved/);
   });
 
-  it("preserves order for flat plugin list", () => {
+  it("throws for reserved plugin name 'emit'", () => {
     const { createPlugin } = setup();
+    const plugin = createPlugin("emit", {});
+    expect(() => validatePlugins("test", [plugin])).toThrow(/reserved/);
+  });
 
-    const router = createPlugin("router", {});
-    const logger = createPlugin("logger", {});
+  it("throws for reserved plugin name 'require'", () => {
+    const { createPlugin } = setup();
+    const plugin = createPlugin("require", {});
+    expect(() => validatePlugins("test", [plugin])).toThrow(/reserved/);
+  });
 
-    const result = flattenPlugins([router, logger]);
-
-    expect(result.map(p => p.name)).toEqual(["router", "logger"]);
+  it("throws for reserved plugin name 'has'", () => {
+    const { createPlugin } = setup();
+    const plugin = createPlugin("has", {});
+    expect(() => validatePlugins("test", [plugin])).toThrow(/reserved/);
   });
 });
 
 // ---------------------------------------------------------------------------
-// flattenPlugins - sub-plugin flattening
+// validatePlugins - duplicate names
 // ---------------------------------------------------------------------------
 
-describe("flattenPlugins - sub-plugin flattening", () => {
-  it("children appear before parent (depth-first)", () => {
+describe("validatePlugins - duplicate names", () => {
+  it("throws for duplicate plugin names", () => {
     const { createPlugin } = setup();
-
-    const child = createPlugin("child", {});
-    const parent = createPlugin("parent", {
-      plugins: [child]
-    });
-
-    const result = flattenPlugins([parent]);
-
-    expect(result).toHaveLength(2);
-    expect(result[0]?.name).toBe("child");
-    expect(result[1]?.name).toBe("parent");
+    const a1 = createPlugin("a", {});
+    const a2 = createPlugin("a", {});
+    expect(() => validatePlugins("test", [a1, a2])).toThrow(/Duplicate/);
   });
 
-  it("handles nested sub-plugins (grandchild before child before parent)", () => {
+  it("passes for unique plugin names", () => {
     const { createPlugin } = setup();
+    const a = createPlugin("a", {});
+    const b = createPlugin("b", {});
+    expect(() => validatePlugins("test", [a, b])).not.toThrow();
+  });
+});
 
-    const grandchild = createPlugin("grandchild", {});
-    const child = createPlugin("child", {
-      plugins: [grandchild]
-    });
-    const parent = createPlugin("parent", {
-      plugins: [child]
-    });
+// ---------------------------------------------------------------------------
+// validatePlugins - dependency order
+// ---------------------------------------------------------------------------
 
-    const result = flattenPlugins([parent]);
-
-    expect(result).toHaveLength(3);
-    expect(result.map(p => p.name)).toEqual(["grandchild", "child", "parent"]);
+describe("validatePlugins - dependency order", () => {
+  it("throws when dependency is missing", () => {
+    const { createPlugin } = setup();
+    const dep = createPlugin("dep", {});
+    const consumer = createPlugin("consumer", { depends: [dep] });
+    expect(() => validatePlugins("test", [consumer])).toThrow(/not registered/);
   });
 
-  it("handles multiple children in correct order", () => {
+  it("throws when dependency appears after dependent", () => {
     const { createPlugin } = setup();
-
-    const childA = createPlugin("child-a", {});
-    const childB = createPlugin("child-b", {});
-    const parent = createPlugin("parent", {
-      plugins: [childA, childB]
-    });
-
-    const result = flattenPlugins([parent]);
-
-    expect(result).toHaveLength(3);
-    expect(result.map(p => p.name)).toEqual(["child-a", "child-b", "parent"]);
+    const dep = createPlugin("dep", {});
+    const consumer = createPlugin("consumer", { depends: [dep] });
+    expect(() => validatePlugins("test", [consumer, dep])).toThrow(/appears after/);
   });
 
-  it("handles mixed flat and nested plugins", () => {
+  it("passes when dependency appears before dependent", () => {
     const { createPlugin } = setup();
-
-    const standalone = createPlugin("standalone", {});
-    const child = createPlugin("child", {});
-    const parent = createPlugin("parent", {
-      plugins: [child]
-    });
-
-    const result = flattenPlugins([standalone, parent]);
-
-    expect(result).toHaveLength(3);
-    expect(result.map(p => p.name)).toEqual(["standalone", "child", "parent"]);
-  });
-
-  it("depth-first with nested sub-plugins across multiple parents", () => {
-    const { createPlugin } = setup();
-
-    const engine = createPlugin("engine", {});
-    const renderer = createPlugin("renderer", {
-      plugins: [engine]
-    });
-
-    const store = createPlugin("store", {});
-    const dataPipeline = createPlugin("data-pipeline", {
-      plugins: [store]
-    });
-
-    const result = flattenPlugins([renderer, dataPipeline]);
-
-    expect(result.map(p => p.name)).toEqual(["engine", "renderer", "store", "data-pipeline"]);
-  });
-
-  it("plugins with empty plugins array treated as flat", () => {
-    const { createPlugin } = setup();
-
-    const plugin = createPlugin("solo", {
-      plugins: []
-    });
-
-    const result = flattenPlugins([plugin]);
-
-    expect(result).toHaveLength(1);
-    expect(result[0]?.name).toBe("solo");
+    const dep = createPlugin("dep", {});
+    const consumer = createPlugin("consumer", { depends: [dep] });
+    expect(() => validatePlugins("test", [dep, consumer])).not.toThrow();
   });
 });

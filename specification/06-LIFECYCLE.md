@@ -24,9 +24,8 @@ Forward = plugin array order (first registered runs first). Reverse = last regis
 Runs during `await createApp(...)`. This single phase encompasses all initialization work. Internal sub-steps (not visible to plugin authors as separate phases):
 
 1. **Merge plugin lists:** `[...frameworkDefaultPlugins, ...consumerExtraPlugins]`
-2. **Flatten sub-plugins:** Depth-first, children before parent. Sub-plugins declared in a plugin's `plugins` field are inserted before their parent.
-3. **Validate names:** No duplicate plugin names in the final list. Throw if any collision.
-4. **Validate dependencies:** For each plugin with `depends`, verify all dependencies exist and appear earlier in the array. Throw with clear error if either fails.
+2. **Validate names:** No duplicate plugin names in the final list. Throw if any collision.
+3. **Validate dependencies:** For each plugin with `depends`, verify all dependencies exist and appear earlier in the array. Throw with clear error if either fails.
 5. **Resolve config:** For each plugin, shallow merge `{ ...config, ...consumerConfig }`. Freeze the result.
 6. **Create state:** For each plugin (forward order), call `createState({ global, config })`. Store mutable state.
 7. **Build API:** For each plugin (forward order), call `api(PluginContext)`. Register the API in the plugin registry.

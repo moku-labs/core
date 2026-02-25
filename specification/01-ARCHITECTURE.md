@@ -301,7 +301,7 @@ Consumers cannot remove default plugins. They can configure them.
 4. TypeScript tells you what's required and what's optional.
 5. Use `app.pluginName.method()` -- everything is typed.
 
-The consumer never sees `createCoreConfig`. Never sees `moku_core`. Never thinks about lifecycle phases or plugin flattening. They declare, configure, and compose.
+The consumer never sees `createCoreConfig`. Never sees `moku_core`. Never thinks about lifecycle phases or plugin validation. They declare, configure, and compose.
 
 ```typescript
 import { createApp, createPlugin } from 'my-framework';

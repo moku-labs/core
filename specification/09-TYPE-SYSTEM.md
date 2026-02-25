@@ -238,9 +238,9 @@ app.router.current();           // () => string
 
 ---
 
-## 8. Sub-Plugin Type Visibility
+## 8. Plugin Type Visibility
 
-Sub-plugin types (from the `plugins` field on PluginSpec) are propagated via the flattening algorithm. When a plugin declares sub-plugins, those sub-plugins are inserted before the parent during flattening. Their APIs appear on the app object.
+All plugins are listed explicitly in the plugins array. Every plugin's API appears on the app object with full type visibility:
 
 ```typescript
 const sessionPlugin = createPlugin('session', {
@@ -248,11 +248,11 @@ const sessionPlugin = createPlugin('session', {
 });
 
 const authPlugin = createPlugin('auth', {
-  plugins: [sessionPlugin],  // sub-plugin
+  depends: [sessionPlugin],
   api: (ctx) => ({ login: () => {} }),
 });
 
-// After flattening: [sessionPlugin, authPlugin]
+// plugins: [sessionPlugin, authPlugin]
 // app.session.getSession() -- typed
 // app.auth.login() -- typed
 ```

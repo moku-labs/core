@@ -25,7 +25,7 @@
 // =============================================================================
 
 import { kernel } from "./app";
-import { flattenPlugins, validatePlugins } from "./flatten";
+import { validatePlugins } from "./flatten";
 import type { BoundCreatePluginFunction } from "./plugin";
 import type { AnyPluginInstance } from "./type-utilities";
 import type { App, CreateAppOptions } from "./types";
@@ -193,18 +193,15 @@ function createCoreFactory<
       // Merge plugin lists: framework defaults first, consumer extras second
       const allPlugins = [...defaultPlugins, ...(appOptions.plugins ?? [])];
 
-      // Flatten sub-plugins depth-first (children before parent)
-      const flatPlugins = flattenPlugins(allPlugins);
-
       // Validate: reserved names, duplicates, dependency existence and order
-      validatePlugins(frameworkId, flatPlugins);
+      validatePlugins(frameworkId, allPlugins);
 
       // Delegate to kernel with pre-separated config and plugin configs
       return kernel({
         id: frameworkId,
         configDefaults,
         frameworkPluginConfigs,
-        flatPlugins,
+        flatPlugins: allPlugins,
         configOverrides: appOptions.config ?? {},
         consumerPluginConfigs: appOptions.pluginConfigs ?? {},
         onReady,

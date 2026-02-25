@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { createCoreConfig } from "../../src";
-import { flattenPlugins, validatePlugins } from "../../src/flatten";
+import { validatePlugins } from "../../src/flatten";
 
 // ---------------------------------------------------------------------------
 // Shared setup
@@ -23,7 +23,7 @@ describe("validatePlugins - reserved names", () => {
     const { createPlugin } = setup();
 
     const plugin = createPlugin("start", {});
-    const flat = flattenPlugins([plugin]);
+    const flat = [plugin];
 
     expect(() => validatePlugins("test", flat)).toThrow(TypeError);
     expect(() => validatePlugins("test", flat)).toThrow("reserved app method");
@@ -33,7 +33,7 @@ describe("validatePlugins - reserved names", () => {
     const { createPlugin } = setup();
 
     const plugin = createPlugin("stop", {});
-    const flat = flattenPlugins([plugin]);
+    const flat = [plugin];
 
     expect(() => validatePlugins("test", flat)).toThrow("reserved app method");
   });
@@ -42,7 +42,7 @@ describe("validatePlugins - reserved names", () => {
     const { createPlugin } = setup();
 
     const plugin = createPlugin("emit", {});
-    const flat = flattenPlugins([plugin]);
+    const flat = [plugin];
 
     expect(() => validatePlugins("test", flat)).toThrow("reserved app method");
   });
@@ -51,7 +51,7 @@ describe("validatePlugins - reserved names", () => {
     const { createPlugin } = setup();
 
     const plugin = createPlugin("require", {});
-    const flat = flattenPlugins([plugin]);
+    const flat = [plugin];
 
     expect(() => validatePlugins("test", flat)).toThrow("reserved app method");
   });
@@ -60,7 +60,7 @@ describe("validatePlugins - reserved names", () => {
     const { createPlugin } = setup();
 
     const plugin = createPlugin("has", {});
-    const flat = flattenPlugins([plugin]);
+    const flat = [plugin];
 
     expect(() => validatePlugins("test", flat)).toThrow("reserved app method");
   });
@@ -76,7 +76,7 @@ describe("validatePlugins - duplicate names", () => {
 
     const a1 = createPlugin("router", {});
     const a2 = createPlugin("router", {});
-    const flat = flattenPlugins([a1, a2]);
+    const flat = [a1, a2];
 
     expect(() => validatePlugins("test", flat)).toThrow(TypeError);
     expect(() => validatePlugins("test", flat)).toThrow("Duplicate plugin name");
@@ -88,7 +88,7 @@ describe("validatePlugins - duplicate names", () => {
 
     const a = createPlugin("a", {});
     const b = createPlugin("b", {});
-    const flat = flattenPlugins([a, b]);
+    const flat = [a, b];
 
     expect(() => validatePlugins("test", flat)).not.toThrow();
   });
@@ -108,7 +108,7 @@ describe("validatePlugins - dependency order", () => {
     });
 
     // Only register consumer, not dep
-    const flat = flattenPlugins([consumer]);
+    const flat = [consumer];
 
     expect(() => validatePlugins("test", flat)).toThrow(TypeError);
     expect(() => validatePlugins("test", flat)).toThrow('depends on "dep"');
@@ -124,7 +124,7 @@ describe("validatePlugins - dependency order", () => {
     });
 
     // Wrong order: consumer before dep
-    const flat = flattenPlugins([consumer, dep]);
+    const flat = [consumer, dep];
 
     expect(() => validatePlugins("test", flat)).toThrow(TypeError);
     expect(() => validatePlugins("test", flat)).toThrow("appears after");
@@ -139,7 +139,7 @@ describe("validatePlugins - dependency order", () => {
     });
 
     // Correct order
-    const flat = flattenPlugins([dep, consumer]);
+    const flat = [dep, consumer];
 
     expect(() => validatePlugins("test", flat)).not.toThrow();
   });
@@ -153,7 +153,7 @@ describe("validatePlugins - dependency order", () => {
       depends: [a, b]
     });
 
-    const flat = flattenPlugins([a, b, c]);
+    const flat = [a, b, c];
 
     expect(() => validatePlugins("test", flat)).not.toThrow();
   });
@@ -169,7 +169,7 @@ describe("validatePlugins - error message format", () => {
 
     const a = createPlugin("router", {});
     const b = createPlugin("router", {});
-    const flat = flattenPlugins([a, b]);
+    const flat = [a, b];
 
     try {
       validatePlugins("my-framework", flat);
@@ -186,7 +186,7 @@ describe("validatePlugins - error message format", () => {
     const consumer = createPlugin("consumer", {
       depends: [dep]
     });
-    const flat = flattenPlugins([consumer]);
+    const flat = [consumer];
 
     try {
       validatePlugins("test", flat);
@@ -211,23 +211,19 @@ describe("validatePlugins - passes on valid input", () => {
     const { createPlugin } = setup();
 
     const plugin = createPlugin("solo", {});
-    const flat = flattenPlugins([plugin]);
+    const flat = [plugin];
 
     expect(() => validatePlugins("test", flat)).not.toThrow();
   });
 
-  it("accepts flattened sub-plugins (children before parent)", () => {
+  it("accepts dependency listed before dependent", () => {
     const { createPlugin } = setup();
 
     const child = createPlugin("child", {});
     const parent = createPlugin("parent", {
-      plugins: [child],
       depends: [child]
     });
 
-    // flattenPlugins ensures child before parent
-    const flat = flattenPlugins([parent]);
-
-    expect(() => validatePlugins("test", flat)).not.toThrow();
+    expect(() => validatePlugins("test", [child, parent])).not.toThrow();
   });
 });

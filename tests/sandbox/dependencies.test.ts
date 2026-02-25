@@ -213,8 +213,8 @@ describe("depends validation at startup", () => {
 // sub-plugin flattening and dependencies
 // ---------------------------------------------------------------------------
 
-describe("sub-plugin flattening and dependencies", () => {
-  it("sub-plugins are accessible after flattening", async () => {
+describe("plugin dependencies with explicit listing", () => {
+  it("dependency plugin is accessible when listed explicitly", async () => {
     const cc = createCoreConfig<{ siteName: string }, Record<string, never>>("test", {
       config: { siteName: "Test" }
     });
@@ -226,7 +226,6 @@ describe("sub-plugin flattening and dependencies", () => {
     });
 
     const renderer = cc.createPlugin("renderer", {
-      plugins: [templateEngine],
       depends: [templateEngine],
       api: ctx => ({
         render: (path: string) => {
@@ -236,15 +235,14 @@ describe("sub-plugin flattening and dependencies", () => {
       })
     });
 
-    const { createApp } = cc.createCore(cc, { plugins: [renderer] });
+    const { createApp } = cc.createCore(cc, { plugins: [templateEngine, renderer] });
     const app = await createApp();
 
-    // template-engine should be registered after flattening
     expect(app.has("template-engine")).toBe(true);
     expect(app.renderer.render("/")).toBe("<div>/</div>");
   });
 
-  it("parent plugin can require its sub-plugin", async () => {
+  it("plugin can require its dependency", async () => {
     const cc = createCoreConfig<{ siteName: string }, Record<string, never>>("test", {
       config: { siteName: "Test" }
     });
@@ -256,20 +254,19 @@ describe("sub-plugin flattening and dependencies", () => {
     });
 
     const renderer = cc.createPlugin("renderer", {
-      plugins: [templateEngine],
       depends: [templateEngine],
       api: ctx => ({
         render: (path: string) => ctx.require(templateEngine).compile(`<div>${path}</div>`)
       })
     });
 
-    const { createApp } = cc.createCore(cc, { plugins: [renderer] });
+    const { createApp } = cc.createCore(cc, { plugins: [templateEngine, renderer] });
     const app = await createApp();
 
     expect(app.renderer.render("/about")).toBe("<div>/about</div>");
   });
 
-  it("flattening order: children before parent", async () => {
+  it("dependencies init before dependents", async () => {
     const order: string[] = [];
 
     const cc = createCoreConfig<{ siteName: string }, Record<string, never>>("test", {
@@ -286,7 +283,6 @@ describe("sub-plugin flattening and dependencies", () => {
     });
 
     const renderer = cc.createPlugin("renderer", {
-      plugins: [templateEngine],
       depends: [templateEngine],
       onInit: () => {
         order.push("renderer:init");
@@ -296,10 +292,10 @@ describe("sub-plugin flattening and dependencies", () => {
       })
     });
 
-    const { createApp } = cc.createCore(cc, { plugins: [renderer] });
+    const { createApp } = cc.createCore(cc, { plugins: [templateEngine, renderer] });
     await createApp();
 
-    // Depth-first flattening: template-engine should init before renderer
+    // Explicit order: template-engine listed before renderer
     expect(order).toEqual(["template-engine:init", "renderer:init"]);
   });
 });

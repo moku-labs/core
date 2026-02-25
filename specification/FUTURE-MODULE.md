@@ -65,7 +65,7 @@ function flatten(items):
 
 ## Open Questions
 
-- Are modules needed if `PluginSpec` already supports sub-plugins via a `plugins` field? Sub-plugins provide similar grouping without a new primitive.
+- Are modules needed now that plugins are always listed explicitly? Modules could provide organizational grouping without a new primitive.
 - Should modules have an `onRegister` hook, or should registration side effects be handled differently?
 - Should modules support nested modules (modules containing modules), or should nesting be limited to one level?
 - How should module-level config work? Can a module define config that is distributed to its child plugins?

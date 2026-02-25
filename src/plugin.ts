@@ -384,14 +384,6 @@ type CreatePluginSpec<
    */
   depends?: DependencyPlugins;
   /**
-   * Sub-plugins bundled with this plugin. Flattened depth-first during startup.
-   * @example
-   * ```ts
-   * plugins: [loggerPlugin, metricsPlugin]
-   * ```
-   */
-  plugins?: PluginLike[];
-  /**
    * Factory for mutable plugin state. Called once at startup with a minimal context
    * (global config + plugin config). The returned object is the only mutable store.
    * @example

@@ -22,7 +22,7 @@ Every significant "why" in the v3 architecture:
 | 9 | ctx.global = Readonly\<Config\> | ctx.global = { config, state } | Global state is deferred. ctx.global is just the frozen config for now. Will expand to include state when that feature is implemented. |
 | 10 | No topological sort | Auto-sort by depends | Explicit ordering is simpler, more predictable, more debuggable. depends is validation-only. |
 | 11 | Configs frozen, state mutable | Everything mutable or everything frozen | Configs are the contract -- they must not change. State is the deliberate escape hatch for runtime mutation. |
-| 12 | Sub-plugins flattened depth-first, children before parent | No sub-plugins in v3 | Simple and useful for organizing related plugins. Trivial flattening without modules. |
+| 12 | No sub-plugins — all plugins listed explicitly | Sub-plugins flattened depth-first | Explicit listing is simpler, gives full type visibility. Frameworks can re-export plugin arrays for convenience. |
 | 13 | start/stop callable once, terminal after stop | Idempotent no-ops on repeat calls | Throws on second call catches misuse. Terminal state prevents zombie apps. |
 | 14 | Stop is best-effort | Stop aborts on first error | One plugin's cleanup failure should not orphan other plugins' resources. All plugins get their onStop called. |
 
@@ -73,7 +73,6 @@ function createPlugin(
     events?: (register: RegisterFn) => EventDescriptorMap,  // PluginEvents inferred from return
     config?: C,                                       // C inferred from value
     depends?: readonly [...PluginInstance[]],                 // tuple of instances
-    plugins?: PluginInstance[],                               // sub-plugins
     createState?: (ctx: MinimalContext<Config, C>) => S,      // S inferred from return
     api?: (ctx: PluginContext<Config, Events & PluginEvents & DepsEvents, C, S>) => A,  // A inferred
     onInit?: (ctx: PluginContext<...>) => void | Promise<void>,
@@ -197,19 +196,11 @@ async function createApp(consumerOptions?: {
   const allPlugins = [...defaultPlugins, ...(extraPlugins ?? [])];
 
   // =========================================================================
-  // Step 3: Flatten sub-plugins
-  // =========================================================================
-  // RATIONALE: Depth-first, children before parent.
-  // A plugin with plugins: [subA, subB] becomes [subA, subB, parent].
-  // This ensures sub-plugins are registered before their parent.
-  const flatPlugins = flatten(allPlugins);
-
-  // =========================================================================
-  // Step 4: Validate names
+  // Step 3: Validate names
   // =========================================================================
   // RATIONALE: No duplicate names. Duplicates are always a bug.
   // Error format: [frameworkId] description.\n  actionable suggestion.
-  const names = flatPlugins.map(p => p.name);
+  const names = allPlugins.map(p => p.name);
   const seen = new Set<string>();
   for (const name of names) {
     if (seen.has(name)) {
@@ -226,8 +217,8 @@ async function createApp(consumerOptions?: {
   // =========================================================================
   // RATIONALE: depends is validation-only. No topological sort.
   // Every dependency must exist AND appear EARLIER in the array.
-  for (let i = 0; i < flatPlugins.length; i++) {
-    const plugin = flatPlugins[i];
+  for (let i = 0; i < allPlugins.length; i++) {
+    const plugin = allPlugins[i];
     if (!plugin.spec.depends) continue;
 
     for (const dep of plugin.spec.depends) {
@@ -269,7 +260,7 @@ async function createApp(consumerOptions?: {
 
   // 6c. Per-plugin config: plugin defaults <- framework overrides <- consumer overrides
   const resolvedConfigs = new Map<string, Readonly<any>>();
-  for (const plugin of flatPlugins) {
+  for (const plugin of allPlugins) {
     const merged = Object.freeze({
       ...plugin.spec.config,
       ...frameworkPluginConfigs[plugin.name],
@@ -284,7 +275,7 @@ async function createApp(consumerOptions?: {
   // RATIONALE: State is created before APIs because api() receives state in ctx.
   // Only MinimalContext available -- no emit, no require, no other plugins.
   const states = new Map<string, any>();
-  for (const plugin of flatPlugins) {
+  for (const plugin of allPlugins) {
     if (plugin.spec.createState) {
       const ctx = {
         global: globalConfig,
@@ -366,7 +357,7 @@ async function createApp(consumerOptions?: {
   }
 
   // Register hooks (context-aware)
-  for (const plugin of flatPlugins) {
+  for (const plugin of allPlugins) {
     if (plugin.spec.hooks) {
       const hookHandlers = plugin.spec.hooks(buildPluginContext(plugin));
       for (const [eventName, handler] of Object.entries(hookHandlers)) {
@@ -381,7 +372,7 @@ async function createApp(consumerOptions?: {
   // =========================================================================
   // RATIONALE: APIs are built after state and hooks so that api() has access
   // to state and can emit events. Forward order.
-  for (const plugin of flatPlugins) {
+  for (const plugin of allPlugins) {
     if (plugin.spec.api) {
       const ctx = buildPluginContext(plugin);
       apis.set(plugin.name, plugin.spec.api(ctx));
@@ -393,7 +384,7 @@ async function createApp(consumerOptions?: {
   // =========================================================================
   // RATIONALE: Sequential, each plugin awaited. All APIs are built,
   // so onInit can safely call require().
-  for (const plugin of flatPlugins) {
+  for (const plugin of allPlugins) {
     if (plugin.spec.onInit) {
       const ctx = buildPluginContext(plugin);
       await plugin.spec.onInit(ctx);
@@ -475,7 +466,7 @@ async start() {
   }
   started = true;
 
-  for (const plugin of flatPlugins) {
+  for (const plugin of allPlugins) {
     if (plugin.spec.onStart) {
       const ctx = buildPluginContext(plugin);
       await plugin.spec.onStart(ctx);
@@ -519,7 +510,7 @@ async stop() {
   };
 
   try {
-    for (const plugin of [...flatPlugins].reverse()) {
+    for (const plugin of [...allPlugins].reverse()) {
       if (plugin.spec.onStop) {
         try {
           await plugin.spec.onStop({ global: globalConfig });
@@ -544,27 +535,6 @@ async stop() {
 ---
 
 ## 8. Helper Functions
-
-### flatten
-
-```pseudo-typescript
-function flatten(plugins: PluginInstance[]): PluginInstance[] {
-  // RATIONALE: Depth-first, children before parent.
-  // If a plugin has sub-plugins, they appear before the parent.
-  // This is a simple recursive walk -- no modules, no special cases.
-  const result: PluginInstance[] = [];
-
-  for (const plugin of plugins) {
-    if (plugin.spec.plugins && plugin.spec.plugins.length > 0) {
-      // Recurse into sub-plugins first
-      result.push(...flatten(plugin.spec.plugins));
-    }
-    result.push(plugin);
-  }
-
-  return result;
-}
-```
 
 ### buildPluginContext
 
@@ -612,7 +582,6 @@ Consumer main.ts:
   await createApp({ plugins?, config?, pluginConfigs?, onReady?, onError?, onStart?, onStop? })
     -> destructure structured options (no key discrimination)
     -> merge plugins: [...defaults, ...extras]
-    -> flatten sub-plugins (depth-first)
     -> validate names (no duplicates)
     -> validate dependencies (exists + earlier in array)
     -> resolve config (shallow merge, freeze)

@@ -327,22 +327,10 @@ describe("createPlugin - return value", () => {
 });
 
 // ---------------------------------------------------------------------------
-// createPlugin - sub-plugins
+// createPlugin - depends
 // ---------------------------------------------------------------------------
 
-describe("createPlugin - sub-plugins", () => {
-  it("accepts plugins array in spec", () => {
-    const { createPlugin } = setup();
-
-    const child = createPlugin("child", {});
-    const parent = createPlugin("parent", {
-      plugins: [child]
-    });
-
-    expect(parent.spec.plugins).toHaveLength(1);
-    expect(parent.spec.plugins?.[0]).toBe(child);
-  });
-
+describe("createPlugin - depends", () => {
   it("accepts depends array in spec", () => {
     const { createPlugin } = setup();
 

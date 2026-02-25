@@ -18,7 +18,7 @@ The key constraint: each layer limits the layer above. Consumer code cannot brea
 
 ## Kernel Responsibilities (6 things, nothing else)
 
-1. Collect and flatten plugins into ordered list
+1. Collect plugins into ordered list
 2. Validate names (no duplicates) and dependencies
 3. Resolve config (shallow merge, no deep merge)
 4. Run 3 lifecycle phases in deterministic order (forward init/start, reverse stop)

@@ -853,73 +853,50 @@ describe("as const not required on depends", () => {
 // Gap 15: Sub-plugin API visibility on app surface
 // ---------------------------------------------------------------------------
 
-describe("sub-plugin API visibility", () => {
-  const subPlugin = cp("sub-api", {
+describe("all plugins listed explicitly have full type visibility", () => {
+  const childPlugin = cp("child", {
     api: () => ({
-      subMethod: () => "from-sub"
+      childMethod: () => "from-child"
     })
   });
 
   const parentPlugin = cp("parent", {
-    plugins: [subPlugin],
-    api: () => ({
-      parentMethod: () => "from-parent"
+    depends: [childPlugin],
+    api: ctx => ({
+      parentMethod: () => "from-parent",
+      childValue: () => ctx.require(childPlugin).childMethod()
     })
   });
 
-  it("parent plugin API is typed on app surface", async () => {
+  it("both parent and child APIs are typed on app surface", async () => {
     const { createApp } = cc.createCore(cc, {
-      plugins: [parentPlugin]
+      plugins: [childPlugin, parentPlugin]
     });
     const app = await createApp();
 
     expectTypeOf(app.parent.parentMethod).toBeFunction();
     expectTypeOf(app.parent.parentMethod).returns.toBeString();
+    expectTypeOf(app.child.childMethod).toBeFunction();
+    expectTypeOf(app.child.childMethod).returns.toBeString();
+
     expect(app.parent.parentMethod()).toBe("from-parent");
+    expect(app.child.childMethod()).toBe("from-child");
+    expect(app.parent.childValue()).toBe("from-child");
   });
 
-  it("sub-plugin is registered at runtime", async () => {
+  it("require() works for both parent and child", async () => {
     const { createApp } = cc.createCore(cc, {
-      plugins: [parentPlugin]
+      plugins: [childPlugin, parentPlugin]
     });
     const app = await createApp();
 
-    // Runtime: sub-plugin is flattened and registered
-    expect(app.has("sub-api")).toBe(true);
-  });
+    const childApi = app.require(childPlugin);
+    const parentApi = app.require(parentPlugin);
 
-  it("sub-plugin API is NOT typed on app surface (type system limitation)", async () => {
-    const { createApp } = cc.createCore(cc, {
-      plugins: [parentPlugin]
-    });
-    const app = await createApp();
+    expectTypeOf(childApi.childMethod).toBeFunction();
+    expectTypeOf(parentApi.parentMethod).toBeFunction();
 
-    // Sub-plugin is registered but its type is lost (PluginLike[] widens).
-    // This documents the limitation: sub-plugin APIs exist at runtime
-    // but not at compile time.
-    // @ts-expect-error -- "sub-api" is not in the typed app surface
-    app["sub-api"];
-
-    // Runtime: the API IS accessible via require
-    expect(app.require(subPlugin).subMethod()).toBe("from-sub");
-  });
-
-  it("sub-plugin API is typed when listed directly (not bundled)", async () => {
-    // When sub-plugin is in the top-level plugins array (not via parent.plugins),
-    // its type is preserved and API appears on the app surface.
-    const standaloneParent = cp("standalone-parent", {
-      // No plugins: [...] — sub is listed separately
-      api: () => ({ parentMethod: () => "from-parent" })
-    });
-
-    const { createApp } = cc.createCore(cc, {
-      plugins: [standaloneParent, subPlugin]
-    });
-    const app = await createApp();
-
-    // Both plugin APIs are typed on the app surface
-    expectTypeOf(app["standalone-parent"].parentMethod).toBeFunction();
-    expectTypeOf(app["sub-api"].subMethod).toBeFunction();
-    expect(app["sub-api"].subMethod()).toBe("from-sub");
+    expect(childApi.childMethod()).toBe("from-child");
+    expect(parentApi.parentMethod()).toBe("from-parent");
   });
 });

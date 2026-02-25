@@ -1,6 +1,6 @@
 # 03 - Plugin System
 
-**Domain:** PluginSpec, createPlugin, depends, sub-plugins, lifecycle methods
+**Domain:** PluginSpec, createPlugin, depends, lifecycle methods
 **Architecture:** Plugins are the only extensibility primitive in v3
 
 ---
@@ -16,9 +16,6 @@ The plugin spec is a plain object that describes a plugin's behavior. All fields
 
   /** Instance-based dependencies. Validated at startup (not a topological sort). */
   depends?: readonly PluginInstance[],
-
-  /** Sub-plugins. Flattened depth-first, children registered before parent. */
-  plugins?: PluginInstance[],
 
   /** Create internal mutable state. Minimal context: global config + plugin config. */
   createState?: (ctx: { global: Readonly<Config>; config: Readonly<C> }) => S,
@@ -214,48 +211,7 @@ The `depends` field accepts an array of plugin instances. Since you import a plu
 
 ---
 
-## 4. Sub-Plugins
-
-Plugins can declare their own sub-plugins via the `plugins` field:
-
-```typescript
-const authPlugin = createPlugin('auth', {
-  plugins: [sessionPlugin, tokenPlugin],
-  depends: [sessionPlugin, tokenPlugin],
-  api: (ctx) => ({
-    authenticate: (credentials: { user: string; pass: string }) => {
-      const session = ctx.require(sessionPlugin).create();
-      const token = ctx.require(tokenPlugin).sign(session);
-      return { session, token };
-    },
-  }),
-});
-```
-
-### Flattening Rule
-
-Sub-plugins are flattened depth-first, children before parent. This means:
-- `sessionPlugin` and `tokenPlugin` are registered before `authPlugin`
-- Their APIs are available when `authPlugin`'s lifecycle runs
-
-Given:
-```
-[
-  pluginA { plugins: [subPlugin1, subPlugin2] },
-  pluginB
-]
-```
-
-Flattened result:
-```
-[subPlugin1, subPlugin2, pluginA, pluginB]
-```
-
-This is a convenience feature for organizing related plugins. The consumer can also just list all plugins in the correct order.
-
----
-
-## 5. Plugin Lifecycle Methods
+## 4. Plugin Lifecycle Methods
 
 Three lifecycle methods, each running at a specific phase:
 

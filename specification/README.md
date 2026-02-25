@@ -29,7 +29,7 @@ One export at Layer 1 (`createCoreConfig`). One setup call at Layer 2 (`createCo
 |---|---|---|
 | 01 | [Architecture](./01-ARCHITECTURE.md) | Three-layer model, design principles, 3-step flow |
 | 02 | [Core API](./02-CORE-API.md) | createCoreConfig, createCore, createApp, createPlugin signatures |
-| 03 | [Plugin System](./03-PLUGIN-SYSTEM.md) | PluginSpec, createPlugin, depends, sub-plugins |
+| 03 | [Plugin System](./03-PLUGIN-SYSTEM.md) | PluginSpec, createPlugin, depends, lifecycle methods |
 | 04 | [Factory Chain](./04-FACTORY-CHAIN.md) | 3-step factory chain: why, how, type flow |
 | 05 | [Config System](./05-CONFIG-SYSTEM.md) | Config resolution, defaults, BuildPluginConfigs |
 | 06 | [Lifecycle](./06-LIFECYCLE.md) | 3 phases (init, start, stop), async model |

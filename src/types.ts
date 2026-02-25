@@ -115,8 +115,6 @@ type PluginSpec<
 > = {
   config?: C;
   depends?: Deps;
-  // biome-ignore lint/suspicious/noExplicitAny: Sub-plugins use widened types for assignability
-  plugins?: Array<PluginInstance<string, any, any, any, any>>;
   createState?: (context: MinimalContext<Config, C>) => S;
   api?: (context: PluginContext<Config, Events & PluginEvents & DepsEvents<Deps>, C, S>) => A;
   onInit?: (

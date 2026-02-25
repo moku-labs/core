@@ -57,7 +57,6 @@ describe("4-level dependency chain: lifecycle ordering", () => {
         "renderer:complete": register<{ path: string; duration: number }>("Render complete")
       }),
       depends: [templateEngine],
-      plugins: [templateEngine],
       api: ctx => ({
         render: (path: string) => {
           const html = ctx.require(templateEngine).compile(`<div>${path}</div>`);
@@ -132,11 +131,9 @@ describe("4-level dependency chain: lifecycle ordering", () => {
       }
     });
 
-    // Plugin array order: [router, renderer, seo, sitemap]
-    // After flattening (renderer has sub-plugin template-engine):
-    //   [router, template-engine, renderer, seo, sitemap]
+    // All plugins listed explicitly in dependency order
     const { createApp } = cc.createCore(cc, {
-      plugins: [router, renderer, seo, sitemap]
+      plugins: [router, templateEngine, renderer, seo, sitemap]
     });
 
     const app = await createApp();
@@ -205,7 +202,6 @@ describe("4-level dependency chain: cross-level API calls", () => {
 
     const renderer = cc.createPlugin("renderer", {
       depends: [templateEngine],
-      plugins: [templateEngine],
       api: ctx => ({
         render: (path: string) => ctx.require(templateEngine).compile(`<div>${path}</div>`)
       })
@@ -252,7 +248,7 @@ describe("4-level dependency chain: cross-level API calls", () => {
     });
 
     const { createApp } = cc.createCore(cc, {
-      plugins: [router, renderer, seo, sitemap]
+      plugins: [router, templateEngine, renderer, seo, sitemap]
     });
 
     const app = await createApp();

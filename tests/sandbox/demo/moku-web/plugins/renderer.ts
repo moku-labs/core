@@ -10,7 +10,6 @@ export const rendererPlugin = createPlugin("renderer", {
   config: {
     template: "default"
   },
-  plugins: [templateEnginePlugin],
   depends: [templateEnginePlugin],
   api: ctx => ({
     render: (path: string) => {

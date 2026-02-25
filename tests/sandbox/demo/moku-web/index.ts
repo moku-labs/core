@@ -3,9 +3,10 @@ import { rendererPlugin } from "./plugins/renderer";
 import { routerPlugin } from "./plugins/router";
 import { seoPlugin } from "./plugins/seo";
 import { sitemapPlugin } from "./plugins/sitemap";
+import { templateEnginePlugin } from "./plugins/template-engine";
 
 const framework = createCore(coreConfig, {
-  plugins: [routerPlugin, rendererPlugin, seoPlugin, sitemapPlugin],
+  plugins: [routerPlugin, templateEnginePlugin, rendererPlugin, seoPlugin, sitemapPlugin],
   pluginConfigs: {
     renderer: { template: "default" }
   },
@@ -24,3 +25,4 @@ export { rendererPlugin } from "./plugins/renderer";
 export { routerPlugin } from "./plugins/router";
 export { seoPlugin } from "./plugins/seo";
 export { sitemapPlugin } from "./plugins/sitemap";
+export { templateEnginePlugin } from "./plugins/template-engine";
