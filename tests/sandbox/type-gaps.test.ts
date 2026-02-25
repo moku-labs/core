@@ -334,11 +334,9 @@ describe("no-API plugin excluded from app surface", () => {
 // ---------------------------------------------------------------------------
 
 describe("hooks key constraint rejects unknown events", () => {
-  // FINDING: TypeScript's mapped type excess property checking is inconsistent.
-  // When hooks return an object with ONLY unknown keys, the error fires at the
-  // function level (proven in Gap 3). But when there's a MIX of valid and
-  // unknown keys, TypeScript does NOT flag the unknown keys. This is a known
-  // TypeScript limitation with mapped types — documented here for awareness.
+  // FIXED: HookHandlerMap generic on BoundCreatePluginFunction captures the
+  // return object's keys and maps unknown event names to `never`, catching them
+  // at compile time. Previously this was a TS limitation with mapped types.
 
   it("hooks with ONLY unknown keys are rejected (error on function)", () => {
     const plugin = cp("only-bad-hooks", {
@@ -350,20 +348,14 @@ describe("hooks key constraint rejects unknown events", () => {
     expect(plugin.name).toBe("only-bad-hooks");
   });
 
-  it("hooks with valid + unknown keys: unknown keys are NOT rejected (TS limitation)", () => {
-    // This test DOCUMENTS the behavior, not enforces it.
-    // TypeScript's mapped type excess property checking does not catch
-    // unknown keys when valid keys are also present in the return object.
+  it("hooks with valid + unknown keys: unknown keys ARE now rejected", () => {
     const plugin = cp("mixed-hook-keys", {
+      // @ts-expect-error -- "fake:event" is not a known event, mapped to never
       hooks: _ctx => ({
         "global:action": _payload => {},
-        // No @ts-expect-error here: TypeScript allows this despite "fake:event"
-        // not being in the merged event map. The payload is typed as `unknown`
-        // (not the specific event payload), which is the only hint something is wrong.
         "fake:event": (_payload: unknown) => {}
       })
     });
-    // The test passes to document this known limitation.
     expect(plugin.name).toBe("mixed-hook-keys");
   });
 });

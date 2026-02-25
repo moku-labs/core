@@ -520,24 +520,47 @@ type BoundCreatePluginFunction<
 > = {
   // All type parameters inferred from the spec object.
   // Per-plugin events use the register callback: events: register => ({ ... })
+  // HookHandlerMap captures the return keys of hooks() to reject unknown event names.
   <
     const PluginName extends string = string,
     PluginConfig extends Record<string, unknown> = Record<string, never>,
     PluginState = Record<string, never>,
     PluginApi extends Record<string, unknown> = Record<string, never>,
     DependencyPlugins extends DependencyPluginTuple = readonly [],
-    PluginEventMap extends Record<string, unknown> = EmptyPluginEventMap
+    PluginEventMap extends Record<string, unknown> = EmptyPluginEventMap,
+    // biome-ignore lint/suspicious/noExplicitAny: Inferred from hooks return; keys checked against merged events
+    HookHandlerMap extends Record<string, any> = Record<never, never>
   >(
     name: PluginName,
-    spec: CreatePluginSpec<
-      GlobalConfig,
-      GlobalEventMap,
-      PluginEventMap,
-      PluginConfig,
-      PluginState,
-      PluginApi,
-      DependencyPlugins
-    >
+    spec: Omit<
+      CreatePluginSpec<
+        GlobalConfig,
+        GlobalEventMap,
+        PluginEventMap,
+        PluginConfig,
+        PluginState,
+        PluginApi,
+        DependencyPlugins
+      >,
+      "hooks"
+    > & {
+      hooks?: (
+        context: PluginExecutionContext<
+          GlobalConfig,
+          MergedPluginEvents<GlobalEventMap, PluginEventMap, DependencyPlugins>,
+          PluginConfig,
+          PluginState
+        >
+      ) => {
+        [K in keyof HookHandlerMap]: K extends string &
+          keyof MergedPluginEvents<GlobalEventMap, PluginEventMap, DependencyPlugins>
+          ? (
+              payload: MergedPluginEvents<GlobalEventMap, PluginEventMap, DependencyPlugins>[K &
+                keyof MergedPluginEvents<GlobalEventMap, PluginEventMap, DependencyPlugins>]
+            ) => void | Promise<void>
+          : never;
+      };
+    }
   ): PluginInstance<PluginName, PluginConfig, PluginState, PluginApi, PluginEventMap>;
 };
 
