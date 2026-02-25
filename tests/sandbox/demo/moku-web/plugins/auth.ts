@@ -35,6 +35,8 @@ export const authPlugin = createPlugin("auth", {
       ctx.require(routerPlugin).navigate(ctx.config.loginPath);
       ctx.emit("auth:timeout", { sessionTimeout: ctx.config.sessionTimeout });
 
+      ctx.emit("router:navigate", { to: ctx.config.loginPath, from: "/" });
+
       // @ts-expect-error -- wrong payload shape: { ctx } is not { from: string, to: string }
       ctx.emit("router:navigate", { ctx });
     },
