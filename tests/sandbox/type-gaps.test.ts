@@ -43,7 +43,7 @@ describe("diamond dependency event merging", () => {
 
   it("plugin depending on B and C can emit both event types", () => {
     const pluginD = cp("d-diamond", {
-      depends: [pluginB, pluginC] as const,
+      depends: [pluginB, pluginC],
       api: ctx => ({
         emitBoth: () => {
           ctx.emit("b:action", { x: 42 });
@@ -61,7 +61,7 @@ describe("diamond dependency event merging", () => {
     const receivedC: Array<{ y: string }> = [];
 
     const pluginD = cp("d-hooks", {
-      depends: [pluginB, pluginC] as const,
+      depends: [pluginB, pluginC],
       hooks: _ctx => ({
         "b:action": payload => {
           expectTypeOf(payload).toEqualTypeOf<{ x: number }>();
@@ -88,7 +88,7 @@ describe("diamond dependency event merging", () => {
 
   it("rejects wrong payload types for diamond dependency events", () => {
     const plugin = cp("d-wrong-payloads", {
-      depends: [pluginB, pluginC] as const,
+      depends: [pluginB, pluginC],
       api: ctx => ({
         test: () => {
           // @ts-expect-error -- x should be number, not string
@@ -118,7 +118,7 @@ describe("events-only plugin (no API)", () => {
 
   it("dependent plugin can emit events-only plugin's events", () => {
     const listener = cp("eo-listener", {
-      depends: [eventsOnlyPlugin] as const,
+      depends: [eventsOnlyPlugin],
       api: ctx => ({
         trigger: () => {
           ctx.emit("events-only:fired", { data: "from-listener" });
@@ -131,7 +131,7 @@ describe("events-only plugin (no API)", () => {
 
   it("events-only plugin does NOT appear on app surface", async () => {
     const withApi = cp("eo-with-api", {
-      depends: [eventsOnlyPlugin] as const,
+      depends: [eventsOnlyPlugin],
       api: () => ({ noop: () => {} })
     });
 
@@ -190,7 +190,7 @@ describe("non-dependency events are inaccessible", () => {
 
   it("plugin WITH dependency CAN emit and hook those events", () => {
     const plugin = cp("related-emitter", {
-      depends: [eventSource] as const,
+      depends: [eventSource],
       api: ctx => ({
         emitSource: () => {
           ctx.emit("source:custom", { detail: "allowed" });
@@ -225,7 +225,7 @@ describe("precise require() return types", () => {
 
   it("ctx.require() returns exact parameter and return types", () => {
     cp("precise-consumer", {
-      depends: [preciseApi] as const,
+      depends: [preciseApi],
       api: ctx => {
         const api = ctx.require(preciseApi);
 
@@ -519,7 +519,7 @@ describe("transitive dependency event isolation", () => {
     });
 
     const pluginB = cp("chain-b-diag", {
-      depends: [pluginA] as const,
+      depends: [pluginA],
       events: register => ({
         "chain-b:event": register<{ bData: string }>("Chain B event")
       }),
@@ -541,7 +541,7 @@ describe("transitive dependency event isolation", () => {
     });
 
     const pluginB = cp("chain-b-iso", {
-      depends: [pluginA] as const,
+      depends: [pluginA],
       events: register => ({
         "chain-b:event": register<{ bData: string }>("Chain B event")
       }),
@@ -549,7 +549,7 @@ describe("transitive dependency event isolation", () => {
     });
 
     const pluginC = cp("chain-c-iso", {
-      depends: [pluginB] as const,
+      depends: [pluginB],
       api: ctx => ({
         test: () => {
           // C CAN emit B's events (direct dependency)
@@ -580,7 +580,7 @@ describe("transitive dependency event isolation", () => {
     });
 
     const pluginB = cp("chain-b-both", {
-      depends: [pluginA] as const,
+      depends: [pluginA],
       events: register => ({
         "chain-b:event": register<{ bData: string }>("Chain B event")
       }),
@@ -588,7 +588,7 @@ describe("transitive dependency event isolation", () => {
     });
 
     const pluginC = cp("chain-c-both", {
-      depends: [pluginA, pluginB] as const,
+      depends: [pluginA, pluginB],
       api: ctx => ({
         test: () => {
           // Direct dep on both: all events visible
@@ -610,7 +610,7 @@ describe("transitive dependency event isolation", () => {
     });
 
     const pluginB = cp("chain-b-rt", {
-      depends: [pluginA] as const,
+      depends: [pluginA],
       events: register => ({
         "chain-b:event": register<{ bData: string }>("Chain B event")
       }),
@@ -618,7 +618,7 @@ describe("transitive dependency event isolation", () => {
     });
 
     const cPlugin = cp("chain-c-rt", {
-      depends: [pluginB] as const,
+      depends: [pluginB],
       hooks: _ctx => ({
         "chain-b:event": _payload => {}
       })
@@ -655,7 +655,7 @@ describe("same event name from multiple plugins", () => {
     });
 
     const consumer = cp("conflict-consumer", {
-      depends: [pluginAlpha, pluginBeta] as const,
+      depends: [pluginAlpha, pluginBeta],
       api: ctx => ({
         test: () => {
           // version becomes number & string = never
@@ -685,7 +685,7 @@ describe("same event name from multiple plugins", () => {
     });
 
     const consumer = cp("compat-consumer", {
-      depends: [pluginGamma, pluginDelta] as const,
+      depends: [pluginGamma, pluginDelta],
       api: ctx => ({
         test: () => {
           // Same payload type: intersection preserves type
@@ -694,5 +694,232 @@ describe("same event name from multiple plugins", () => {
       })
     });
     expect(consumer.name).toBe("compat-consumer");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Gap 13: Callback context has typed plugin APIs
+// ---------------------------------------------------------------------------
+
+describe("callback context has typed plugin APIs", () => {
+  const routerPlugin = cp("router", {
+    config: { basePath: "/" },
+    api: ctx => ({
+      navigate: (path: string) => path,
+      current: () => ctx.config.basePath
+    })
+  });
+
+  const authPlugin = cp("auth", {
+    api: () => ({
+      isLoggedIn: () => false,
+      login: (user: string) => user
+    })
+  });
+
+  it("onReady callback context has typed plugin APIs", async () => {
+    const { createApp } = cc.createCore(cc, {
+      plugins: [routerPlugin, authPlugin]
+    });
+
+    const app = await createApp({
+      onReady: ctx => {
+        // Plugin APIs should be on the context
+        expectTypeOf(ctx.router.navigate).toBeFunction();
+        expectTypeOf(ctx.router.navigate).parameter(0).toBeString();
+        expectTypeOf(ctx.auth.isLoggedIn).returns.toBeBoolean();
+
+        // Config should be typed
+        expectTypeOf(ctx.config).toEqualTypeOf<Readonly<TestConfig>>();
+
+        // Emit should be typed
+        ctx.emit("global:action", { id: "ready" });
+      }
+    });
+
+    expect(app).toBeDefined();
+  });
+
+  it("onStart callback context has typed plugin APIs", async () => {
+    const { createApp } = cc.createCore(cc, {
+      plugins: [routerPlugin, authPlugin]
+    });
+
+    const app = await createApp({
+      onStart: ctx => {
+        expectTypeOf(ctx.router.current).returns.toBeString();
+        expectTypeOf(ctx.auth.login).parameter(0).toBeString();
+      }
+    });
+
+    await app.start();
+    expect(app).toBeDefined();
+  });
+
+  it("onStop callback context has typed plugin APIs", async () => {
+    const { createApp } = cc.createCore(cc, {
+      plugins: [routerPlugin, authPlugin]
+    });
+
+    const app = await createApp({
+      onStop: ctx => {
+        expectTypeOf(ctx.router.navigate).toBeFunction();
+        expectTypeOf(ctx.auth.isLoggedIn).toBeFunction();
+      }
+    });
+
+    await app.start();
+    await app.stop();
+    expect(app).toBeDefined();
+  });
+
+  it("onError callback receives Error and typed context", async () => {
+    const { createApp } = cc.createCore(cc, {
+      plugins: [routerPlugin]
+    });
+
+    const app = await createApp({
+      onError: (error, ctx) => {
+        expectTypeOf(error).toEqualTypeOf<Error>();
+        expectTypeOf(ctx.router.navigate).toBeFunction();
+        expectTypeOf(ctx.config).toEqualTypeOf<Readonly<TestConfig>>();
+      }
+    });
+
+    expect(app).toBeDefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Gap 14: `as const` not required on depends
+// ---------------------------------------------------------------------------
+
+describe("as const not required on depends", () => {
+  // The `const` modifier on `PluginName` in BoundCreatePluginFunction narrows
+  // ALL inferred types in the generic call, including the depends tuple.
+  // This means `as const` is unnecessary — TypeScript infers specific plugin
+  // types from the array without it.
+
+  const depPlugin = cp("dep-target", {
+    events: register => ({
+      "dep:fired": register<{ value: number }>("Dep event")
+    }),
+    api: () => ({
+      getValue: () => 42,
+      format: (n: number) => `#${n}`
+    })
+  });
+
+  it("require() returns exact API types without as const", () => {
+    const consumer = cp("dep-require", {
+      depends: [depPlugin],
+      api: ctx => {
+        const api = ctx.require(depPlugin);
+        expectTypeOf(api.getValue).returns.toBeNumber();
+        expectTypeOf(api.format).parameter(0).toBeNumber();
+        expectTypeOf(api.format).returns.toBeString();
+        return {};
+      }
+    });
+    expect(consumer.name).toBe("dep-require");
+  });
+
+  it("dependency events are visible without as const", () => {
+    const consumer = cp("dep-events", {
+      depends: [depPlugin],
+      api: ctx => ({
+        test: () => {
+          ctx.emit("dep:fired", { value: 1 });
+        }
+      })
+    });
+    expect(consumer.name).toBe("dep-events");
+  });
+
+  it("hooks on dependency events are typed without as const", () => {
+    const consumer = cp("dep-hooks", {
+      depends: [depPlugin],
+      hooks: _ctx => ({
+        "dep:fired": payload => {
+          expectTypeOf(payload).toEqualTypeOf<{ value: number }>();
+        }
+      })
+    });
+    expect(consumer.name).toBe("dep-hooks");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Gap 15: Sub-plugin API visibility on app surface
+// ---------------------------------------------------------------------------
+
+describe("sub-plugin API visibility", () => {
+  const subPlugin = cp("sub-api", {
+    api: () => ({
+      subMethod: () => "from-sub"
+    })
+  });
+
+  const parentPlugin = cp("parent", {
+    plugins: [subPlugin],
+    api: () => ({
+      parentMethod: () => "from-parent"
+    })
+  });
+
+  it("parent plugin API is typed on app surface", async () => {
+    const { createApp } = cc.createCore(cc, {
+      plugins: [parentPlugin]
+    });
+    const app = await createApp();
+
+    expectTypeOf(app.parent.parentMethod).toBeFunction();
+    expectTypeOf(app.parent.parentMethod).returns.toBeString();
+    expect(app.parent.parentMethod()).toBe("from-parent");
+  });
+
+  it("sub-plugin is registered at runtime", async () => {
+    const { createApp } = cc.createCore(cc, {
+      plugins: [parentPlugin]
+    });
+    const app = await createApp();
+
+    // Runtime: sub-plugin is flattened and registered
+    expect(app.has("sub-api")).toBe(true);
+  });
+
+  it("sub-plugin API is NOT typed on app surface (type system limitation)", async () => {
+    const { createApp } = cc.createCore(cc, {
+      plugins: [parentPlugin]
+    });
+    const app = await createApp();
+
+    // Sub-plugin is registered but its type is lost (PluginLike[] widens).
+    // This documents the limitation: sub-plugin APIs exist at runtime
+    // but not at compile time.
+    // @ts-expect-error -- "sub-api" is not in the typed app surface
+    app["sub-api"];
+
+    // Runtime: the API IS accessible via require
+    expect(app.require(subPlugin).subMethod()).toBe("from-sub");
+  });
+
+  it("sub-plugin API is typed when listed directly (not bundled)", async () => {
+    // When sub-plugin is in the top-level plugins array (not via parent.plugins),
+    // its type is preserved and API appears on the app surface.
+    const standaloneParent = cp("standalone-parent", {
+      // No plugins: [...] — sub is listed separately
+      api: () => ({ parentMethod: () => "from-parent" })
+    });
+
+    const { createApp } = cc.createCore(cc, {
+      plugins: [standaloneParent, subPlugin]
+    });
+    const app = await createApp();
+
+    // Both plugin APIs are typed on the app surface
+    expectTypeOf(app["standalone-parent"].parentMethod).toBeFunction();
+    expectTypeOf(app["sub-api"].subMethod).toBeFunction();
+    expect(app["sub-api"].subMethod()).toBe("from-sub");
   });
 });

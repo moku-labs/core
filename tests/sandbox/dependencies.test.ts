@@ -21,7 +21,7 @@ describe("ctx.require returns typed API (SAND-05)", () => {
     });
 
     const logger = cc.createPlugin("logger", {
-      depends: [router] as const,
+      depends: [router],
       api: ctx => {
         const routerApi = ctx.require(router);
 
@@ -56,7 +56,7 @@ describe("ctx.require returns typed API (SAND-05)", () => {
     let capturedResult: string | undefined;
 
     const consumer = cc.createPlugin("consumer", {
-      depends: [router] as const,
+      depends: [router],
       api: ctx => {
         const routerApi = ctx.require(router);
         // Type-level: routerApi.current is typed
@@ -114,7 +114,7 @@ describe("ctx.has", () => {
     });
 
     const logger = cc.createPlugin("logger", {
-      depends: [router] as const,
+      depends: [router],
       api: ctx => {
         hasRouter = ctx.has("router");
         hasLogger = ctx.has("logger");
@@ -165,7 +165,7 @@ describe("ctx.has", () => {
     });
 
     const logger = cc.createPlugin("logger", {
-      depends: [router] as const,
+      depends: [router],
       api: ctx => {
         // logger depends on router only, but has() checks global registration
         hasRenderer = ctx.has("renderer");
@@ -195,7 +195,7 @@ describe("depends validation at startup", () => {
     });
 
     const logger = cc.createPlugin("logger", {
-      depends: [router] as const,
+      depends: [router],
       api: ctx => ({
         log: () => ctx.require(router).current()
       })
@@ -227,7 +227,7 @@ describe("sub-plugin flattening and dependencies", () => {
 
     const renderer = cc.createPlugin("renderer", {
       plugins: [templateEngine],
-      depends: [templateEngine] as const,
+      depends: [templateEngine],
       api: ctx => ({
         render: (path: string) => {
           const engine = ctx.require(templateEngine);
@@ -257,7 +257,7 @@ describe("sub-plugin flattening and dependencies", () => {
 
     const renderer = cc.createPlugin("renderer", {
       plugins: [templateEngine],
-      depends: [templateEngine] as const,
+      depends: [templateEngine],
       api: ctx => ({
         render: (path: string) => ctx.require(templateEngine).compile(`<div>${path}</div>`)
       })
@@ -287,7 +287,7 @@ describe("sub-plugin flattening and dependencies", () => {
 
     const renderer = cc.createPlugin("renderer", {
       plugins: [templateEngine],
-      depends: [templateEngine] as const,
+      depends: [templateEngine],
       onInit: () => {
         order.push("renderer:init");
       },
@@ -361,7 +361,7 @@ describe("multiple plugin dependencies", () => {
     });
 
     const auth = cc.createPlugin("auth", {
-      depends: [router] as const,
+      depends: [router],
       config: { loginPath: "/login" },
       createState: () => ({ user: undefined as string | undefined }),
       api: ctx => ({
@@ -377,7 +377,7 @@ describe("multiple plugin dependencies", () => {
     });
 
     const dashboard = cc.createPlugin("dashboard", {
-      depends: [router, auth] as const,
+      depends: [router, auth],
       api: ctx => {
         const routerApi = ctx.require(router);
         const authApi = ctx.require(auth);
@@ -433,14 +433,14 @@ describe("multiple plugin dependencies", () => {
     });
 
     const auth = cc.createPlugin("auth", {
-      depends: [router] as const,
+      depends: [router],
       api: () => ({
         currentUser: () => "alice" as string | undefined
       })
     });
 
     const dashboard = cc.createPlugin("dashboard", {
-      depends: [router, auth] as const,
+      depends: [router, auth],
       api: ctx => {
         const routerApi = ctx.require(router);
         const authApi = ctx.require(auth);

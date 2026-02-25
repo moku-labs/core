@@ -104,7 +104,7 @@ describe("validatePlugins - dependency order", () => {
 
     const dep = createPlugin("dep", {});
     const consumer = createPlugin("consumer", {
-      depends: [dep] as const
+      depends: [dep]
     });
 
     // Only register consumer, not dep
@@ -120,7 +120,7 @@ describe("validatePlugins - dependency order", () => {
 
     const dep = createPlugin("dep", {});
     const consumer = createPlugin("consumer", {
-      depends: [dep] as const
+      depends: [dep]
     });
 
     // Wrong order: consumer before dep
@@ -135,7 +135,7 @@ describe("validatePlugins - dependency order", () => {
 
     const dep = createPlugin("dep", {});
     const consumer = createPlugin("consumer", {
-      depends: [dep] as const
+      depends: [dep]
     });
 
     // Correct order
@@ -150,7 +150,7 @@ describe("validatePlugins - dependency order", () => {
     const a = createPlugin("a", {});
     const b = createPlugin("b", {});
     const c = createPlugin("c", {
-      depends: [a, b] as const
+      depends: [a, b]
     });
 
     const flat = flattenPlugins([a, b, c]);
@@ -184,7 +184,7 @@ describe("validatePlugins - error message format", () => {
 
     const dep = createPlugin("dep", {});
     const consumer = createPlugin("consumer", {
-      depends: [dep] as const
+      depends: [dep]
     });
     const flat = flattenPlugins([consumer]);
 
@@ -222,7 +222,7 @@ describe("validatePlugins - passes on valid input", () => {
     const child = createPlugin("child", {});
     const parent = createPlugin("parent", {
       plugins: [child],
-      depends: [child] as const
+      depends: [child]
     });
 
     // flattenPlugins ensures child before parent

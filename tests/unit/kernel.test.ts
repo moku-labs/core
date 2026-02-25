@@ -606,7 +606,7 @@ describe("require, has", () => {
     });
 
     const consumer = cc.createPlugin("consumer", {
-      depends: [dep] as const,
+      depends: [dep],
       onInit: ctx => {
         results.api = ctx.require(dep);
         results.has = ctx.has("dep");

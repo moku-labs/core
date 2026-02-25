@@ -78,7 +78,7 @@ describe("per-plugin events (PluginEvents)", () => {
     const received: Array<{ path: string; duration: number }> = [];
 
     const listenerPlugin = createPlugin("render-listener", {
-      depends: [rendererPlugin] as const,
+      depends: [rendererPlugin],
       hooks: _ctx => ({
         "renderer:complete": payload => {
           received.push(payload);
@@ -113,7 +113,7 @@ describe("event merging via depends", () => {
     // Dependent plugin hooks on "router:navigate" (global event).
     // When router emits "router:navigate", the hook fires with typed payload.
     const navListenerPlugin = createPlugin("nav-listener", {
-      depends: [routerPlugin] as const,
+      depends: [routerPlugin],
       hooks: _ctx => ({
         "router:navigate": payload => {
           navigations.push(payload);
@@ -149,7 +149,7 @@ describe("event merging via depends", () => {
     const received: Array<{ value: number }> = [];
 
     const pluginB = createPlugin("plugin-b", {
-      depends: [pluginA] as const,
+      depends: [pluginA],
       hooks: _ctx => ({
         "pluginA:action": payload => {
           received.push(payload);
@@ -189,7 +189,7 @@ describe("event merging via depends", () => {
     });
 
     const dashboardPlugin = createPlugin("dashboard", {
-      depends: [authPlugin] as const,
+      depends: [authPlugin],
       api: ctx => ({
         triggerLogout: () => {
           // Dashboard depends on auth, so it can emit auth's events
@@ -242,7 +242,7 @@ describe("strict hooks typing (no escape hatch)", () => {
     });
 
     const pluginB = createPlugin("typed-dep-hook", {
-      depends: [pluginA] as const,
+      depends: [pluginA],
       hooks: _ctx => ({
         "source:action": payload => {
           // payload is typed as { value: number } -- no cast needed
@@ -273,7 +273,7 @@ describe("strict hooks typing (no escape hatch)", () => {
     });
 
     const pluginB = createPlugin("wrong-hook-payload", {
-      depends: [pluginA] as const,
+      depends: [pluginA],
       hooks: _ctx => ({
         "source:action": payload => {
           // @ts-expect-error -- payload.value is number, not assignable to string
@@ -295,7 +295,7 @@ describe("strict hooks typing (no escape hatch)", () => {
     });
 
     const pluginB = createPlugin("context-hook", {
-      depends: [pluginA] as const,
+      depends: [pluginA],
       createState: () => ({ lastValue: 0 }),
       hooks: ctx => ({
         "source:action": payload => {

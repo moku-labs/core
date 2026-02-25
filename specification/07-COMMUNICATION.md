@@ -159,7 +159,7 @@ const authPlugin = createPlugin('auth', {
 
 // dashboardPlugin depends on authPlugin:
 const dashboardPlugin = createPlugin('dashboard', {
-  depends: [authPlugin] as const,
+  depends: [authPlugin],
   // dashboard now sees: Events & AuthPlugin's events
   hooks: (ctx) => ({
     'auth:login': (payload) => {

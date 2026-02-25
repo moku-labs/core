@@ -39,7 +39,7 @@ describe("full lifecycle integration", () => {
     });
 
     const cache = cc.createPlugin("cache", {
-      depends: [database] as const,
+      depends: [database],
       createState: () => ({ entries: 0 }),
       api: context => ({
         getEntries: () => context.state.entries,

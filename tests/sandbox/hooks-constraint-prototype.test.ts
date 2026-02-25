@@ -106,7 +106,7 @@ describe("hooks constraint prototype", () => {
     });
 
     const consumer = cp("consumer", {
-      depends: [depPlugin] as const,
+      depends: [depPlugin],
       hooks: _ctx => ({
         "dep:ready": _payload => {
           expectTypeOf(_payload).toEqualTypeOf<{ timestamp: number }>();

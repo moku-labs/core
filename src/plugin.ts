@@ -80,7 +80,7 @@
 //
 //     const dashboard = createPlugin("dashboard", {
 //       config: { refreshInterval: 5000 },
-//       depends: [authPlugin] as const,
+//       depends: [authPlugin],
 //       createState: () => ({ lastLogin: "" }),
 //       hooks: ctx => ({
 //         "auth:login": ({ userId }) => { ctx.state.lastLogin = userId; },
@@ -379,7 +379,7 @@ type CreatePluginSpec<
    * Dependencies must appear earlier in the plugins array (no topological sort).
    * @example
    * ```ts
-   * depends: [authPlugin, httpPlugin] as const
+   * depends: [authPlugin, httpPlugin]
    * ```
    */
   depends?: DependencyPlugins;

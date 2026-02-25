@@ -348,7 +348,7 @@ describe("createPlugin - sub-plugins", () => {
 
     const dep = createPlugin("dep", {});
     const consumer = createPlugin("consumer", {
-      depends: [dep] as const
+      depends: [dep]
     });
 
     expect(consumer.spec.depends).toHaveLength(1);

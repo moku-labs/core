@@ -239,7 +239,7 @@ export const routerPlugin = createPlugin('router', {
 
 ```typescript
 export const dashboardPlugin = createPlugin('dashboard', {
-  depends: [authPlugin] as const,
+  depends: [authPlugin],
   hooks: {
     // Typed -- payload inferred from authPlugin's PluginEvents via depends
     'auth:login': payload => {

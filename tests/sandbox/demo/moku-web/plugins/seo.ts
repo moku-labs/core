@@ -3,7 +3,7 @@ import { rendererPlugin } from "./renderer";
 import { routerPlugin } from "./router";
 
 export const seoPlugin = createPlugin("seo", {
-  depends: [routerPlugin, rendererPlugin] as const,
+  depends: [routerPlugin, rendererPlugin],
   config: {
     defaultTitle: "Untitled"
   },
