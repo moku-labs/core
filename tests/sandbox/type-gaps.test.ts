@@ -467,37 +467,33 @@ describe("pluginConfigs excludes void-config plugins", () => {
     expect(app).toBeDefined();
   });
 
-  it("pluginConfigs rejects non-empty overrides for config-less plugins", async () => {
+  it("pluginConfigs rejects any key for config-less plugins", async () => {
     const { createApp } = cc.createCore(cc, {
       plugins: [withConfig, withoutConfig]
     });
 
-    // NOTE: The "no-config" key IS present in pluginConfigs (filter checks
-    // ExtractConfig<K> extends void, but config-less plugins have
-    // Record<string, never>, not void). However, the VALUE type is
-    // Partial<Record<string, never>> = { [key: string]?: never }, which makes
-    // any non-empty object a type error. The type error is on the value, not the key.
+    // FIXED: Filter now uses `ExtractConfig<K> extends Record<string, never>`
+    // which matches the config-less default. The key "no-config" is fully
+    // excluded from pluginConfigs — error is on the key, not just the value.
     const app = await createApp({
       pluginConfigs: {
-        // @ts-expect-error -- value type is Partial<Record<string, never>>; true is not never
+        // @ts-expect-error -- "no-config" is not a valid key (config-less plugin excluded)
         "no-config": { anything: true }
       }
     });
     expect(app).toBeDefined();
   });
 
-  it("pluginConfigs accepts empty object for config-less plugins (accidental)", async () => {
+  it("pluginConfigs rejects even empty object for config-less plugins", async () => {
     const { createApp } = cc.createCore(cc, {
       plugins: [withConfig, withoutConfig]
     });
 
-    // This compiles because {} satisfies Partial<Record<string, never>>.
-    // Ideally, "no-config" should be excluded from pluginConfigs entirely,
-    // but the filter uses `extends void` while config-less plugins have
-    // Record<string, never>. This is a minor type system gap to address
-    // during refactoring.
+    // FIXED: Previously {} was accepted because {} satisfies Partial<Record<string, never>>.
+    // Now "no-config" is excluded from the key set entirely.
     const app = await createApp({
       pluginConfigs: {
+        // @ts-expect-error -- "no-config" is not a valid key (config-less plugin excluded)
         "no-config": {}
       }
     });

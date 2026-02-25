@@ -304,7 +304,7 @@ type CreateAppOptions<
   plugins?: ExtraPlugins;
   config?: { [K in keyof Config]?: Config[K] };
   pluginConfigs?: {
-    [K in P as ExtractConfig<K> extends void
+    [K in P as ExtractConfig<K> extends Record<string, never>
       ? never
       : IsLiteralString<ExtractName<K>> extends true
         ? ExtractName<K>
