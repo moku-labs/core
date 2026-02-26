@@ -45,6 +45,8 @@ export default [
       "jsdoc/require-returns": "error",
       "jsdoc/require-returns-description": "error",
       "jsdoc/require-example": "error",
+      // Enforce import type for type-only imports (prevents accidental runtime coupling)
+      "@typescript-eslint/consistent-type-imports": ["error", { prefer: "type-imports" }],
       // Allow `export {};` module marker pattern in stubs and barrel files
       "unicorn/require-module-specifiers": "off"
     }

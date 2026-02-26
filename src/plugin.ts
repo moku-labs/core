@@ -105,13 +105,13 @@
 //     });
 // =============================================================================
 
+import type { EmitFunction, PluginInstance } from "./types";
 import type {
   EmptyPluginEventMap,
   FrameworkConfig,
   FrameworkEventMap,
   UnionToIntersection
-} from "./type-utilities";
-import type { EmitFunction, PluginInstance } from "./types";
+} from "./utilities";
 
 // =============================================================================
 // Section 1: Plugin Structural Types

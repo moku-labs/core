@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { createCoreConfig } from "../../src";
-import { validatePlugins } from "../../src/flatten";
+import { validatePlugins } from "../../src/utilities";
 
 // ---------------------------------------------------------------------------
 // Shared setup

@@ -25,10 +25,9 @@
 // =============================================================================
 
 import { kernel } from "./app";
-import { validatePlugins } from "./flatten";
 import type { BoundCreatePluginFunction } from "./plugin";
-import type { AnyPluginInstance } from "./type-utilities";
-import type { App, CreateAppOptions } from "./types";
+import type { AnyPluginInstance, App, CreateAppOptions } from "./types";
+import { validatePlugins } from "./utilities";
 
 // =============================================================================
 // Section 1: Options Types

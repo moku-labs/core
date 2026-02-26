@@ -2,7 +2,7 @@
 // moku_core v3 - createApp Kernel
 // =============================================================================
 // The runtime heart of the framework. Called by createCore's createApp wrapper
-// after flatten + validate have run.
+// after plugin list merging and validatePlugins have run.
 //
 // Sections:
 //   §1 Runtime Boundary Types    — Type aliases, KernelParameters, KernelRuntime
@@ -14,7 +14,7 @@
 //   §7 Kernel Orchestrator       — kernel
 // =============================================================================
 
-import type { AnyPluginInstance } from "./type-utilities";
+import type { AnyPluginInstance } from "./types";
 
 // =============================================================================
 // Section 1: Runtime Boundary Types
@@ -33,7 +33,13 @@ type ApiMap = Map<string, any>;
 // biome-ignore lint/suspicious/noExplicitAny: plugin state values vary per plugin
 type StateMap = Map<string, any>;
 
-/** Fire-and-forget event emitter function (dynamically typed at runtime). */
+/**
+ * Fire-and-forget event emitter function (runtime-layer alias).
+ * This is the dynamically typed runtime counterpart of the generic
+ * `EmitFunction<Events>` in types.ts. At runtime, event names and payloads
+ * are strings/objects — type safety is enforced at compile time by the
+ * generic signature, not here.
+ */
 // biome-ignore lint/suspicious/noExplicitAny: event payloads vary per event; typed by EmitFunction<Events>
 type EmitFunction = (eventName: string, payload?: any) => void;
 
