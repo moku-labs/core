@@ -1,0 +1,37 @@
+import { createPlugin } from "../config";
+import { routerPlugin } from "../router";
+import { createAnalyticsApi } from "./api";
+import { createAnalyticsState } from "./state";
+import type { AnalyticsEvents } from "./types";
+
+export const analyticsPlugin = createPlugin("analytics", {
+  depends: [routerPlugin],
+  events: register => ({
+    "analytics:track": register<AnalyticsEvents["analytics:track"]>("Event tracked"),
+    "analytics:identify": register<AnalyticsEvents["analytics:identify"]>("User identified")
+  }),
+  config: {
+    provider: "memory" as "console" | "memory",
+    sampleRate: 1,
+    trackingId: ""
+  },
+  createState: createAnalyticsState,
+  api: ctx => createAnalyticsApi(ctx),
+  hooks: ctx => ({
+    "router:navigate": ({ to }) => {
+      ctx.state.events.push({
+        event: "page_view",
+        properties: { path: to },
+        timestamp: Date.now()
+      });
+    }
+  }),
+  onInit: ctx => {
+    if (!ctx.config.trackingId) {
+      throw new Error(
+        "[plugin-test] analytics.trackingId is required.\n  Provide a tracking ID in pluginConfigs."
+      );
+    }
+    ctx.state.initialized = true;
+  }
+});

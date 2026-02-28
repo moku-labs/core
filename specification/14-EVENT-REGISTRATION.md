@@ -147,8 +147,14 @@ The callback pattern:
 With the register callback, `emit` is strictly typed. There is no untyped overload:
 
 ```typescript
-// emit type (strict)
-emit: <K extends string & keyof AllEvents>(name: K, payload: AllEvents[K]) => void;
+// EmitFunction type signature (defined in src/types.ts)
+type EmitFunction<Events extends Record<string, unknown>> = <K extends string & keyof Events>(
+  name: K,
+  payload: Events[K]
+) => void;
+
+// In plugin context, AllEvents = global Events + own PluginEvents + dependency events
+emit: EmitFunction<AllEvents>;
 ```
 
 Where `AllEvents` = global Events + own PluginEvents + dependency events (from `depends` chain).
@@ -160,6 +166,31 @@ ctx.emit('auth:login', { userId: '123' });           // OK -- known event, typed
 ctx.emit('auth:login', { wrongKey: true });           // ERROR -- wrong payload shape
 ctx.emit('unknown:event', { anything: true });        // ERROR -- unknown event name
 ```
+
+### Domain Context Emit
+
+When domain factories are extracted into separate files (Standard+ tier plugins), the domain context type should use **overloaded call signatures** scoped to the plugin's own events:
+
+```typescript
+// plugins/auth/types.ts
+export type AuthEvents = {
+  'auth:login':  { userId: string };
+  'auth:logout': { userId: string };
+};
+
+export type AuthCtx = {
+  config: AuthConfig;
+  state: AuthState;
+  emit: {
+    (name: 'auth:login',  payload: AuthEvents['auth:login']): void;
+    (name: 'auth:logout', payload: AuthEvents['auth:logout']): void;
+  };
+};
+```
+
+Overloaded call signatures are used instead of a generic `<K extends keyof AuthEvents>(name: K, payload: AuthEvents[K]) => void` because TypeScript cannot prove generic indexed access compatibility between `AuthEvents[K]` and `(GlobalEvents & AuthEvents)[K]` when the kernel's `EmitFunction<MergedEvents>` is assigned to a narrower domain emit. Concrete overloads avoid this — TypeScript instantiates the kernel's generic per-overload and checks compatibility directly.
+
+This preserves type safety in domain code while remaining compatible with both the kernel's `EmitFunction<MergedEvents>` (instantiated per-overload) and test mocks (`vi.fn()`, `() => {}`). See [15-PLUGIN-STRUCTURE §4 Unit Testing](./15-PLUGIN-STRUCTURE.md) for the full pattern.
 
 **Rationale:** The escape hatch (`(name: string, payload?: unknown) => void`) was removed because it defeats the purpose of typed events. If a plugin can bypass type checking at any call site, the event system provides no safety. With the register callback, declaring events is easy enough that there is no reason to skip it.
 

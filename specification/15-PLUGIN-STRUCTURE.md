@@ -660,31 +660,82 @@ plugins/
 
 ### Unit Testing Domain Files
 
-Domain functions are pure — they accept a context-shaped object and return values. They can be unit tested without the kernel:
+Domain functions are pure — they accept a context-shaped object and return values. They can be unit tested without the kernel by defining a domain context type in `types.ts`.
+
+#### Domain Context Types and Typed Emit
+
+When domain factories (e.g. `createRouterApi`) are extracted into separate files, they need a typed context parameter. The emit function on this context should use **overloaded call signatures** — one per event — scoped to the plugin's own events:
+
+```typescript
+// plugins/router/types.ts
+export type RouterEvents = {
+  'router:navigate': { from: string; to: string };
+  'router:not-found': { path: string };
+};
+
+export type RouterCtx = {
+  config: RouterConfig;
+  state: RouterState;
+  emit: {
+    (name: 'router:navigate', payload: RouterEvents['router:navigate']): void;
+    (name: 'router:not-found', payload: RouterEvents['router:not-found']): void;
+  };
+};
+```
+
+This pattern provides:
+- **Compile-time safety** — wrong event names and payloads are caught in domain code
+- **Single source of truth** — event payload types defined once in `RouterEvents`, referenced by overload signatures and `register<>()` calls
+- **Test compatibility** — `vi.fn()`, `() => {}`, and `(name: string, payload: unknown) => { ... }` are all assignable to overloaded call signatures
+- **Kernel compatibility** — the kernel's generic `EmitFunction<MergedEvents>` is assignable to concrete overloads (TypeScript instantiates the generic per-overload)
+
+**Why overloads, not a generic?** A generic domain emit `<K extends keyof RouterEvents>(name: K, payload: RouterEvents[K]) => void` fails TypeScript's assignability check against the kernel's `EmitFunction<MergedEvents>`. The kernel's merged events include global events (e.g., `app:ready`), and TypeScript cannot prove that `RouterEvents[K]` is assignable to `(GlobalEvents & RouterEvents)[K]` for generic K. Concrete overloads avoid this — TypeScript instantiates the kernel's generic with each specific event name and checks compatibility directly.
+
+The `index.ts` wiring harness references the same event types and uses an inline lambda to preserve event inference:
+
+```typescript
+// plugins/router/index.ts
+import type { RouterEvents } from './types';
+
+export const routerPlugin = createPlugin('router', {
+  events: register => ({
+    'router:navigate': register<RouterEvents['router:navigate']>('Route changed'),
+    'router:not-found': register<RouterEvents['router:not-found']>('Route not found'),
+  }),
+  api: ctx => createRouterApi(ctx),  // inline lambda — required for event inference
+  // ...
+});
+```
+
+**Note:** The `api` field must use an inline lambda (`ctx => createRouterApi(ctx)`) rather than a direct function reference (`api: createRouterApi`). A direct reference prevents TypeScript from inferring the plugin's events, causing the context to receive `EmptyPluginEventMap` instead of the declared events.
+
+**Anti-pattern:** Do not use `(...args: any[]) => void` or `(name: string, payload: unknown) => void` for domain context emit. These lose type safety — wrong event names and payloads compile without errors.
+
+#### Mock Contexts in Unit Tests
+
+Domain factories can be unit tested with mock contexts — no kernel required:
 
 ```typescript
 // plugins/router/__tests__/api.test.ts
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { createRouterApi } from '../api';
+import type { RouterCtx } from '../types';
 
 describe('createRouterApi', () => {
   it('navigates to path and updates state', () => {
-    const state = { currentPath: '/', history: [] as string[] };
-    const emitted: Array<{ name: string; payload: unknown }> = [];
+    const ctx: RouterCtx = {
+      config: { basePath: '/', notFoundPath: '/404' },
+      state: { currentPath: '/', history: [], guards: [], initialized: false },
+      emit: vi.fn(),
+    };
 
-    const api = createRouterApi({
-      global: { siteName: 'Test' },
-      config: { basePath: '/' },
-      state,
-      emit: (name: string, payload: unknown) => { emitted.push({ name, payload }); },
-      require: () => { throw new Error('unused'); },
-      has: () => false,
-    } as any);
-
+    const api = createRouterApi(ctx);
     api.navigate('/about');
 
-    expect(state.currentPath).toBe('/about');
-    expect(emitted[0]).toMatchObject({ name: 'router:navigate' });
+    expect(ctx.state.currentPath).toBe('/about');
+    expect(ctx.emit).toHaveBeenCalledWith('router:navigate', {
+      from: '/', to: '/about',
+    });
   });
 });
 ```
