@@ -38,8 +38,10 @@ TypeScript's own type system determines config behavior. No flags. No metadata. 
 
 **Shallow merge. No deep merge. Ever.**
 
+Per-plugin config uses a 3-level merge: plugin defaults, then framework overrides (from `createCore`), then consumer overrides (from `createApp`):
+
 ```typescript
-resolvedConfig = { ...spec.config, ...consumerProvidedConfig }
+resolvedConfig = { ...spec.config, ...frameworkOverrides, ...consumerOverrides }
 ```
 
 If `config` is `{ level: 'info', prefix: '[app]' }` and the consumer provides `{ level: 'debug' }`, the result is `{ level: 'debug', prefix: '[app]' }`.

@@ -229,26 +229,29 @@ Brief here -- see [03-PLUGIN-SYSTEM](./03-PLUGIN-SYSTEM.md) for full plugin spec
 What `createApp` returns after all plugins are initialized:
 
 ```typescript
-type App<Config, Events, Plugins> = Readonly<{
+type App<
+  _Config extends Record<string, unknown>,
+  Events extends Record<string, unknown>,
+  P extends PluginInstance,
+> = {
   /** Start all plugins (forward order). Returns when all onStart complete. */
-  start: () => Promise<void>;
+  readonly start: () => Promise<void>;
 
   /** Stop all plugins (reverse order). Returns when all onStop complete. */
-  stop: () => Promise<void>;
+  readonly stop: () => Promise<void>;
 
   /** Emit a typed event. Only known events accepted, payload strictly typed. */
-  emit: EmitFn<Events>;
+  readonly emit: EmitFunction<Events>;
 
   /** Get a plugin or throw. Instance-only, fully typed. */
-  require: <P extends PluginInstance>(plugin: P) => ExtractApi<P>;
+  readonly require: RequireFunction;
 
   /** Check if a plugin is registered by name. */
-  has: (name: string) => boolean;
-
-  /** Plugin APIs mounted directly. app.router.navigate() is typed. */
-  [pluginName: string]: PluginApi;
-}>;
+  readonly has: HasFunction;
+} & BuildPluginApis<P>;
 ```
+
+Plugin APIs are mounted via `BuildPluginApis<P>`, a mapped type that selectively includes only plugins with non-empty APIs and literal string names. This prevents index signature pollution on the App type.
 
 **Key properties:**
 

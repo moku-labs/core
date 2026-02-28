@@ -77,10 +77,8 @@ Plugin internal state (`ctx.state`) is mutable -- that's the point of state. But
 ### 1.8 Lifecycle Guards
 
 - `app.start()` callable once. Second call throws.
-- `app.start()` failure triggers rollback: already-started plugins are stopped in reverse order, then the app enters the terminal stopped state. No retry is possible.
-- `app.stop()` callable once. Second call throws.
-- After `app.stop()`, all methods throw. The app is in a terminal state.
-- **Mounted plugin APIs are also guarded.** After `stop()`, accessing any property on mounted plugin APIs (e.g., `app.router.navigate`) throws the stopped error. This is enforced via `Proxy` on each plugin's API object.
+- `app.start()` failure triggers rollback: already-started plugins are stopped in reverse order.
+- `app.stop()` requires `start()` first.
 
 ### 1.9 require() Contract
 

@@ -385,33 +385,22 @@ function buildCallbackContext(runtime: KernelRuntime): DynamicObject {
 // =============================================================================
 
 /**
- * Run onStop for all plugins in reverse order with best-effort error handling.
+ * Run onStop for all plugins in reverse order.
  * @param flatPlugins - The flattened plugin list.
  * @param globalConfig - The frozen global config object.
- * @param onError - Optional error handler for stop failures.
  * @example
  * ```ts
- * await executeStop(plugins, globalConfig, error => console.error(error));
+ * await executeStop(plugins, globalConfig);
  * ```
  */
 async function executeStop(
   flatPlugins: AnyPluginInstance[],
-  globalConfig: Readonly<Record<string, unknown>>,
-  onError: ((error: Error) => void) | undefined
+  globalConfig: Readonly<Record<string, unknown>>
 ): Promise<void> {
-  let firstError: Error | undefined;
-
   for (const plugin of flatPlugins.toReversed()) {
     if (!plugin.spec.onStop) continue;
-    try {
-      await plugin.spec.onStop({ global: globalConfig });
-    } catch (error) {
-      firstError ??= error as Error;
-      if (onError) onError(error as Error);
-    }
+    await plugin.spec.onStop({ global: globalConfig });
   }
-
-  if (firstError) throw firstError;
 }
 
 /**
@@ -419,7 +408,6 @@ async function executeStop(
  * @param runtime - The kernel runtime with shared state and APIs.
  * @param flatPlugins - The flattened plugin list.
  * @param buildPluginContext - Factory that builds context for a plugin.
- * @param onError - Optional combined error handler.
  * @param consumer - Optional consumer lifecycle callbacks.
  * @returns A frozen app object with lifecycle methods and plugin APIs.
  * @example
@@ -432,26 +420,9 @@ function buildApp(
   runtime: KernelRuntime,
   flatPlugins: AnyPluginInstance[],
   buildPluginContext: ContextFactory,
-  onError: ((error: Error) => void) | undefined,
   consumer?: KernelParameters["consumer"]
 ): DynamicObject {
   let started = false;
-  let stopped = false;
-
-  /**
-   * Throw if the app has been stopped.
-   * @example
-   * ```ts
-   * guardStopped(); // throws if stopped
-   * ```
-   */
-  function guardStopped(): void {
-    if (stopped) {
-      throw new Error(
-        `[${runtime.id}] App is stopped. No further operations allowed.\n  Create a new app instance instead.`
-      );
-    }
-  }
 
   const appRequire = createRequire(
     runtime,
@@ -469,38 +440,21 @@ function buildApp(
      * ```
      */
     start: async (): Promise<void> => {
-      guardStopped();
       if (started) {
         throw new Error(`[${runtime.id}] App already started.\n  start() can only be called once.`);
       }
 
-      const startedPlugins: AnyPluginInstance[] = [];
-      try {
-        for (const plugin of flatPlugins) {
-          if (plugin.spec.onStart) {
-            await plugin.spec.onStart(buildPluginContext(plugin));
-          }
-          startedPlugins.push(plugin);
+      for (const plugin of flatPlugins) {
+        if (plugin.spec.onStart) {
+          await plugin.spec.onStart(buildPluginContext(plugin));
         }
-
-        if (consumer?.onStart) {
-          await consumer.onStart(buildCallbackContext(runtime));
-        }
-
-        started = true;
-      } catch (startError) {
-        // Rollback: stop already-started plugins in reverse, then enter terminal state.
-        // Stop errors during rollback are intentionally swallowed here — they are
-        // already reported via onError by executeStop. The start error is the one
-        // that matters to the caller.
-        stopped = true;
-        try {
-          await executeStop(startedPlugins, runtime.globalConfig, onError);
-        } catch {
-          // Reported via onError — intentional silent catch (see above)
-        }
-        throw startError;
       }
+
+      if (consumer?.onStart) {
+        await consumer.onStart(buildCallbackContext(runtime));
+      }
+
+      started = true;
     },
 
     /**
@@ -511,23 +465,14 @@ function buildApp(
      * ```
      */
     stop: async (): Promise<void> => {
-      guardStopped();
       if (!started) {
         throw new Error(`[${runtime.id}] App not started.\n  Call start() before stop().`);
       }
-      stopped = true;
-      let stopError: Error | undefined;
-      try {
-        await executeStop(flatPlugins, runtime.globalConfig, onError);
-      } catch (error) {
-        stopError = error as Error;
-      }
+      await executeStop(flatPlugins, runtime.globalConfig);
 
       if (consumer?.onStop) {
         await consumer.onStop(buildCallbackContext(runtime));
       }
-
-      if (stopError) throw stopError;
     },
 
     /**
@@ -540,7 +485,6 @@ function buildApp(
      * ```
      */
     emit: (eventName: string, payload?: unknown): void => {
-      guardStopped();
       runtime.emit(eventName, payload);
     },
 
@@ -553,10 +497,7 @@ function buildApp(
      * const routerApi = app.require(routerPlugin);
      * ```
      */
-    require: (instance: AnyPluginInstance) => {
-      guardStopped();
-      return appRequire(instance);
-    },
+    require: (instance: AnyPluginInstance) => appRequire(instance),
 
     /**
      * Check if a plugin name is registered.
@@ -567,31 +508,12 @@ function buildApp(
      * app.has("router"); // => true or false
      * ```
      */
-    has: (name: string): boolean => {
-      guardStopped();
-      return appHas(name);
-    }
+    has: (name: string): boolean => appHas(name)
   };
 
-  // Mount plugin APIs with stopped guard (Proxy intercepts property access after stop)
+  // Mount plugin APIs directly on the app object
   for (const [name, api] of runtime.apis) {
-    app[name] = new Proxy(api, {
-      /**
-       * Intercepts property access to enforce the stopped guard on mounted plugin APIs.
-       * @param target - The original plugin API object.
-       * @param property - The property being accessed.
-       * @param receiver - The proxy or object that the property is accessed on.
-       * @returns The property value from the target.
-       * @example
-       * ```ts
-       * app.router.navigate('/about'); // throws after app.stop()
-       * ```
-       */
-      get(target, property, receiver) {
-        guardStopped();
-        return Reflect.get(target, property, receiver);
-      }
-    });
+    app[name] = api;
   }
 
   return Object.freeze(app);
@@ -695,7 +617,7 @@ async function kernel(parameters: KernelParameters): Promise<DynamicObject> {
   }
 
   // Step 11: Build and freeze app
-  return buildApp(runtime, flatPlugins, buildPluginContext, combinedOnError, consumer);
+  return buildApp(runtime, flatPlugins, buildPluginContext, consumer);
 }
 
 export { kernel };

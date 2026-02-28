@@ -23,7 +23,7 @@ Every significant "why" in the v3 architecture:
 | 10 | No topological sort | Auto-sort by depends | Explicit ordering is simpler, more predictable, more debuggable. depends is validation-only. |
 | 11 | Configs frozen, state mutable | Everything mutable or everything frozen | Configs are the contract -- they must not change. State is the deliberate escape hatch for runtime mutation. |
 | 12 | No sub-plugins — all plugins listed explicitly | Sub-plugins flattened depth-first | Explicit listing is simpler, gives full type visibility. Frameworks can re-export plugin arrays for convenience. |
-| 13 | start/stop callable once, terminal after stop | Idempotent no-ops on repeat calls | Throws on second call catches misuse. Terminal state prevents zombie apps. |
+| 13 | start callable once, stop requires start | Idempotent no-ops on repeat calls | Throws on second call catches misuse. |
 | 14 | Stop is best-effort | Stop aborts on first error | One plugin's cleanup failure should not orphan other plugins' resources. All plugins get their onStop called. |
 
 ---
@@ -216,22 +216,21 @@ async function createApp(consumerOptions?: {
   const pluginNameSet = new Set(allPlugins.map(p => p.name));
 
   // =========================================================================
-  // Step 5: Resolve config
+  // Step 5: Resolve global config
   // =========================================================================
   // RATIONALE: Shallow merge. Framework defaults -> consumer overrides.
-  // Config keys are identified from the Config type shape.
-  // Plugin config keys are identified by matching registered plugin names.
-
-  // 5a. Config overrides and plugin configs are already separated by the
+  // Config overrides and plugin configs are already separated by the
   // structured options (no runtime key discrimination needed).
-
-  // 5b. Global config: framework defaults <- consumer overrides
   const globalConfig: Readonly<Config> = Object.freeze({
     ...configDefaults,
     ...(configOverrides ?? {}),
   });
 
-  // 5c. Per-plugin config: plugin defaults <- framework overrides <- consumer overrides
+  // =========================================================================
+  // Step 6: Resolve per-plugin config
+  // =========================================================================
+  // RATIONALE: 3-level merge. Plugin defaults <- framework overrides <- consumer overrides.
+  // Plugin config keys are identified by matching registered plugin names.
   const resolvedConfigs = new Map<string, Readonly<any>>();
   for (const plugin of allPlugins) {
     const merged = Object.freeze({
@@ -243,7 +242,7 @@ async function createApp(consumerOptions?: {
   }
 
   // =========================================================================
-  // Step 6: Create state
+  // Step 7: Create state
   // =========================================================================
   // RATIONALE: State is created before APIs because api() receives state in ctx.
   // Only MinimalContext available -- no emit, no require, no other plugins.
@@ -256,14 +255,16 @@ async function createApp(consumerOptions?: {
         config: resolvedConfigs.get(plugin.name),
       };
       states.set(plugin.name, plugin.spec.createState(ctx));
+    } else {
+      states.set(plugin.name, {});
     }
   }
 
   // =========================================================================
-  // Step 7a: Build event bus (empty -- hooks registered in Step 7b)
+  // Step 8a: Build event bus (empty -- hooks registered in Step 8b)
   // =========================================================================
   // RATIONALE: The event bus infrastructure is created first (hookMap, dispatch,
-  // emit, registerHook). Hooks are NOT registered yet -- that happens in Step 7b
+  // emit, registerHook). Hooks are NOT registered yet -- that happens in Step 8b
   // after the context factory is available. This 2-step approach preserves the
   // invariant that hooks are registered before APIs and onInit run.
   const hookMap = new Map<string, Array<(payload: any) => void | Promise<void>>>();
@@ -298,7 +299,7 @@ async function createApp(consumerOptions?: {
   }
 
   // =========================================================================
-  // Step 7b: Build context factory + Register hooks
+  // Step 8b: Build context factory + Register hooks
   // =========================================================================
   // RATIONALE: hooks(ctx) follows the same closure pattern as api(ctx).
   // The context factory must exist before hooks can be called.
@@ -343,7 +344,7 @@ async function createApp(consumerOptions?: {
   }
 
   // =========================================================================
-  // Step 8: Build APIs
+  // Step 9: Build APIs
   // =========================================================================
   // RATIONALE: APIs are built after state and hooks so that api() has access
   // to state and can emit events. Forward order.
@@ -355,7 +356,7 @@ async function createApp(consumerOptions?: {
   }
 
   // =========================================================================
-  // Step 9: Run onInit (forward order)
+  // Step 10: Run onInit (forward order)
   // =========================================================================
   // RATIONALE: Sequential, each plugin awaited. All APIs are built,
   // so onInit can safely call require().
@@ -378,29 +379,20 @@ async function createApp(consumerOptions?: {
   }
 
   // =========================================================================
-  // Step 10: Build and freeze app
+  // Step 11: Build and freeze app
   // =========================================================================
   let started = false;
-  let stopped = false;
-
-  function guardStopped() {
-    if (stopped) {
-      throw new Error(`[${id}] App is stopped. No further operations allowed.`);
-    }
-  }
 
   const app = {
     start: async () => { /* see Section 6 */ },
     stop: async () => { /* see Section 7 */ },
 
     emit: (eventName: string, payload?: any) => {
-      guardStopped();
       emit(eventName, payload);
     },
 
     // Instance-only: accepts PluginInstance, throws if not registered
     require: (pluginInstance: PluginInstance) => {
-      guardStopped();
       const api = apis.get(pluginInstance.name);
       if (!api) {
         throw new Error(
@@ -412,21 +404,12 @@ async function createApp(consumerOptions?: {
     },
 
     // has stays string-based (boolean check) -- checks all registered plugins, not just those with APIs
-    has: (name: string) => {
-      guardStopped();
-      return pluginNameSet.has(name);
-    },
+    has: (name: string) => pluginNameSet.has(name),
   };
 
   // Mount plugin APIs directly on app: app.router, app.blog, etc.
-  // Wrapped in Proxy to enforce guardStopped() on property access after stop.
   for (const [name, api] of apis) {
-    app[name] = new Proxy(api, {
-      get(target, property, receiver) {
-        guardStopped();
-        return Reflect.get(target, property, receiver);
-      }
-    });
+    app[name] = api;
   }
 
   return Object.freeze(app) as App<Config, Events, AllPlugins>;
@@ -441,9 +424,7 @@ async function createApp(consumerOptions?: {
 async start() {
   // RATIONALE: Forward order. Sequential. Each plugin awaited.
   // Throws if already started (catches misuse).
-  // On failure: rolls back already-started plugins, then enters terminal state.
-  guardStopped();
-
+  // On failure: rolls back already-started plugins.
   if (started) {
     throw new Error(`[${id}] App already started.\n  start() can only be called once.`);
   }
@@ -465,12 +446,11 @@ async start() {
 
     started = true;
   } catch (startError) {
-    // Rollback: stop already-started plugins in reverse, then terminal state.
+    // Rollback: stop already-started plugins in reverse.
     // Stop errors during rollback are reported via onError but intentionally
     // swallowed -- the start error is what matters to the caller.
-    stopped = true;
     try {
-      executeStop(startedPlugins, globalConfig, combinedOnError);
+      await executeStop(startedPlugins, globalConfig, combinedOnError);
     } catch { /* reported via onError */ }
     throw startError;
   }
@@ -491,12 +471,9 @@ async stop() {
   // continue stopping remaining plugins. Consumer onStop fires even if
   // a plugin threw (via try/finally). Re-throw the first error after all done.
 
-  guardStopped();
-
   if (!started) {
     throw new Error(`[${id}] App not started.\n  Call start() before stop().`);
   }
-  stopped = true;
 
   let firstError: Error | null = null;
 
@@ -530,28 +507,12 @@ async stop() {
 
 ### buildPluginContext
 
-See Section 5, Step 7b for the full implementation. Constructs the appropriate context object for a given plugin, providing:
+See Section 5, Step 8b for the full implementation. Constructs the appropriate context object for a given plugin, providing:
 - `global` -- frozen global config
 - `config` -- frozen plugin config
 - `state` -- mutable plugin state
 - `emit` -- event dispatch function
 - `require` / `has` -- inter-plugin communication
-
-### guardStopped
-
-```pseudo-typescript
-function guardStopped() {
-  // RATIONALE: After stop(), the app is in a terminal state.
-  // All methods throw to prevent use of a stopped app.
-  // This also applies to mounted plugin APIs via Proxy (see Step 10).
-  if (stopped) {
-    throw new Error(
-      `[${id}] App is stopped. No further operations allowed.\n` +
-      `  Create a new app instance instead.`
-    );
-  }
-}
-```
 
 ---
 
@@ -576,29 +537,28 @@ Framework index.ts:
 
 Consumer main.ts:
   await createApp({ plugins?, config?, pluginConfigs?, onReady?, onError?, onStart?, onStop? })
-    -> destructure structured options (no key discrimination)
-    -> merge plugins: [...defaults, ...extras]
-    -> validate plugins (reserved names, duplicates, dependency order)
-    -> build plugin name set
-    -> resolve config (shallow merge, freeze)
-    -> create state (MinimalContext; default {} if no createState)
-    -> build event bus (empty hookMap, emit, registerHook)
-    -> build context factory
-    -> register hooks (hooks(ctx), context-aware)
-    -> build APIs (PluginContext)
-    -> run onInit (PluginContext, forward, sequential)
-    -> call framework onReady, then consumer onReady
-    -> build app with Proxy guards on plugin APIs, freeze and return
+    Step 1: destructure structured options (no key discrimination)
+    Step 2: merge plugins: [...defaults, ...extras]
+    Step 3: validate plugins (reserved names, duplicates, dependency order)
+    Step 4: build plugin name set
+    Step 5: resolve global config (shallow merge, freeze)
+    Step 6: resolve per-plugin config (3-level merge, freeze)
+    Step 7: create state (MinimalContext; default {} if no createState)
+    Step 8a: build event bus (empty hookMap, emit, registerHook)
+    Step 8b: build context factory, register hooks (hooks(ctx), context-aware)
+    Step 9: build APIs (PluginContext)
+    Step 10: run onInit (PluginContext, forward, sequential)
+    call framework onReady, then consumer onReady
+    Step 11: build app, mount plugin APIs, freeze and return
 
   await app.start()
     -> run onStart (PluginContext, forward, sequential)
     -> call consumer onStart
-    -> on failure: rollback (stop started plugins in reverse), enter terminal state
+    -> on failure: rollback (stop started plugins in reverse)
 
   await app.stop()
     -> run onStop (TeardownContext, REVERSE, sequential, best-effort)
     -> call consumer onStop (even if a plugin threw)
-    -> app enters terminal state
 ```
 
 ---

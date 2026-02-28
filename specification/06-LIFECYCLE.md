@@ -32,6 +32,8 @@ Runs during `await createApp(...)`. This single phase encompasses all initializa
 7. **Register hooks:** For each plugin (forward order), call `hooks(PluginContext)`, register handlers in the event bus.
 8. **Build API:** For each plugin (forward order), call `api(PluginContext)`. Register the API in the plugin registry.
 9. **Run onInit:** For each plugin (forward order), call `onInit(PluginContext)`. Sequential, awaited. This is where plugins validate dependencies with `require()`/`has()`.
+10. **Call framework onReady:** If `onReady` was passed to `createCore`, call it with `{ config: globalConfig }`. Awaited.
+11. **Call consumer onReady:** If `onReady` was passed to `createApp`, call it with full `AppCallbackContext` (config, emit, require, has, plugin APIs). Awaited.
 
 These sub-steps are presented as ONE phase with internal mechanics. Plugin authors write `onInit` -- the rest is kernel machinery.
 
@@ -116,17 +118,12 @@ Lifecycle methods can throw (or reject). When they do:
 
 - `start()` can only be called once. Calling it again throws: `"App already started."`
 - `stop()` requires `start()` first. Calling it before start throws: `"App not started."`
-- `stop()` can only be called once. After `stop()`, all app methods throw: `"App is stopped."` The app is in a terminal state.
-- If `start()` fails, the app enters the terminal stopped state after rollback (see §3). No retry is possible.
-- **Mounted plugin APIs are also guarded.** After `stop()`, accessing any property on `app.router`, `app.auth`, etc. throws the same stopped error. This is enforced via `Proxy` on each plugin's API object.
+- If `start()` fails, already-started plugins are rolled back (stopped in reverse order).
 
 ```typescript
 const app = await createApp({ ... });
 await app.start();
 await app.start();          // throws: "App already started."
-await app.stop();
-app.emit('any', {});        // throws: "App is stopped."
-app.router.navigate('/');   // throws: "App is stopped." (Proxy guard)
 ```
 
 ---

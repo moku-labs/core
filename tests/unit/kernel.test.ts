@@ -395,17 +395,6 @@ describe("idempotency", () => {
     await expect(app.start()).rejects.toThrow("already started");
   });
 
-  it("stop() can only be called once", async () => {
-    const cc = createTestCore();
-
-    const { createApp } = cc.createCore(cc, { plugins: [] });
-    const app = await createApp();
-
-    await app.start();
-    await app.stop();
-    await expect(app.stop()).rejects.toThrow("stopped");
-  });
-
   it("stop() requires start() first", async () => {
     const cc = createTestCore();
 
@@ -413,24 +402,6 @@ describe("idempotency", () => {
     const app = await createApp();
 
     await expect(app.stop()).rejects.toThrow("not started");
-  });
-
-  it("app is terminal after stop -- no further operations", async () => {
-    const cc = createTestCore();
-
-    const dummy = cc.createPlugin("dummy", {});
-
-    const { createApp } = cc.createCore(cc, { plugins: [] });
-    const app = await createApp();
-
-    await app.start();
-    await app.stop();
-
-    // All operations should throw after stop
-    await expect(app.start()).rejects.toThrow("stopped");
-    expect(() => app.emit("test", {})).toThrow("stopped");
-    expect(() => app.has("router")).toThrow("stopped");
-    expect(() => app.require(dummy)).toThrow("stopped");
   });
 });
 
@@ -681,66 +652,10 @@ describe("onReady callback", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Best-effort stop
+// onError callback
 // ---------------------------------------------------------------------------
 
-describe("best-effort stop", () => {
-  it("continues stopping all plugins even if one throws", async () => {
-    const stopOrder: string[] = [];
-    const cc = createTestCore();
-
-    const a = cc.createPlugin("a", {
-      onStop: () => {
-        stopOrder.push("a");
-      }
-    });
-    const b = cc.createPlugin("b", {
-      onStop: () => {
-        stopOrder.push("b");
-        throw new Error("b failed");
-      }
-    });
-    const c = cc.createPlugin("c", {
-      onStop: () => {
-        stopOrder.push("c");
-      }
-    });
-
-    const { createApp } = cc.createCore(cc, { plugins: [a, b, c] });
-    const app = await createApp();
-    await app.start();
-
-    // stop() re-throws first error but runs all plugins
-    await expect(app.stop()).rejects.toThrow("b failed");
-
-    // All plugins received onStop in reverse order
-    expect(stopOrder).toEqual(["c", "b", "a"]);
-  });
-
-  it("onError callback receives errors during stop", async () => {
-    const errors: Error[] = [];
-    const cc = createTestCore();
-
-    const plugin = cc.createPlugin("failing", {
-      onStop: () => {
-        throw new Error("stop failed");
-      }
-    });
-
-    const { createApp } = cc.createCore(cc, {
-      plugins: [plugin],
-      onError: error => {
-        errors.push(error);
-      }
-    });
-    const app = await createApp();
-    await app.start();
-
-    await expect(app.stop()).rejects.toThrow("stop failed");
-    expect(errors).toHaveLength(1);
-    expect(errors[0]?.message).toBe("stop failed");
-  });
-
+describe("onError callback", () => {
   it("onError callback receives errors from async hooks", async () => {
     const errors: Error[] = [];
     const hookCalls: string[] = [];
