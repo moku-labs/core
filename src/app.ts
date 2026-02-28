@@ -15,6 +15,7 @@
 // =============================================================================
 
 import type { AnyPluginInstance } from "./types";
+import { isRecord } from "./utilities";
 
 // =============================================================================
 // Section 1: Runtime Boundary Types
@@ -109,10 +110,7 @@ interface KernelRuntime {
  * ```
  */
 function asRecord(value: unknown): Record<string, unknown> {
-  if (value !== undefined && typeof value === "object" && value !== null) {
-    return value as Record<string, unknown>;
-  }
-  return {};
+  return isRecord(value) ? value : {};
 }
 
 /**
@@ -207,6 +205,8 @@ function createPluginStates(
       const pluginConfig = resolvedConfigs.get(plugin.name) ?? {};
       const minimalContext = { global: globalConfig, config: pluginConfig };
       states.set(plugin.name, plugin.spec.createState(minimalContext));
+    } else {
+      states.set(plugin.name, {});
     }
   }
   return states;
@@ -402,13 +402,12 @@ async function executeStop(
   let firstError: Error | undefined;
 
   for (const plugin of flatPlugins.toReversed()) {
-    if (plugin.spec.onStop) {
-      try {
-        await plugin.spec.onStop({ global: globalConfig });
-      } catch (error) {
-        if (!firstError) firstError = error as Error;
-        if (onError) onError(error as Error);
-      }
+    if (!plugin.spec.onStop) continue;
+    try {
+      await plugin.spec.onStop({ global: globalConfig });
+    } catch (error) {
+      firstError ??= error as Error;
+      if (onError) onError(error as Error);
     }
   }
 
@@ -474,7 +473,6 @@ function buildApp(
       if (started) {
         throw new Error(`[${runtime.id}] App already started.\n  start() can only be called once.`);
       }
-      started = true;
 
       for (const plugin of flatPlugins) {
         if (plugin.spec.onStart) {
@@ -485,6 +483,8 @@ function buildApp(
       if (consumer?.onStart) {
         await consumer.onStart(buildCallbackContext(runtime));
       }
+
+      started = true;
     },
 
     /**

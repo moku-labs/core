@@ -105,12 +105,13 @@
 //     });
 // =============================================================================
 
-import type { EmitFunction, PluginInstance } from "./types";
-import type {
-  EmptyPluginEventMap,
-  FrameworkConfig,
-  FrameworkEventMap,
-  UnionToIntersection
+import type { EmitFunction, MinimalContext, PluginInstance, TeardownContext } from "./types";
+import {
+  type EmptyPluginEventMap,
+  type FrameworkConfig,
+  type FrameworkEventMap,
+  isRecord,
+  type UnionToIntersection
 } from "./utilities";
 
 // =============================================================================
@@ -391,10 +392,7 @@ type CreatePluginSpec<
    * createState: (ctx) => ({ count: 0, cache: new Map() })
    * ```
    */
-  createState?: (context: {
-    readonly global: Readonly<GlobalConfig>;
-    readonly config: Readonly<PluginConfig>;
-  }) => PluginState;
+  createState?: (context: MinimalContext<GlobalConfig, PluginConfig>) => PluginState;
   /**
    * Public API factory. Receives full plugin context; returns the API object
    * other plugins access via `ctx.require(thisPlugin)`.
@@ -461,7 +459,7 @@ type CreatePluginSpec<
    * }
    * ```
    */
-  onStop?: (context: { readonly global: Readonly<GlobalConfig> }) => void | Promise<void>;
+  onStop?: (context: TeardownContext<GlobalConfig>) => void | Promise<void>;
   /**
    * Event subscription factory. Receives full plugin context; returns a map of
    * event handlers. Same closure pattern as `api`. Handlers can access `ctx.state`,
@@ -578,6 +576,8 @@ type LifecycleMethodName = "onInit" | "onStart" | "onStop";
  */
 type RuntimePluginSpec = Record<string, unknown> & {
   readonly events?: unknown;
+  readonly api?: unknown;
+  readonly createState?: unknown;
   readonly onInit?: unknown;
   readonly onStart?: unknown;
   readonly onStop?: unknown;
@@ -587,19 +587,6 @@ type RuntimePluginSpec = Record<string, unknown> & {
 // =============================================================================
 // Section 9: Runtime Assertions
 // =============================================================================
-
-/**
- * Checks whether a value is a non-null object record.
- * @param value - Value to inspect.
- * @returns `true` when value is an object record.
- * @example
- * ```ts
- * const asRecord = isRecord({ key: "value" });
- * ```
- */
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 /**
  * Asserts that a plugin name is a non-empty string.
@@ -723,6 +710,48 @@ function assertValidHooks(frameworkId: string, pluginName: string, hooks: unknow
   }
 }
 
+/**
+ * Validates that `api` is a function if provided.
+ * @param frameworkId - Framework identifier used in error messages.
+ * @param pluginName - Validated plugin name.
+ * @param api - Candidate api value from plugin spec.
+ * @example
+ * ```ts
+ * assertValidApi("my-app", "router", ctx => ({ navigate: () => {} }));
+ * ```
+ */
+function assertValidApi(frameworkId: string, pluginName: string, api: unknown): void {
+  if (api !== undefined && typeof api !== "function") {
+    throw new TypeError(
+      `[${frameworkId}] Plugin "${pluginName}" has invalid api: expected a function.\n` +
+        `  Provide a function like: api: ctx => ({ methodName: () => { ... } })`
+    );
+  }
+}
+
+/**
+ * Validates that `createState` is a function if provided.
+ * @param frameworkId - Framework identifier used in error messages.
+ * @param pluginName - Validated plugin name.
+ * @param createState - Candidate createState value from plugin spec.
+ * @example
+ * ```ts
+ * assertValidCreateState("my-app", "router", ctx => ({ count: 0 }));
+ * ```
+ */
+function assertValidCreateState(
+  frameworkId: string,
+  pluginName: string,
+  createState: unknown
+): void {
+  if (createState !== undefined && typeof createState !== "function") {
+    throw new TypeError(
+      `[${frameworkId}] Plugin "${pluginName}" has invalid createState: expected a function.\n` +
+        `  Provide a function like: createState: ctx => ({ key: initialValue })`
+    );
+  }
+}
+
 // =============================================================================
 // Section 10: Plugin Factory
 // =============================================================================
@@ -764,6 +793,8 @@ function createPluginFactory<
     assertValidLifecycleHandlers(frameworkId, name, spec);
     assertValidEvents(frameworkId, name, spec.events);
     assertValidHooks(frameworkId, name, spec.hooks);
+    assertValidApi(frameworkId, name, spec.api);
+    assertValidCreateState(frameworkId, name, spec.createState);
 
     return {
       name,

@@ -2,7 +2,7 @@
 // moku_core v3 - Shared Utilities
 // =============================================================================
 // Generic type utilities and runtime validation functions shared across multiple
-// source files. No domain knowledge -- just reusable machinery.
+// source files. No domain knowledge — just reusable machinery.
 //
 // NOTE: This file has a type-only circular import with types.ts.
 //       types.ts imports IsLiteralString and UnionToIntersection from here.
@@ -84,7 +84,26 @@ type UnionToIntersection<U> = (U extends any ? (k: U) => void : never) extends (
 type IsLiteralString<S extends string> = string extends S ? false : true;
 
 // =============================================================================
-// Section 3: Plugin Validation
+// Section 3: Runtime Guards
+// =============================================================================
+
+/**
+ * Checks whether a value is a non-null, non-array object record.
+ * @param value - Value to inspect.
+ * @returns `true` when value is an object record.
+ * @example
+ * ```ts
+ * isRecord({ key: "value" }); // => true
+ * isRecord([1, 2, 3]);        // => false
+ * isRecord(null);              // => false
+ * ```
+ */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+// =============================================================================
+// Section 4: Plugin Validation
 // =============================================================================
 
 /**
@@ -95,7 +114,17 @@ type IsLiteralString<S extends string> = string extends S ? false : true;
  * RESERVED_NAMES.has("router"); // false
  * ```
  */
-const RESERVED_NAMES = new Set(["start", "stop", "emit", "require", "has"]);
+const RESERVED_NAMES = new Set([
+  "start",
+  "stop",
+  "emit",
+  "require",
+  "has",
+  "config",
+  "__proto__",
+  "constructor",
+  "prototype"
+]);
 
 /**
  * Check that no plugin name collides with reserved app method names.
@@ -134,7 +163,7 @@ function checkDuplicateNames(id: string, names: string[]): void {
   for (const name of names) {
     if (seen.has(name)) {
       throw new TypeError(
-        `[${id}] Duplicate plugin name: "${name}".\n` + `  Each plugin must have a unique name.`
+        `[${id}] Duplicate plugin name: "${name}".\n  Each plugin must have a unique name.`
       );
     }
     seen.add(name);
@@ -209,4 +238,4 @@ export type {
   IsLiteralString
 };
 
-export { validatePlugins };
+export { isRecord, validatePlugins };
