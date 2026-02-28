@@ -273,8 +273,8 @@ type PluginExecutionContext<
    */
   emit: EmitFunction<AllEvents>;
   /**
-   * Get a dependency plugin's API. Throws if the plugin is not registered.
-   * Accepts only plugin instance references (not strings).
+   * Get a registered plugin's API by instance reference. Throws if the plugin is not registered.
+   * Accepts any plugin instance, not just declared dependencies (not strings).
    * @example
    * ```ts
    * const http = ctx.require(httpPlugin);
@@ -396,6 +396,7 @@ type CreatePluginSpec<
   /**
    * Public API factory. Receives full plugin context; returns the API object
    * other plugins access via `ctx.require(thisPlugin)`.
+   * Must be synchronous and side-effect-free — do not call `ctx.emit()` from this factory.
    * @example
    * ```ts
    * api: (ctx) => ({
