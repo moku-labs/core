@@ -5,10 +5,11 @@ import { createRouterState } from "./state";
 import type { RouterEvents } from "./types";
 
 export const routerPlugin = createPlugin("router", {
-  events: register => ({
-    "router:navigate": register<RouterEvents["router:navigate"]>("Route changed"),
-    "router:not-found": register<RouterEvents["router:not-found"]>("Route not found")
-  }),
+  events: register =>
+    register.map<RouterEvents>({
+      "router:navigate": "Route changed",
+      "router:not-found": "Route not found"
+    }),
   config: { basePath: "/", notFoundPath: "/404" },
   createState: createRouterState,
   api: ctx => createRouterApi(ctx),

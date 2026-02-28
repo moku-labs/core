@@ -15,11 +15,12 @@ const createCmsState = (): CmsState => ({
 
 export const cmsPlugin = createPlugin("cms", {
   depends: [routerPlugin, analyticsPlugin],
-  events: register => ({
-    "cms:publish": register<CmsEvents["cms:publish"]>("Content published"),
-    "cms:draft": register<CmsEvents["cms:draft"]>("Draft saved"),
-    "cms:upload": register<CmsEvents["cms:upload"]>("Media uploaded")
-  }),
+  events: register =>
+    register.map<CmsEvents>({
+      "cms:publish": "Content published",
+      "cms:draft": "Draft saved",
+      "cms:upload": "Media uploaded"
+    }),
   config: {
     defaultLocale: "en",
     maxUploadSize: 10 * 1024 * 1024

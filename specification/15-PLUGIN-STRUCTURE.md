@@ -232,13 +232,14 @@ import { createContentApi } from './content/api';
 import { createMediaApi } from './media/api';
 import { createVersioningApi } from './versioning/api';
 import { createPublishingApi } from './publishing/api';
+import type { CmsEvents } from './types';
 
 export const cmsPlugin = createPlugin('cms', {
   depends: [dbPlugin, httpPlugin],
-  events: (register) => ({
-    'cms:publish':  register<{ contentId: string; target: string }>('Content published'),
-    'cms:draft':    register<{ contentId: string }>('Draft saved'),
-    'cms:upload':   register<{ assetId: string; mimeType: string }>('Media uploaded'),
+  events: register => register.map<CmsEvents>({
+    'cms:publish':  'Content published',
+    'cms:draft':    'Draft saved',
+    'cms:upload':   'Media uploaded',
   }),
   config: {
     defaultLocale: 'en',
@@ -417,11 +418,12 @@ plugins/
 import { createPlugin } from '../../config';
 import { createHttpState } from './state';
 import { createHttpApi } from './api';
+import type { HttpEvents } from './types';
 
 export const httpPlugin = createPlugin('http', {
-  events: (register) => ({
-    'http:request':  register<{ method: string; path: string }>('Incoming HTTP request'),
-    'http:response': register<{ status: number; path: string }>('Outgoing HTTP response'),
+  events: register => register.map<HttpEvents>({
+    'http:request':  'Incoming HTTP request',
+    'http:response': 'Outgoing HTTP response',
   }),
   config: { port: 3000, host: 'localhost' },
   createState: createHttpState,
@@ -570,13 +572,14 @@ import { httpPlugin } from '../http';
 import { createAuthState } from './state';
 import { createAuthApi } from './api';
 import { handleSessionExpiry } from './handlers';
+import type { AuthEvents } from './types';
 
 export const authPlugin = createPlugin('auth', {
   depends: [httpPlugin],
-  events: (register) => ({
-    'auth:login':   register<{ userId: string }>('User authenticated'),
-    'auth:logout':  register<{ userId: string }>('User signed out'),
-    'auth:expired': register<{ userId: string }>('Session expired'),
+  events: register => register.map<AuthEvents>({
+    'auth:login':   'User authenticated',
+    'auth:logout':  'User signed out',
+    'auth:expired': 'Session expired',
   }),
   config: {
     sessionTimeout: 3600,
@@ -685,22 +688,22 @@ export type RouterCtx = {
 
 This pattern provides:
 - **Compile-time safety** — wrong event names and payloads are caught in domain code
-- **Single source of truth** — event payload types defined once in `RouterEvents`, referenced by overload signatures and `register<>()` calls
+- **Single source of truth** — event payload types defined once in `RouterEvents`, referenced by overload signatures and `register.map<>()` calls
 - **Test compatibility** — `vi.fn()`, `() => {}`, and `(name: string, payload: unknown) => { ... }` are all assignable to overloaded call signatures
 - **Kernel compatibility** — the kernel's generic `EmitFunction<MergedEvents>` is assignable to concrete overloads (TypeScript instantiates the generic per-overload)
 
 **Why overloads, not a generic?** A generic domain emit `<K extends keyof RouterEvents>(name: K, payload: RouterEvents[K]) => void` fails TypeScript's assignability check against the kernel's `EmitFunction<MergedEvents>`. The kernel's merged events include global events (e.g., `app:ready`), and TypeScript cannot prove that `RouterEvents[K]` is assignable to `(GlobalEvents & RouterEvents)[K]` for generic K. Concrete overloads avoid this — TypeScript instantiates the kernel's generic with each specific event name and checks compatibility directly.
 
-The `index.ts` wiring harness references the same event types and uses an inline lambda to preserve event inference:
+The `index.ts` wiring harness uses `register.map<RouterEvents>()` to bulk-register from the type map, and an inline lambda to preserve event inference:
 
 ```typescript
 // plugins/router/index.ts
 import type { RouterEvents } from './types';
 
 export const routerPlugin = createPlugin('router', {
-  events: register => ({
-    'router:navigate': register<RouterEvents['router:navigate']>('Route changed'),
-    'router:not-found': register<RouterEvents['router:not-found']>('Route not found'),
+  events: register => register.map<RouterEvents>({
+    'router:navigate': 'Route changed',
+    'router:not-found': 'Route not found',
   }),
   api: ctx => createRouterApi(ctx),  // inline lambda — required for event inference
   // ...
@@ -755,6 +758,8 @@ Integration tests use `createApp` to verify the full plugin wiring.
 | Wire spec fields to imported functions | Import from node_modules directly |
 | Export the plugin instance | Contain helper functions |
 | Stay under ~50 lines | |
+
+**Event registration:** Standard+ plugins with a separate `XxxEvents` type in `types.ts` should use `register.map<XxxEvents>(descriptions?)` to bulk-register all events from the type map. This eliminates per-event `register<Events["name"]>()` repetition. Nano/micro plugins with inline event types should use individual `register<T>()` calls. See [14-EVENT-REGISTRATION §8.4](./14-EVENT-REGISTRATION.md).
 
 ### types.ts
 

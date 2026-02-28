@@ -6,10 +6,11 @@ import type { AnalyticsEvents } from "./types";
 
 export const analyticsPlugin = createPlugin("analytics", {
   depends: [routerPlugin],
-  events: register => ({
-    "analytics:track": register<AnalyticsEvents["analytics:track"]>("Event tracked"),
-    "analytics:identify": register<AnalyticsEvents["analytics:identify"]>("User identified")
-  }),
+  events: register =>
+    register.map<AnalyticsEvents>({
+      "analytics:track": "Event tracked",
+      "analytics:identify": "User identified"
+    }),
   config: {
     provider: "memory" as "console" | "memory",
     sampleRate: 1,

@@ -79,16 +79,25 @@ type EventDescriptor<T = unknown> = {
 
 /**
  * The register function passed to the events callback.
- * Calling register<T>(description?) returns an EventDescriptor<T>.
+ * Two usage modes:
+ *   register<T>(description?) -- single event registration
+ *   register.map<EventMap>(descriptions?) -- bulk registration from a type map
  */
-type RegisterFn = <T>(description?: string) => EventDescriptor<T>;
+type RegisterFn = {
+  <T>(description?: string): EventDescriptor<T>;
+  map: <EventMap extends Record<string, unknown>>(
+    descriptions?: { [K in keyof EventMap]?: string }
+  ) => { [K in keyof EventMap]: EventDescriptor<EventMap[K]> };
+};
 ```
 
 **EventDescriptor** is the bridge between types and runtime:
 - The phantom `_type?: T` field carries the payload type for TypeScript. It is never assigned at runtime.
 - The `description` field carries a human-readable string for runtime event catalogs, documentation, and tooling.
 
-**RegisterFn** is the factory passed to the `events` callback. It creates `EventDescriptor<T>` objects. The generic `T` on `register<T>()` is the payload type for that event.
+**RegisterFn** is the factory passed to the `events` callback. It creates `EventDescriptor<T>` objects. Two usage modes:
+- `register<T>(description?)` -- register a single event with inline payload type. Best for simple plugins where events are defined in one file.
+- `register.map<EventMap>(descriptions?)` -- bulk-register all events from a pre-declared type map. Best for Standard+ plugins with a separate `XxxEvents` type (see §8.4).
 
 ---
 
@@ -286,6 +295,55 @@ export const dashboardPlugin = createPlugin('dashboard', {
 });
 ```
 
+### Bulk registration with `register.map` (Standard+ plugins)
+
+When a plugin declares events in a separate `types.ts` file, `register.map<EventMap>()` eliminates the per-event `register<Events["name"]>()` repetition:
+
+```typescript
+// plugins/router/types.ts -- single source of truth for event payloads
+export type RouterEvents = {
+  'router:navigate': { from: string; to: string };
+  'router:not-found': { path: string };
+};
+
+// plugins/router/index.ts -- bulk-register from the type map
+import type { RouterEvents } from './types';
+
+export const routerPlugin = createPlugin('router', {
+  events: register => register.map<RouterEvents>({
+    'router:navigate': 'Route changed',
+    'router:not-found': 'Route not found',
+  }),
+  // ...
+});
+```
+
+**Before** (`register<T>()` per event):
+```typescript
+events: register => ({
+  'router:navigate': register<RouterEvents['router:navigate']>('Route changed'),
+  'router:not-found': register<RouterEvents['router:not-found']>('Route not found'),
+}),
+```
+
+**After** (`register.map<EventMap>()`):
+```typescript
+events: register => register.map<RouterEvents>({
+  'router:navigate': 'Route changed',
+  'router:not-found': 'Route not found',
+}),
+```
+
+Event names appear in the descriptions object (for documentation), but payload types are not repeated -- they come from `RouterEvents` via the generic.
+
+Descriptions are optional. `register.map<RouterEvents>()` with no argument still infers the full event map.
+
+**When to use which:**
+- `register<T>()` -- inline event types, simple plugins, one-file plugins
+- `register.map<EventMap>()` -- separate `XxxEvents` type, Standard+ plugins
+
+Both forms are fully backward compatible. Individual `register<T>()` and `register.map<EventMap>()` cannot be mixed in the same `events` callback (choose one per plugin).
+
 ---
 
 ## 9. Future: Beyond Plugins
@@ -309,6 +367,7 @@ The pattern is the same everywhere: `(register) => ({ 'event:name': register<Pay
 | 4 | `PluginEvents` default is `{}` (empty object) | `{}` is the identity element for intersection. `Record<string, never>` has a string index mapping all keys to `never`, poisoning intersections. |
 | 5 | Dependency events use `UnionToIntersection` | `ExtractEvents<Deps[number]>` distributes as a union. `UnionToIntersection` merges event maps so all dependency events are available. |
 | 6 | Description is optional (`register<T>()` works) | Not all contexts need descriptions. The pattern still works for pure type inference without metadata. |
+| 7 | `register.map<EventMap>()` for bulk registration | Standard+ plugins with separate `XxxEvents` types should not repeat each event name and payload in `register<Events["name"]>()` calls. `register.map` accepts the full type map as a generic. |
 
 ---
 

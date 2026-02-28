@@ -310,10 +310,30 @@ type EventDescriptor<PayloadType = unknown> = {
 
 /**
  * The register function passed to the events callback.
- * `register<{ userId: string }>("desc")` returns an EventDescriptor
- * that carries both the payload type and description.
+ * Two usage modes:
+ * - `register<T>(description?)` — register a single event with payload type `T`.
+ * - `register.map<EventMap>(descriptions?)` — bulk-register all events from a
+ *   pre-declared event map type. Eliminates per-event `register<Events["name"]>()` calls.
+ * @example
+ * ```ts
+ * // Individual registration (inline event types):
+ * events: register => ({
+ *   "auth:login": register<{ userId: string }>("Triggered after login"),
+ * })
+ *
+ * // Bulk registration (Standard+ plugins with separate XxxEvents type):
+ * events: register => register.map<AuthEvents>({
+ *   "auth:login": "Triggered after login",
+ *   "auth:logout": "Triggered after logout",
+ * })
+ * ```
  */
-type RegisterFunction = <PayloadType>(description?: string) => EventDescriptor<PayloadType>;
+type RegisterFunction = {
+  <PayloadType>(description?: string): EventDescriptor<PayloadType>;
+  map: <EventMap extends Record<string, unknown>>(
+    descriptions?: { [K in keyof EventMap]?: string }
+  ) => { [K in keyof EventMap]: EventDescriptor<EventMap[K]> };
+};
 
 // =============================================================================
 // Section 6: Plugin Spec

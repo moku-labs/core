@@ -19,10 +19,11 @@ const cp = cc.createPlugin;
 // ---------------------------------------------------------------------------
 
 describe("diamond dependency event merging", () => {
+  type BEvents = { "b:action": { x: number } };
+  type CEvents = { "c:action": { y: string } };
+
   const pluginB = cp("b-events", {
-    events: register => ({
-      "b:action": register<{ x: number }>("B action")
-    }),
+    events: register => register.map<BEvents>({ "b:action": "B action" }),
     api: ctx => ({
       fireB: () => {
         ctx.emit("b:action", { x: 1 });
@@ -31,9 +32,7 @@ describe("diamond dependency event merging", () => {
   });
 
   const pluginC = cp("c-events", {
-    events: register => ({
-      "c:action": register<{ y: string }>("C action")
-    }),
+    events: register => register.map<CEvents>({ "c:action": "C action" }),
     api: ctx => ({
       fireC: () => {
         ctx.emit("c:action", { y: "hello" });
@@ -107,10 +106,11 @@ describe("diamond dependency event merging", () => {
 // ---------------------------------------------------------------------------
 
 describe("events-only plugin (no API)", () => {
+  type EventsOnlyEvents = { "events-only:fired": { data: string } };
+
   const eventsOnlyPlugin = cp("events-only", {
-    events: register => ({
-      "events-only:fired": register<{ data: string }>("Events-only event")
-    }),
+    events: register =>
+      register.map<EventsOnlyEvents>({ "events-only:fired": "Events-only event" }),
     onInit: ctx => {
       ctx.emit("events-only:fired", { data: "init" });
     }
@@ -155,10 +155,10 @@ describe("events-only plugin (no API)", () => {
 // ---------------------------------------------------------------------------
 
 describe("non-dependency events are inaccessible", () => {
+  type SourceEvents = { "source:custom": { detail: string } };
+
   const eventSource = cp("event-source", {
-    events: register => ({
-      "source:custom": register<{ detail: string }>("Source-specific event")
-    }),
+    events: register => register.map<SourceEvents>({ "source:custom": "Source-specific event" }),
     api: () => ({ noop: () => {} })
   });
 
@@ -508,19 +508,18 @@ describe("transitive dependency event isolation", () => {
   // Diagnostic: verify what ExtractPluginEvents sees on pluginB's phantom type.
   // If B stores only its own events (not A's), C should not see A's events.
 
+  type ChainAEvents = { "chain-a:event": { aData: number } };
+  type ChainBEvents = { "chain-b:event": { bData: string } };
+
   it("B's phantom events contain only B's own events (diagnostic)", () => {
     const pluginA = cp("chain-a-diag", {
-      events: register => ({
-        "chain-a:event": register<{ aData: number }>("Chain A event")
-      }),
+      events: register => register.map<ChainAEvents>({ "chain-a:event": "Chain A event" }),
       api: () => ({ aMethod: () => "a" })
     });
 
     const pluginB = cp("chain-b-diag", {
       depends: [pluginA],
-      events: register => ({
-        "chain-b:event": register<{ bData: string }>("Chain B event")
-      }),
+      events: register => register.map<ChainBEvents>({ "chain-b:event": "Chain B event" }),
       api: () => ({ bMethod: () => "b" })
     });
 
@@ -532,17 +531,13 @@ describe("transitive dependency event isolation", () => {
 
   it("C depending only on B sees B's events and global events", () => {
     const pluginA = cp("chain-a-iso", {
-      events: register => ({
-        "chain-a:event": register<{ aData: number }>("Chain A event")
-      }),
+      events: register => register.map<ChainAEvents>({ "chain-a:event": "Chain A event" }),
       api: () => ({ aMethod: () => "a" })
     });
 
     const pluginB = cp("chain-b-iso", {
       depends: [pluginA],
-      events: register => ({
-        "chain-b:event": register<{ bData: string }>("Chain B event")
-      }),
+      events: register => register.map<ChainBEvents>({ "chain-b:event": "Chain B event" }),
       api: () => ({ bMethod: () => "b" })
     });
 
@@ -571,17 +566,13 @@ describe("transitive dependency event isolation", () => {
 
   it("C depending on both A and B CAN emit A's events", () => {
     const pluginA = cp("chain-a-both", {
-      events: register => ({
-        "chain-a:event": register<{ aData: number }>("Chain A event")
-      }),
+      events: register => register.map<ChainAEvents>({ "chain-a:event": "Chain A event" }),
       api: () => ({ aMethod: () => "a" })
     });
 
     const pluginB = cp("chain-b-both", {
       depends: [pluginA],
-      events: register => ({
-        "chain-b:event": register<{ bData: string }>("Chain B event")
-      }),
+      events: register => register.map<ChainBEvents>({ "chain-b:event": "Chain B event" }),
       api: () => ({ bMethod: () => "b" })
     });
 
@@ -601,17 +592,13 @@ describe("transitive dependency event isolation", () => {
 
   it("runtime: C depending on B still has access to all registered plugins", async () => {
     const pluginA = cp("chain-a-rt", {
-      events: register => ({
-        "chain-a:event": register<{ aData: number }>("Chain A event")
-      }),
+      events: register => register.map<ChainAEvents>({ "chain-a:event": "Chain A event" }),
       api: () => ({ aMethod: () => "a" })
     });
 
     const pluginB = cp("chain-b-rt", {
       depends: [pluginA],
-      events: register => ({
-        "chain-b:event": register<{ bData: string }>("Chain B event")
-      }),
+      events: register => register.map<ChainBEvents>({ "chain-b:event": "Chain B event" }),
       api: () => ({ bMethod: () => "b" })
     });
 
@@ -638,17 +625,16 @@ describe("transitive dependency event isolation", () => {
 
 describe("same event name from multiple plugins", () => {
   it("conflicting payload types collapse to never via UnionToIntersection", () => {
+    type AlphaEvents = { "shared:update": { version: number } };
+    type BetaEvents = { "shared:update": { version: string } };
+
     const pluginAlpha = cp("alpha", {
-      events: register => ({
-        "shared:update": register<{ version: number }>("Alpha update")
-      }),
+      events: register => register.map<AlphaEvents>({ "shared:update": "Alpha update" }),
       api: () => ({ noop: () => {} })
     });
 
     const pluginBeta = cp("beta", {
-      events: register => ({
-        "shared:update": register<{ version: string }>("Beta update")
-      }),
+      events: register => register.map<BetaEvents>({ "shared:update": "Beta update" }),
       api: () => ({ noop: () => {} })
     });
 
@@ -668,17 +654,15 @@ describe("same event name from multiple plugins", () => {
   });
 
   it("compatible payload types merge correctly", () => {
+    type NotifyEvents = { "common:notify": { message: string } };
+
     const pluginGamma = cp("gamma", {
-      events: register => ({
-        "common:notify": register<{ message: string }>("Gamma notification")
-      }),
+      events: register => register.map<NotifyEvents>({ "common:notify": "Gamma notification" }),
       api: () => ({ noop: () => {} })
     });
 
     const pluginDelta = cp("delta", {
-      events: register => ({
-        "common:notify": register<{ message: string }>("Delta notification")
-      }),
+      events: register => register.map<NotifyEvents>({ "common:notify": "Delta notification" }),
       api: () => ({ noop: () => {} })
     });
 
@@ -798,10 +782,10 @@ describe("as const not required on depends", () => {
   // This means `as const` is unnecessary — TypeScript infers specific plugin
   // types from the array without it.
 
+  type DepEvents = { "dep:fired": { value: number } };
+
   const depPlugin = cp("dep-target", {
-    events: register => ({
-      "dep:fired": register<{ value: number }>("Dep event")
-    }),
+    events: register => register.map<DepEvents>({ "dep:fired": "Dep event" }),
     api: () => ({
       getValue: () => 42,
       format: (n: number) => `#${n}`
@@ -896,5 +880,166 @@ describe("all plugins listed explicitly have full type visibility", () => {
 
     expect(childApi.childMethod()).toBe("from-child");
     expect(parentApi.parentMethod()).toBe("from-parent");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Gap 16: register.map<Events>() bulk event registration
+// ---------------------------------------------------------------------------
+
+describe("register.map<Events>() bulk event registration", () => {
+  type MapEvents = {
+    "map:created": { id: string };
+    "map:deleted": { id: string; reason: string };
+  };
+
+  it("infers correct PluginEventMap from register.map", () => {
+    const plugin = cp("map-basic", {
+      events: register =>
+        register.map<MapEvents>({
+          "map:created": "Item created",
+          "map:deleted": "Item deleted"
+        }),
+      api: ctx => ({
+        create: (id: string) => {
+          ctx.emit("map:created", { id });
+        },
+        remove: (id: string) => {
+          ctx.emit("map:deleted", { id, reason: "user" });
+        }
+      })
+    });
+
+    // Phantom events carry the correct type
+    expectTypeOf(plugin._phantom.events).toEqualTypeOf<MapEvents>();
+    expect(plugin.name).toBe("map-basic");
+  });
+
+  it("works without descriptions", () => {
+    const plugin = cp("map-no-desc", {
+      events: register => register.map<MapEvents>(),
+      api: ctx => ({
+        create: (id: string) => {
+          ctx.emit("map:created", { id });
+        }
+      })
+    });
+
+    expectTypeOf(plugin._phantom.events).toEqualTypeOf<MapEvents>();
+    expect(plugin.name).toBe("map-no-desc");
+  });
+
+  it("works with partial descriptions", () => {
+    const plugin = cp("map-partial-desc", {
+      events: register =>
+        register.map<MapEvents>({
+          "map:created": "Only this one has a description"
+        }),
+      api: () => ({})
+    });
+
+    expectTypeOf(plugin._phantom.events).toEqualTypeOf<MapEvents>();
+    expect(plugin.name).toBe("map-partial-desc");
+  });
+
+  it("rejects wrong payload types in emit", () => {
+    const plugin = cp("map-wrong-payload", {
+      events: register => register.map<MapEvents>(),
+      api: ctx => ({
+        test: () => {
+          // @ts-expect-error -- wrong payload: { name } is not { id: string }
+          ctx.emit("map:created", { name: "wrong" });
+          // @ts-expect-error -- missing field: reason is required
+          ctx.emit("map:deleted", { id: "1" });
+        }
+      })
+    });
+    expect(plugin.name).toBe("map-wrong-payload");
+  });
+
+  it("rejects unknown event names in emit", () => {
+    const plugin = cp("map-unknown-event", {
+      events: register => register.map<MapEvents>(),
+      api: ctx => ({
+        test: () => {
+          // @ts-expect-error -- "map:unknown" is not in MapEvents
+          ctx.emit("map:unknown", {});
+        }
+      })
+    });
+    expect(plugin.name).toBe("map-unknown-event");
+  });
+
+  it("preserves hook typing for dependencies", () => {
+    const source = cp("map-source", {
+      events: register => register.map<MapEvents>(),
+      api: ctx => ({
+        create: (id: string) => {
+          ctx.emit("map:created", { id });
+        }
+      })
+    });
+
+    const listener = cp("map-listener", {
+      depends: [source],
+      hooks: _ctx => ({
+        "map:created": payload => {
+          expectTypeOf(payload).toEqualTypeOf<{ id: string }>();
+        },
+        "map:deleted": payload => {
+          expectTypeOf(payload).toEqualTypeOf<{ id: string; reason: string }>();
+        }
+      })
+    });
+
+    expect(listener.name).toBe("map-listener");
+  });
+
+  it("merges correctly with dependency events via depends", async () => {
+    type SourceEvents = { "src:ping": { ts: number } };
+
+    const sourcePlugin = cp("map-dep-source", {
+      events: register => register.map<SourceEvents>(),
+      api: ctx => ({
+        ping: () => {
+          ctx.emit("src:ping", { ts: Date.now() });
+        }
+      })
+    });
+
+    const consumer = cp("map-dep-consumer", {
+      depends: [sourcePlugin],
+      events: register => register.map<MapEvents>(),
+      api: ctx => ({
+        test: () => {
+          // Own events via register.map
+          ctx.emit("map:created", { id: "1" });
+          // Dependency events
+          ctx.emit("src:ping", { ts: 0 });
+          // Global events
+          ctx.emit("global:action", { id: "from-consumer" });
+        }
+      })
+    });
+
+    expectTypeOf(consumer._phantom.events).toEqualTypeOf<MapEvents>();
+    expect(consumer.name).toBe("map-dep-consumer");
+  });
+
+  it("individual register<T>() still works alongside register.map", () => {
+    // Backward compatibility: the old pattern is unaffected
+    const plugin = cp("individual-register", {
+      events: register => ({
+        "old:event": register<{ value: number }>("Old style")
+      }),
+      api: ctx => ({
+        fire: () => {
+          ctx.emit("old:event", { value: 42 });
+        }
+      })
+    });
+
+    expectTypeOf(plugin._phantom.events).toEqualTypeOf<{ "old:event": { value: number } }>();
+    expect(plugin.name).toBe("individual-register");
   });
 });
