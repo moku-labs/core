@@ -28,7 +28,7 @@ type MinimalContext<Config, C> = {
 };
 ```
 
-Used by: `createState`. At this stage, the plugin's state does not exist yet (it is being created). Other plugins may not be fully created. Only configuration is available.
+Used by: `createState`. At this stage, the plugin's state does not exist yet (it is being created). Other plugins may not be fully created. Only configuration is available. Plugins that omit `createState` receive an empty `{}` as their state at runtime.
 
 ### PluginContext
 
@@ -135,7 +135,7 @@ onInit: (ctx) => {
 
 ## 6. ctx.state
 
-Plugin-local mutable state. Created by `createState()`, private to the owning plugin. Other plugins cannot access it -- it is not exposed on the app object or through `require`.
+Plugin-local mutable state. Created by `createState()`, private to the owning plugin. Other plugins cannot access it -- it is not exposed on the app object or through `require`. Plugins that omit `createState` get an empty `{}` as state at runtime.
 
 ```typescript
 const counterPlugin = createPlugin('counter', {

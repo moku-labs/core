@@ -240,13 +240,13 @@ export const routerPlugin = createPlugin('router', {
 ```typescript
 export const dashboardPlugin = createPlugin('dashboard', {
   depends: [authPlugin],
-  hooks: {
+  hooks: (ctx) => ({
     // Typed -- payload inferred from authPlugin's PluginEvents via depends
-    'auth:login': payload => {
+    'auth:login': (payload) => {
       console.log(`User ${payload.userId} logged in`);
     },
-  },
-  api: ctx => ({
+  }),
+  api: (ctx) => ({
     refresh: () => {
       // Can emit auth events because of depends
       ctx.emit('auth:logout', { userId: 'dashboard-triggered' });

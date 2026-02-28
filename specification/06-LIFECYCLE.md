@@ -50,6 +50,18 @@ await app.start();  // triggers onStart for each plugin, forward order
 
 This is where plugins perform runtime setup: opening connections, starting servers, loading data.
 
+**Rollback on failure:** If any plugin's `onStart` throws, the kernel rolls back by stopping all already-started plugins in reverse order (via the same best-effort stop logic used by `app.stop()`). After rollback, the app enters a terminal stopped state -- it cannot be retried. The original start error is re-thrown to the caller.
+
+```typescript
+// If plugin C's onStart throws after A and B started successfully:
+// 1. B.onStop() called (reverse order)
+// 2. A.onStop() called
+// 3. App enters terminal state (stopped = true)
+// 4. C's error is re-thrown from app.start()
+```
+
+Stop errors during rollback are reported via `onError` but do not replace the original start error.
+
 ---
 
 ## 4. The stop Phase
@@ -91,7 +103,7 @@ Lifecycle methods can throw (or reject). When they do:
 
 - The error propagates immediately to the caller.
 - If `onInit` throws, `createApp` rejects.
-- If `onStart` throws, `app.start()` rejects.
+- If `onStart` throws, `app.start()` rejects -- but already-started plugins are rolled back first (stopped in reverse order). The app enters the terminal stopped state.
 - If `onStop` throws, `app.stop()` rejects -- but remaining plugins still get `onStop` called (teardown is best-effort).
 
 **No catch-and-silence. No error swallowing. No retry logic.** The consumer decides how to handle errors. The kernel does not know what "error recovery" means in your domain.
@@ -105,13 +117,16 @@ Lifecycle methods can throw (or reject). When they do:
 - `start()` can only be called once. Calling it again throws: `"App already started."`
 - `stop()` requires `start()` first. Calling it before start throws: `"App not started."`
 - `stop()` can only be called once. After `stop()`, all app methods throw: `"App is stopped."` The app is in a terminal state.
+- If `start()` fails, the app enters the terminal stopped state after rollback (see §3). No retry is possible.
+- **Mounted plugin APIs are also guarded.** After `stop()`, accessing any property on `app.router`, `app.auth`, etc. throws the same stopped error. This is enforced via `Proxy` on each plugin's API object.
 
 ```typescript
 const app = await createApp({ ... });
 await app.start();
-await app.start();   // throws: "App already started."
+await app.start();          // throws: "App already started."
 await app.stop();
-app.emit('any', {}); // throws: "App is stopped."
+app.emit('any', {});        // throws: "App is stopped."
+app.router.navigate('/');   // throws: "App is stopped." (Proxy guard)
 ```
 
 ---

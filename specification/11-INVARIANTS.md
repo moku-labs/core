@@ -77,19 +77,34 @@ Plugin internal state (`ctx.state`) is mutable -- that's the point of state. But
 ### 1.8 Lifecycle Guards
 
 - `app.start()` callable once. Second call throws.
+- `app.start()` failure triggers rollback: already-started plugins are stopped in reverse order, then the app enters the terminal stopped state. No retry is possible.
 - `app.stop()` callable once. Second call throws.
 - After `app.stop()`, all methods throw. The app is in a terminal state.
+- **Mounted plugin APIs are also guarded.** After `stop()`, accessing any property on mounted plugin APIs (e.g., `app.router.navigate`) throws the stopped error. This is enforced via `Proxy` on each plugin's API object.
 
 ### 1.9 require() Contract
 
-`ctx.require(pluginInstance)` accepts only plugin instance references (not strings). It either returns the plugin's fully typed API object or throws:
+`ctx.require(pluginInstance)` accepts only plugin instance references (not strings). It either returns the plugin's fully typed API object or throws.
 
+There are three require contexts, each with a distinct error message:
+
+**Plugin-level** (inside plugin lifecycle/api/hooks via `ctx.require`):
 ```
 Error: [moku-site] Plugin "router" requires "logger", but "logger" is not registered.
   Add "logger" to your plugin list.
 ```
 
-The error message includes the framework name, the requesting plugin, and the missing plugin.
+**App-level** (consumer calling `app.require`):
+```
+Error: [moku-site] app.require("logger") failed: "logger" is not registered.
+  Check your plugin list.
+```
+
+**Callback-level** (inside consumer callbacks like `onReady`, `onStart`, `onStop`):
+```
+Error: [moku-site] Plugin "logger" is not registered.
+  Add "logger" to your plugin list.
+```
 
 `ctx.has('name')` stays string-based. Returns `boolean`. Never throws. Checks all registered plugins (not just those with APIs).
 
@@ -278,6 +293,35 @@ Error: [moku-site] App not started.
 Error: [moku-site] App is stopped. No further operations allowed.
   Create a new app instance instead.
 ```
+
+### Plugin Spec Validation Errors
+
+`createPlugin` validates the spec object at registration time. These use `TypeError`:
+
+```
+TypeError: [moku-site] Plugin name must be a non-empty string.
+  Pass a non-empty string as the first argument.
+
+TypeError: [moku-site] Plugin "router" has invalid spec: expected an object.
+  Provide a plugin specification object as the second argument.
+
+TypeError: [moku-site] Plugin "router" has invalid onInit: expected a function.
+  Provide a function for onInit or remove it from the spec.
+
+TypeError: [moku-site] Plugin "router" has invalid events: expected a function.
+  Provide a function like: events: register => ({ "event:name": register<PayloadType>() })
+
+TypeError: [moku-site] Plugin "router" has invalid hooks: expected a function.
+  Provide a function like: hooks: ctx => ({ "event:name": payload => { ... } })
+
+TypeError: [moku-site] Plugin "router" has invalid api: expected a function.
+  Provide a function like: api: ctx => ({ methodName: () => { ... } })
+
+TypeError: [moku-site] Plugin "router" has invalid createState: expected a function.
+  Provide a function like: createState: ctx => ({ key: initialValue })
+```
+
+These catch common mistakes like passing a plain object where a function is expected (e.g., `hooks: { ... }` instead of `hooks: ctx => ({ ... })`).
 
 ---
 

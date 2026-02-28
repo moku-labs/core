@@ -17,7 +17,8 @@ The plugin spec is a plain object that describes a plugin's behavior. All fields
   /** Instance-based dependencies. Validated at startup (not a topological sort). */
   depends?: readonly PluginInstance[],
 
-  /** Create internal mutable state. Minimal context: global config + plugin config. */
+  /** Create internal mutable state. Minimal context: global config + plugin config.
+      Plugins without createState receive an empty {} as state at runtime. */
   createState?: (ctx: { global: Readonly<Config>; config: Readonly<C> }) => S,
 
   /** Build the public API mounted on app.<pluginName>. Full context. */
@@ -229,7 +230,7 @@ Two factory methods run during `createApp` before lifecycle:
 
 | Method | When | Context |
 |---|---|---|
-| `createState` | First, before APIs | Minimal: `{ global, config }` |
+| `createState` | First, before APIs | Minimal: `{ global, config }`. Default: `{}` if omitted. |
 | `api` | After state created | Full PluginContext |
 
 See [06-LIFECYCLE](./06-LIFECYCLE.md) for detailed phase documentation.
