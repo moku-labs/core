@@ -55,12 +55,12 @@ const userPlugin = createPlugin('user', {
     getTheme: () => ctx.global.state.theme,
   }),
 
-  hooks: {
+  hooks: (ctx) => ({
     // React to state changes from any plugin
     'state:changed': (payload) => {
       // payload typed from GlobalState
     },
-  },
+  }),
 });
 ```
 

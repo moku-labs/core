@@ -226,12 +226,13 @@ Three lifecycle methods, each running at a specific phase:
 
 All lifecycle methods support async: `void | Promise<void>`. Execution is sequential -- Plugin A's method completes (including await) before Plugin B's method begins.
 
-Two factory methods run during `createApp` before lifecycle:
+Three factory methods run during `createApp` before lifecycle:
 
 | Method | When | Context |
 |---|---|---|
-| `createState` | First, before APIs | Minimal: `{ global, config }`. Default: `{}` if omitted. |
-| `api` | After state created | Full PluginContext |
+| `createState` | First, before hooks and APIs | Minimal: `{ global, config }`. Default: `{}` if omitted. |
+| `hooks` | After state, before APIs | Full PluginContext |
+| `api` | After hooks registered | Full PluginContext |
 
 See [06-LIFECYCLE](./06-LIFECYCLE.md) for detailed phase documentation.
 

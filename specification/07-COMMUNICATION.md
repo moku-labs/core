@@ -94,7 +94,7 @@ ctx.emit('unknown:event', { anything: true });                         // ERROR 
 
 **For frameworks that want untyped events:** Set `Events = Record<string, unknown>` in `createCoreConfig`. This makes all event names valid with `unknown` payload.
 
-**Hook error resilience.** `emit` is fire-and-forget (returns `void`). Hooks run sequentially via an internal async `dispatch`. If a hook throws, the error is reported via a combined error handler that calls both the framework `onError` (from `createCore`) and the consumer `onError` (from `createApp`), if either is provided. One failing hook does not prevent other hooks from running -- the same best-effort resilience pattern used by `onStop`.
+**Hook error resilience.** `emit` is fire-and-forget (returns `void`). Hooks run sequentially via an internal async `dispatch`. If a hook throws, the error is reported via a combined error handler that calls both the framework `onError` (from `createCore`) and the consumer `onError` (from `createApp`), if either is provided. If neither handler is provided, hook errors are silently caught and discarded. One failing hook does not prevent other hooks from running.
 
 ---
 
@@ -176,7 +176,7 @@ const dashboardPlugin = createPlugin('dashboard', {
 });
 ```
 
-**Transitive merging:** If Plugin C depends on Plugin B which depends on Plugin A, Plugin C sees `Events & PluginAEvents & PluginBEvents`. The entire depends chain contributes events.
+**No transitive merging.** Dependencies are NOT transitive in the type system. If Plugin C depends on Plugin B which depends on Plugin A, Plugin C sees only `Events & PluginBEvents` — it does NOT see Plugin A's events. To see A's events, C must directly declare `depends: [pluginA, pluginB]`. This is because each plugin's `_phantom.events` carries only its own declared events, not its transitive dependencies' events. `DependencyEvents` extracts events from direct dependencies only.
 
 ---
 

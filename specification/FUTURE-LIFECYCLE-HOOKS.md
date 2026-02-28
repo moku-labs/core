@@ -41,14 +41,14 @@ const monitorPlugin = createPlugin('monitor', {
 
 ```typescript
 const monitorPlugin = createPlugin('monitor', {
-  hooks: {
+  hooks: (ctx) => ({
     'lifecycle:preStart': () => {
       console.log('About to start all plugins...');
     },
     'lifecycle:afterStart': () => {
       console.log('All plugins started');
     },
-  },
+  }),
 });
 ```
 

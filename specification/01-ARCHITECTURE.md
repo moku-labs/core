@@ -10,13 +10,14 @@ Moku is a universal, type-safe, functional plugin framework for TypeScript.
 
 Every application -- site, CLI, game, build tool, bot -- is a kernel plus plugins. Moku provides the kernel. You provide the plugins.
 
-The kernel does 5 things:
+The kernel does 6 things:
 
-1. Collects and validates plugins (no duplicates, dependency order checked)
-2. Resolves config (shallow merge, no magic)
-3. Runs 3 lifecycle phases in deterministic order (init and start forward, stop reverse)
-4. Dispatches events (typed for known events, untyped fallback for ad-hoc)
-5. Freezes everything when done
+1. Collects plugins into ordered list
+2. Validates names (no duplicates) and dependencies
+3. Resolves config (shallow merge, no deep merge)
+4. Runs 3 lifecycle phases in deterministic order (forward init/start, reverse stop)
+5. Dispatches events: `emit` (strictly typed, no escape hatch)
+6. Freezes everything when done (`Object.freeze` on app, configs)
 
 That's it. Everything else is a plugin.
 
@@ -49,8 +50,8 @@ Moku is an application *skeleton*. It answers "how do I compose my app from inde
 |  import { createApp, createPlugin } from 'my-framework';          |
 |  const app = await createApp({                                    |
 |    plugins: [myPlugin],                                           |
-|    siteName: 'My Blog',                                           |
-|    myPlugin: { postsPerPage: 5 },                                 |
+|    config: { siteName: 'My Blog' },                               |
+|    pluginConfigs: { myPlugin: { postsPerPage: 5 } },              |
 |  });                                                              |
 |                                                                   |
 |  Consumers use what the framework gives them.                     |
@@ -240,9 +241,11 @@ In every case, the structural skeleton is identical:
 ```
 const app = await createApp({
   plugins: [Plugin1, Plugin2, ...],
-  ...configOverrides,
-  plugin1: { ... },
-  plugin2: { ... },
+  config: { ...configOverrides },
+  pluginConfigs: {
+    plugin1: { ... },
+    plugin2: { ... },
+  },
 });
 
 app.plugin1.doSomething()      // typed
@@ -315,9 +318,13 @@ const myPlugin = createPlugin('analytics', {
 
 const app = await createApp({
   plugins: [myPlugin],
-  siteName: 'My Blog',
-  mode: 'production',
-  analytics: { trackingId: 'G-XXXXX' },
+  config: {
+    siteName: 'My Blog',
+    mode: 'production',
+  },
+  pluginConfigs: {
+    analytics: { trackingId: 'G-XXXXX' },
+  },
 });
 
 await app.start();

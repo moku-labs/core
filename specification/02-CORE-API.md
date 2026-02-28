@@ -149,9 +149,9 @@ function createApp(
 | `config` | Global config overrides (typed from `Config`) | `config: { siteName: 'My Blog' }` |
 | `pluginConfigs` | Per-plugin config overrides (keyed by plugin name) | `pluginConfigs: { router: { basePath: '/' } }` |
 | `onReady` | Called after all plugin `onInit` and framework `onReady` | `onReady: (ctx) => {}` |
-| `onError` | Error handler for hook dispatch and stop errors | `onError: (error) => {}` |
+| `onError` | Error handler for hook dispatch errors | `onError: (error) => {}` |
 | `onStart` | Called after all plugin `onStart` (inside `app.start()`) | `onStart: (ctx) => {}` |
-| `onStop` | Called after all plugin `onStop` (inside `app.stop()`), even if a plugin threw | `onStop: (ctx) => {}` |
+| `onStop` | Called after all plugin `onStop` (inside `app.stop()`) | `onStop: (ctx) => {}` |
 
 Consumer callbacks are additive to framework-level callbacks set in `createCore`.
 
@@ -257,8 +257,8 @@ Plugin APIs are mounted via `BuildPluginApis<P>`, a mapped type that selectively
 
 - The entire app object is frozen (`Object.freeze`) after creation.
 - Plugin APIs are mounted directly on the app: `app.router`, `app.blog`, etc.
-- All methods throw after `stop()` is called (terminal state enforcement).
-- `start()` and `stop()` are callable once. A second call throws.
+- `start()` throws on second call ("App already started").
+- `stop()` throws if `start()` has not been called ("App not started").
 
 ---
 

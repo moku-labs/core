@@ -40,7 +40,7 @@ const infraModule = createModule('infra', {
 // Consumer uses the module like any other plugin entry
 const app = await createApp({
   plugins: [infraModule, blogPlugin],
-  siteName: 'My Blog',
+  config: { siteName: 'My Blog' },
 });
 // After flattening: [cachePlugin, metricsPlugin, blogPlugin]
 ```

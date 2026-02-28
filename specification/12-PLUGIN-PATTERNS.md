@@ -25,20 +25,20 @@ import { createRouterApi } from './api';
 import { handleNotFound } from './handlers';
 
 export const routerPlugin = createPlugin('router', {
-  depends: ['renderer'],
+  depends: [rendererPlugin],
   config: { basePath: '/', default: 'home' },
   createState: createRouterState,
   api: createRouterApi,
 
   onInit: (ctx) => {
     if (ctx.has('logger')) {
-      ctx.require('logger').info('Router ready');
+      ctx.require(loggerPlugin).info('Router ready');
     }
   },
 
-  hooks: {
+  hooks: (ctx) => ({
     'page:error': handleNotFound,
-  },
+  }),
 
   onStart: async (ctx) => {
     void ctx.emit('router:navigate', {
@@ -194,18 +194,19 @@ const blogPlugin = createPlugin('blog', {
 
 const app = await createApp({
   plugins: [blogPlugin],
-  // Global config overrides (typed from Config)
-  siteName: 'Code & Coffee',
-  mode: 'production',
-  // Plugin configs (typed from plugin names)
-  blog: { postsPerPage: 5 },
+  config: {
+    siteName: 'Code & Coffee',
+    mode: 'production',
+  },
+  pluginConfigs: {
+    blog: { postsPerPage: 5 },
+  },
 });
 
 await app.start();
 
 app.router.navigate('/about');   // typed, framework default plugin
 app.blog.listPosts();            // typed, consumer extra plugin
-app.config.siteName;             // 'Code & Coffee' -- typed, frozen
 
 await app.stop();
 ```
@@ -218,9 +219,11 @@ import { createPlugin } from 'my-framework';
 import { createContactFormApi } from './api';
 
 export const contactFormPlugin = createPlugin('contactForm', {
-  depends: ['renderer'],
+  depends: [rendererPlugin],
   api: createContactFormApi,
-  hooks: { 'page:render': (payload) => { /* framework typed */ } },
+  hooks: (ctx) => ({
+    'page:render': (payload) => { /* framework typed */ },
+  }),
 });
 ```
 
@@ -273,8 +276,8 @@ THREE-STEP PATTERN:
     const myPlugin = createPlugin('myPlugin', { ... });
     const app = await createApp({
       plugins: [myPlugin],
-      siteName: 'My App',
-      myPlugin: { someConfig: true },
+      config: { siteName: 'My App' },
+      pluginConfigs: { myPlugin: { someConfig: true } },
     });
     await app.start();
 
@@ -289,9 +292,9 @@ CREATING PLUGINS:
     onInit: (ctx) => { /* runs during createApp, all plugins exist */ },
     onStart: (ctx) => { /* runs during app.start() */ },
     onStop: (ctx) => { /* runs during app.stop(), reverse order */ },
-    hooks: {
+    hooks: (ctx) => ({
       'eventName': (payload) => { /* react to typed events */ },
-    },
+    }),
   });
 
   Per-plugin events via register callback:
@@ -305,7 +308,7 @@ CONTEXT RULES:
   onStop: TeardownContext. Only { global }. Minimal for cleanup.
 
 LIFECYCLE (3 phases):
-  createApp: createState -> api -> onInit (forward order) -> app returned
+  createApp: createState -> hooks -> api -> onInit (forward order) -> app returned
   app.start(): onStart (forward order)
   app.stop(): onStop (REVERSE order)
 
@@ -319,15 +322,15 @@ EVENT SYSTEM:
   2. Per-plugin events from events register callback -- scoped to plugin + dependents.
 
   ctx.emit('eventName', payload) -- fire event (strictly typed, no escape hatch).
-  hooks: { 'eventName': (payload) => { ... } } -- listen to events.
-  Events are notifications. Use ctx.require('name') for request/response.
+  hooks: (ctx) => ({ 'eventName': (payload) => { ... } }) -- listen to events.
+  Events are notifications. Use ctx.require(pluginInstance) for request/response.
 
 CONFIG RULES:
   - config present = config key optional in createApp
   - config absent + non-void config = config key required in createApp
   - Shallow merge: { ...config, ...consumerConfig }
   - Configs are frozen after creation
-  - depends: ['pluginName'] declares dependencies. Validated at startup. Not a sort.
+  - depends: [pluginInstance] declares dependencies (instance-based). Validated at startup. Not a sort.
 
 FILE STRUCTURE:
   plugins/
@@ -344,14 +347,16 @@ RULES:
   - Never create new abstractions (services, providers, managers). Use createPlugin.
   - Never put more than ~50 lines of logic in a plugin index.ts.
   - Plugin index.ts is a CONNECTION POINT. Domain code lives in separate files.
-  - Use ctx.require('name') for dependencies. Use ctx.has('name') for optional deps.
+  - Use ctx.require(pluginInstance) for dependencies. Use ctx.has('name') for optional deps.
   - ALWAYS await createApp -- it returns a Promise.
 
 APP-LEVEL TYPING:
   app.pluginName.method() is fully typed via the plugin's api return type.
-  app.config is the frozen global config object, fully typed.
+  app.emit('eventName', payload) -- strictly typed event dispatch.
+  app.require(pluginInstance) -- get plugin API by instance reference.
+  app.has('name') -- check if a plugin is registered (boolean).
   app.start() starts all plugins (forward order).
-  app.stop() stops all plugins (reverse order). Terminal state after stop.
+  app.stop() stops all plugins (reverse order).
 ```
 
 ---

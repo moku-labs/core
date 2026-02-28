@@ -1,6 +1,6 @@
 # Moku Core -- v3 Specification
 
-**Status:** Pre-implementation reference for v3 architecture
+**Status:** v3 architecture — implemented
 **Framework:** moku_core -- Type-safe micro-kernel plugin framework for TypeScript
 
 ---
@@ -14,7 +14,7 @@ createCoreConfig<Config, Events>(id, options)     -- Framework config.ts
      |
 createCore(coreConfig, { plugins })               -- Framework index.ts
      |
-createApp({ plugins?, ...config, ...pluginConfigs })  -- Consumer main.ts
+createApp({ plugins?, config?, pluginConfigs?, ... })  -- Consumer main.ts
      |
 Promise<App>  -- Typed plugin APIs: app.router.navigate()
 ```

@@ -103,11 +103,11 @@ type PluginSpec = {
 };
 ```
 
-When `events` is present, the kernel:
-1. Calls the function with a `register` implementation.
-2. Receives the event descriptor map.
-3. Extracts payload types from the descriptors for compile-time type checking.
-4. Optionally stores descriptions for runtime introspection.
+The `events` callback is **compile-time only**. The kernel never calls `events(register)` at runtime — it is stored in the spec but never invoked. Its sole purpose is TypeScript type inference:
+
+1. TypeScript infers the return type of the callback from the `register<T>()` calls.
+2. The inferred event map types flow into `ctx.emit`, `hooks`, and dependency event merging.
+3. At runtime, `events` is validated to be a function (if present) by `createPlugin`, but never executed by the kernel.
 
 When `events` is absent, the plugin has no per-plugin events. It can still emit and listen to global events (from `createCoreConfig`) and dependency events (from `depends`).
 

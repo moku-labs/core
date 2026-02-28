@@ -289,13 +289,13 @@ export const loggerPlugin = createPlugin('logger', {
       if (ctx.global.debug) console.log(`[${ctx.global.appName}] ${msg}`);
     },
   }),
-  hooks: {
+  hooks: (ctx) => ({
     // 'data:fetch' is typed from Events
     'data:fetch': (payload) => {
       // payload typed as { url: string; result: unknown }
       console.log(`Fetched: ${payload.url}`);
     },
-  },
+  }),
 });
 ```
 

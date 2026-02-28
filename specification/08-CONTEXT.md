@@ -76,6 +76,7 @@ Used by: `onStop`. During teardown, plugins are being stopped in reverse order. 
 | Method | Context Tier | Why |
 |--------|-------------|------|
 | `createState` | MinimalContext | State not yet created, only config available |
+| `hooks` | PluginContext | Full context needed to build hook handlers |
 | `api` | PluginContext | Full context needed to build API methods |
 | `onInit` | PluginContext | Plugin fully initialized, can interact with deps |
 | `onStart` | PluginContext | App is starting, full context |
@@ -85,6 +86,8 @@ Used by: `onStop`. During teardown, plugins are being stopped in reverse order. 
 
 ```
 createState:    { global, config }                            (minimal)
+hooks:          { global, config, state, emit,                (full)
+                  require, has }
 api:            { global, config, state, emit,                (full)
                   require, has }
 onInit:         { global, config, state, emit,                (full)

@@ -24,7 +24,7 @@ Every significant "why" in the v3 architecture:
 | 11 | Configs frozen, state mutable | Everything mutable or everything frozen | Configs are the contract -- they must not change. State is the deliberate escape hatch for runtime mutation. |
 | 12 | No sub-plugins — all plugins listed explicitly | Sub-plugins flattened depth-first | Explicit listing is simpler, gives full type visibility. Frameworks can re-export plugin arrays for convenience. |
 | 13 | start callable once, stop requires start | Idempotent no-ops on repeat calls | Throws on second call catches misuse. |
-| 14 | Stop is best-effort | Stop aborts on first error | One plugin's cleanup failure should not orphan other plugins' resources. All plugins get their onStop called. |
+| 14 | Stop propagates errors | Stop is best-effort (continue on error) | Simple. If a plugin's onStop throws, the error propagates immediately. Consumer handles error recovery. |
 
 ---
 
@@ -282,7 +282,7 @@ async function createApp(consumerOptions?: {
       try {
         await handler(payload);
       } catch (err) {
-        // One failing hook does not stop other hooks (same pattern as executeStop).
+        // One failing hook does not stop other hooks from running.
         combinedOnError(err as Error);
       }
     }
@@ -424,36 +424,24 @@ async function createApp(consumerOptions?: {
 async start() {
   // RATIONALE: Forward order. Sequential. Each plugin awaited.
   // Throws if already started (catches misuse).
-  // On failure: rolls back already-started plugins.
+  // No rollback -- errors propagate immediately.
   if (started) {
     throw new Error(`[${id}] App already started.\n  start() can only be called once.`);
   }
 
-  const startedPlugins = [];
-  try {
-    for (const plugin of allPlugins) {
-      if (plugin.spec.onStart) {
-        const ctx = buildPluginContext(plugin);
-        await plugin.spec.onStart(ctx);
-      }
-      startedPlugins.push(plugin);
+  for (const plugin of allPlugins) {
+    if (plugin.spec.onStart) {
+      const ctx = buildPluginContext(plugin);
+      await plugin.spec.onStart(ctx);
     }
-
-    // Consumer onStart fires after all plugin onStart
-    if (consumerOnStart) {
-      await consumerOnStart(buildCallbackContext());
-    }
-
-    started = true;
-  } catch (startError) {
-    // Rollback: stop already-started plugins in reverse.
-    // Stop errors during rollback are reported via onError but intentionally
-    // swallowed -- the start error is what matters to the caller.
-    try {
-      await executeStop(startedPlugins, globalConfig, combinedOnError);
-    } catch { /* reported via onError */ }
-    throw startError;
   }
+
+  // Consumer onStart fires after all plugin onStart
+  if (consumerOnStart) {
+    await consumerOnStart(buildCallbackContext());
+  }
+
+  started = true;
 }
 ```
 
@@ -467,37 +455,23 @@ async stop() {
   // If B depends on A, B stops before A -- B can still use A's resources
   // during its own cleanup.
   //
-  // Best-effort: if a plugin's onStop throws, capture the error but
-  // continue stopping remaining plugins. Consumer onStop fires even if
-  // a plugin threw (via try/finally). Re-throw the first error after all done.
+  // Errors propagate immediately. No best-effort -- if a plugin's onStop
+  // throws, remaining plugins do not get their onStop called.
 
   if (!started) {
     throw new Error(`[${id}] App not started.\n  Call start() before stop().`);
   }
 
-  let firstError: Error | null = null;
-
-  try {
-    for (const plugin of [...allPlugins].reverse()) {
-      if (plugin.spec.onStop) {
-        try {
-          await plugin.spec.onStop({ global: globalConfig });
-        } catch (err) {
-          if (!firstError) firstError = err as Error;
-          // Continue stopping remaining plugins (best-effort teardown)
-          combinedOnError(err as Error);
-        }
-      }
-    }
-  } finally {
-    // Consumer onStop fires even if a plugin's onStop threw
-    // Consumer receives full AppCallbackContext
-    if (consumerOnStop) {
-      await consumerOnStop(buildCallbackContext());
+  for (const plugin of [...allPlugins].reverse()) {
+    if (plugin.spec.onStop) {
+      await plugin.spec.onStop({ global: globalConfig });
     }
   }
 
-  if (firstError) throw firstError;
+  // Consumer onStop fires after all plugin onStop
+  if (consumerOnStop) {
+    await consumerOnStop(buildCallbackContext());
+  }
 }
 ```
 
@@ -554,11 +528,10 @@ Consumer main.ts:
   await app.start()
     -> run onStart (PluginContext, forward, sequential)
     -> call consumer onStart
-    -> on failure: rollback (stop started plugins in reverse)
 
   await app.stop()
-    -> run onStop (TeardownContext, REVERSE, sequential, best-effort)
-    -> call consumer onStop (even if a plugin threw)
+    -> run onStop (TeardownContext, REVERSE, sequential)
+    -> call consumer onStop
 ```
 
 ---

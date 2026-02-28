@@ -24,16 +24,17 @@ Forward = plugin array order (first registered runs first). Reverse = last regis
 Runs during `await createApp(...)`. This single phase encompasses all initialization work. Internal sub-steps (not visible to plugin authors as separate phases):
 
 1. **Merge plugin lists:** `[...frameworkDefaultPlugins, ...consumerExtraPlugins]`
-2. **Validate reserved names:** No plugin name can conflict with app methods (`start`, `stop`, `emit`, `require`, `has`, `config`).
+2. **Validate reserved names:** No plugin name can conflict with app methods or dangerous object keys (`start`, `stop`, `emit`, `require`, `has`, `config`, `__proto__`, `constructor`, `prototype`).
 3. **Validate names:** No duplicate plugin names in the final list. Throw if any collision.
 4. **Validate dependencies:** For each plugin with `depends`, verify all dependencies exist and appear earlier in the array. Throw with clear error if either fails.
-5. **Resolve config:** For each plugin, shallow merge `{ ...plugin.config, ...frameworkOverride, ...consumerOverride }`. Freeze the result.
-6. **Create state:** For each plugin (forward order), call `createState({ global, config })`. Store mutable state.
-7. **Register hooks:** For each plugin (forward order), call `hooks(PluginContext)`, register handlers in the event bus.
-8. **Build API:** For each plugin (forward order), call `api(PluginContext)`. Register the API in the plugin registry.
-9. **Run onInit:** For each plugin (forward order), call `onInit(PluginContext)`. Sequential, awaited. This is where plugins validate dependencies with `require()`/`has()`.
-10. **Call framework onReady:** If `onReady` was passed to `createCore`, call it with `{ config: globalConfig }`. Awaited.
-11. **Call consumer onReady:** If `onReady` was passed to `createApp`, call it with full `AppCallbackContext` (config, emit, require, has, plugin APIs). Awaited.
+5. **Resolve global config:** Shallow merge `{ ...configDefaults, ...consumerOverrides }`. Freeze the result.
+6. **Resolve per-plugin config:** For each plugin, 3-level shallow merge `{ ...plugin.config, ...frameworkOverride, ...consumerOverride }`. Freeze each result.
+7. **Create state:** For each plugin (forward order), call `createState({ global, config })`. Store mutable state. Default `{}` if no `createState`.
+8. **Register hooks:** For each plugin (forward order), call `hooks(PluginContext)`, register handlers in the event bus.
+9. **Build API:** For each plugin (forward order), call `api(PluginContext)`. Register the API in the plugin registry.
+10. **Run onInit:** For each plugin (forward order), call `onInit(PluginContext)`. Sequential, awaited. This is where plugins validate dependencies with `require()`/`has()`.
+11. **Call framework onReady:** If `onReady` was passed to `createCore`, call it with `{ config: globalConfig }`. Awaited.
+12. **Call consumer onReady:** If `onReady` was passed to `createApp`, call it with full `AppCallbackContext` (config, emit, require, has, plugin APIs). Awaited.
 
 These sub-steps are presented as ONE phase with internal mechanics. Plugin authors write `onInit` -- the rest is kernel machinery.
 
@@ -52,17 +53,9 @@ await app.start();  // triggers onStart for each plugin, forward order
 
 This is where plugins perform runtime setup: opening connections, starting servers, loading data.
 
-**Rollback on failure:** If any plugin's `onStart` throws, the kernel rolls back by stopping all already-started plugins in reverse order (via the same best-effort stop logic used by `app.stop()`). After rollback, the app enters a terminal stopped state -- it cannot be retried. The original start error is re-thrown to the caller.
+After all plugin `onStart` methods complete, the consumer `onStart` callback (if provided) is called with `AppCallbackContext`.
 
-```typescript
-// If plugin C's onStart throws after A and B started successfully:
-// 1. B.onStop() called (reverse order)
-// 2. A.onStop() called
-// 3. App enters terminal state (stopped = true)
-// 4. C's error is re-thrown from app.start()
-```
-
-Stop errors during rollback are reported via `onError` but do not replace the original start error.
+**Error behavior:** If any plugin's `onStart` throws, the error propagates immediately. Remaining plugins do not get their `onStart` called. There is no automatic rollback -- the consumer is responsible for error recovery.
 
 ---
 
@@ -105,12 +98,10 @@ Lifecycle methods can throw (or reject). When they do:
 
 - The error propagates immediately to the caller.
 - If `onInit` throws, `createApp` rejects.
-- If `onStart` throws, `app.start()` rejects -- but already-started plugins are rolled back first (stopped in reverse order). The app enters the terminal stopped state.
-- If `onStop` throws, `app.stop()` rejects -- but remaining plugins still get `onStop` called (teardown is best-effort).
+- If `onStart` throws, `app.start()` rejects. No rollback -- remaining plugins are not started.
+- If `onStop` throws, `app.stop()` rejects. The error propagates immediately.
 
 **No catch-and-silence. No error swallowing. No retry logic.** The consumer decides how to handle errors. The kernel does not know what "error recovery" means in your domain.
-
-**Teardown best-effort:** During stop, if a plugin's `onStop` throws, the error is captured but the kernel continues calling `onStop` on remaining plugins. After all plugins have had their chance to stop, the first error is re-thrown. This prevents one plugin's failure from orphaning other plugins' resources.
 
 ---
 
@@ -118,7 +109,6 @@ Lifecycle methods can throw (or reject). When they do:
 
 - `start()` can only be called once. Calling it again throws: `"App already started."`
 - `stop()` requires `start()` first. Calling it before start throws: `"App not started."`
-- If `start()` fails, already-started plugins are rolled back (stopped in reverse order).
 
 ```typescript
 const app = await createApp({ ... });

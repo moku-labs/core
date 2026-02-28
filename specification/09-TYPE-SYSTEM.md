@@ -136,7 +136,7 @@ type App<
   /** Start the app. Forward order. Throws on second call. */
   readonly start: () => Promise<void>;
 
-  /** Stop the app. Reverse order. Throws on second call. */
+  /** Stop the app. Reverse order. Throws if start() not called. */
   readonly stop: () => Promise<void>;
 
   /**

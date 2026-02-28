@@ -77,7 +77,6 @@ Plugin internal state (`ctx.state`) is mutable -- that's the point of state. But
 ### 1.8 Lifecycle Guards
 
 - `app.start()` callable once. Second call throws.
-- `app.start()` failure triggers rollback: already-started plugins are stopped in reverse order.
 - `app.stop()` requires `start()` first.
 
 ### 1.9 require() Contract
@@ -117,6 +116,7 @@ Context is restricted based on what is safe to access at each point:
 | Method | Context Tier | Available |
 |--------|-------------|-----------|
 | `createState` | MinimalContext | `global`, `config` |
+| `hooks` | PluginContext | `global`, `config`, `state`, `emit`, `require`, `has` |
 | `api` | PluginContext | `global`, `config`, `state`, `emit`, `require`, `has` |
 | `onInit` | PluginContext | `global`, `config`, `state`, `emit`, `require`, `has` |
 | `onStart` | PluginContext | `global`, `config`, `state`, `emit`, `require`, `has` |
@@ -287,9 +287,6 @@ Error: [moku-site] App already started.
 
 Error: [moku-site] App not started.
   Call start() before stop().
-
-Error: [moku-site] App is stopped. No further operations allowed.
-  Create a new app instance instead.
 ```
 
 ### Plugin Spec Validation Errors
