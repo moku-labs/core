@@ -229,11 +229,10 @@ describe("precise require() return types", () => {
       api: ctx => {
         const api = ctx.require(preciseApi);
 
-        expectTypeOf(api.add).parameter(0).toBeString();
+        expectTypeOf(api.add).toEqualTypeOf<(item: string) => void>();
         expectTypeOf(api.getAll).returns.toEqualTypeOf<string[]>();
         expectTypeOf(api.count).returns.toBeNumber();
-        expectTypeOf(api.find).parameter(0).toEqualTypeOf<(s: string) => boolean>();
-        expectTypeOf(api.find).returns.toEqualTypeOf<string[]>();
+        expectTypeOf(api.find).toEqualTypeOf<(predicate: (s: string) => boolean) => string[]>();
 
         return { check: () => true };
       }
@@ -245,18 +244,17 @@ describe("precise require() return types", () => {
     const app = await createApp();
 
     const api = app.require(preciseApi);
-    expectTypeOf(api.add).parameter(0).toBeString();
+    expectTypeOf(api.add).toEqualTypeOf<(item: string) => void>();
     expectTypeOf(api.getAll).returns.toEqualTypeOf<string[]>();
     expectTypeOf(api.count).returns.toBeNumber();
-    expectTypeOf(api.find).parameter(0).toEqualTypeOf<(s: string) => boolean>();
-    expectTypeOf(api.find).returns.toEqualTypeOf<string[]>();
+    expectTypeOf(api.find).toEqualTypeOf<(predicate: (s: string) => boolean) => string[]>();
   });
 
   it("app.pluginName methods have exact types", async () => {
     const { createApp } = cc.createCore(cc, { plugins: [preciseApi] });
     const app = await createApp();
 
-    expectTypeOf(app["precise-api"].add).parameter(0).toBeString();
+    expectTypeOf(app["precise-api"].add).toEqualTypeOf<(item: string) => void>();
     expectTypeOf(app["precise-api"].getAll).returns.toEqualTypeOf<string[]>();
     expectTypeOf(app["precise-api"].count).returns.toBeNumber();
   });
@@ -282,7 +280,7 @@ describe("consumer extra plugin typing", () => {
     // Extra plugin API is fully typed
     expectTypeOf(app.blog.list).toBeFunction();
     expectTypeOf(app.blog.list).returns.toEqualTypeOf<string[]>();
-    expectTypeOf(app.blog.getById).parameter(0).toBeString();
+    expectTypeOf(app.blog.getById).toEqualTypeOf<(id: string) => { id: string; title: string }>();
     expectTypeOf(app.blog.getById).returns.toEqualTypeOf<{ id: string; title: string }>();
 
     // Framework defaults are still typed
@@ -726,7 +724,7 @@ describe("callback context has typed plugin APIs", () => {
       onReady: ctx => {
         // Plugin APIs should be on the context
         expectTypeOf(ctx.router.navigate).toBeFunction();
-        expectTypeOf(ctx.router.navigate).parameter(0).toBeString();
+        expectTypeOf(ctx.router.navigate).toEqualTypeOf<(path: string) => string>();
         expectTypeOf(ctx.auth.isLoggedIn).returns.toBeBoolean();
 
         // Config should be typed
@@ -748,7 +746,7 @@ describe("callback context has typed plugin APIs", () => {
     const app = await createApp({
       onStart: ctx => {
         expectTypeOf(ctx.router.current).returns.toBeString();
-        expectTypeOf(ctx.auth.login).parameter(0).toBeString();
+        expectTypeOf(ctx.auth.login).toEqualTypeOf<(user: string) => string>();
       }
     });
 
@@ -816,7 +814,7 @@ describe("as const not required on depends", () => {
       api: ctx => {
         const api = ctx.require(depPlugin);
         expectTypeOf(api.getValue).returns.toBeNumber();
-        expectTypeOf(api.format).parameter(0).toBeNumber();
+        expectTypeOf(api.format).toEqualTypeOf<(n: number) => string>();
         expectTypeOf(api.format).returns.toBeString();
         return {};
       }

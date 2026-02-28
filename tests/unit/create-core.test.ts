@@ -157,7 +157,7 @@ describe("type safety: plugin APIs on app", () => {
     // Type-level: plugin API methods are typed, not any
     expectTypeOf(app.router.navigate).toBeFunction();
     expectTypeOf(app.router.current).toBeFunction();
-    expectTypeOf(app.router.navigate).parameter(0).toBeString();
+    expectTypeOf(app.router.navigate).toEqualTypeOf<(path: string) => void>();
     expectTypeOf(app.router.current).returns.toBeString();
 
     // Runtime: API works correctly
