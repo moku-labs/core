@@ -56,6 +56,8 @@ function createPlugin(
 
 **Zero generics.** All types are inferred from the spec object -- config from `config`, state from `createState`, API from `api`, and events from the `events` register callback. Config and Events flow in from the `createCoreConfig` closure.
 
+**Reserved names:** Plugin names cannot conflict with app methods or dangerous object keys. The following names are reserved and will throw a `TypeError` at registration: `start`, `stop`, `emit`, `require`, `has`, `config`, `__proto__`, `constructor`, `prototype`.
+
 ### Example 1: Zero Events (Most Common)
 
 ```typescript

@@ -51,44 +51,51 @@ All inferred -- plugin authors never write this type. The `_phantom` field carri
 
 ```typescript
 /** Extract name literal from a plugin */
-type PluginName<P> = P extends PluginInstance<infer N, any, any, any> ? N : never;
+type ExtractName<P> = P extends PluginInstance<infer N, any, any, any, any> ? N : never;
 
 /** Extract config type from a plugin */
-type PluginConfigType<P> = P extends PluginInstance<any, infer C, any, any> ? C : never;
+type ExtractConfig<P> = P extends PluginInstance<string, infer C, any, any, any> ? C : never;
 
 /** Extract API type from a plugin */
-type PluginApiType<P> = P extends PluginInstance<any, any, infer A, any> ? A : never;
+type ExtractApi<P> = P extends PluginInstance<string, any, any, infer A, any> ? A : never;
 
-/** Is the config type empty (void | {} | never)? */
-type IsEmptyConfig<C> =
-  C extends void ? true :
-  C extends Record<string, never> ? true :
-  [keyof C] extends [never] ? true :
-  false;
+/** Extract events type from a plugin */
+type ExtractEvents<P> = P extends PluginInstance<string, any, any, any, infer E> ? E : never;
 
-/** Does this plugin have config? */
-type HasDefaults<P> = P extends { _hasDefaults: true } ? true : false;
+/** Detect if a string type is a literal vs the general `string` type */
+type IsLiteralString<S extends string> = string extends S ? false : true;
 
-/** Extract API by plugin name from a plugin union */
-type PluginApiByName<P, N extends string> =
-  P extends PluginInstance<N, infer C, infer A, any>
-    ? A & { readonly config: C extends void ? {} : Readonly<C> }
-    : never;
+/** Convert a union to an intersection */
+type UnionToIntersection<U> = (U extends any ? (k: U) => void : never) extends (k: infer I) => void ? I : never;
+
+/** Intersection of all PluginEvents from a depends tuple */
+type DepsEvents<Deps extends ReadonlyArray<PluginInstance>> =
+  Deps[number] extends never ? {} : UnionToIntersection<ExtractEvents<Deps[number]>>;
 ```
 
-These helpers extract type information from plugin instances for use in mapped types like `BuildPluginApis` and `BuildPluginConfigs`.
+These helpers extract type information from plugin instances for use in mapped types like `BuildPluginApis` and `CreateAppOptions`.
 
 ---
 
-## 4. BuildPluginConfigs
+## 4. Plugin Config in CreateAppOptions
 
-Maps over the plugin union to build the config portion of the `createApp` options object. For each plugin:
+Plugin configs are typed inline within `CreateAppOptions` via a mapped type on `pluginConfigs`. For each plugin in the union:
 
-- If `IsEmptyConfig`, the plugin has no config key (excluded)
-- If `HasDefaults`, the config key is optional (`Partial<C>`)
-- Otherwise, the config key is required (full `C`)
+- Plugins with `Record<string, never>` config are excluded (no key in `pluginConfigs`)
+- Plugins with non-literal names are excluded (prevents index signature pollution)
+- All included plugins get an optional `Partial<ExtractConfig<K>>` key
 
-See [05-CONFIG-SYSTEM](./05-CONFIG-SYSTEM.md) for the full type definition and explanation.
+```typescript
+pluginConfigs?: {
+  [K in P as ExtractConfig<K> extends Record<string, never>
+    ? never
+    : IsLiteralString<ExtractName<K>> extends true
+      ? ExtractName<K>
+      : never]?: Partial<ExtractConfig<K>>;
+};
+```
+
+See [05-CONFIG-SYSTEM](./05-CONFIG-SYSTEM.md) for config resolution details.
 
 ---
 
@@ -97,20 +104,22 @@ See [05-CONFIG-SYSTEM](./05-CONFIG-SYSTEM.md) for the full type definition and e
 ```typescript
 /** Build the app's API surface from the plugin union */
 type BuildPluginApis<P extends PluginInstance> = {
-  [K in P as PluginName<K>]: PluginApiType<K> & {
-    readonly config: PluginConfigType<K> extends void ? {} : Readonly<PluginConfigType<K>>;
-  };
+  [K in P as ExtractApi<K> extends Record<string, never>
+    ? never
+    : IsLiteralString<ExtractName<K>> extends true
+      ? ExtractName<K>
+      : never]: ExtractApi<K>;
 };
 ```
 
-This maps each plugin in the union to a property on the app, keyed by the plugin's name literal. The plugin's API type is augmented with a `config` property for accessing the resolved plugin config.
+This maps each plugin in the union to a property on the app, keyed by the plugin's name literal. Plugins with empty API (`Record<string, never>`) are excluded. Plugins with non-literal name type (`string`) are excluded to prevent index signature pollution.
 
 ```typescript
 // Given: routerPlugin ('router', RouterApi), loggerPlugin ('logger', LoggerApi)
 // BuildPluginApis produces:
 {
-  router: RouterApi & { readonly config: Readonly<RouterConfig> };
-  logger: LoggerApi & { readonly config: Readonly<LoggerConfig> };
+  router: RouterApi;
+  logger: LoggerApi;
 }
 ```
 
@@ -120,30 +129,30 @@ This maps each plugin in the union to a property on the app, keyed by the plugin
 
 ```typescript
 type App<
-  Config extends Record<string, any>,
-  Events extends Record<string, any>,
+  _Config extends Record<string, unknown>,
+  Events extends Record<string, unknown>,
   P extends PluginInstance,
 > = {
-  /** Start the app. Forward order. Idempotent. */
-  start: () => Promise<void>;
+  /** Start the app. Forward order. Throws on second call. */
+  readonly start: () => Promise<void>;
 
-  /** Stop the app. Reverse order. Idempotent. */
-  stop: () => Promise<void>;
+  /** Stop the app. Reverse order. Throws on second call. */
+  readonly stop: () => Promise<void>;
 
   /**
    * Fire an event. Strictly typed:
    * Only known names (in Events) accepted with typed required payload.
    */
-  emit: <K extends string & keyof Events>(name: K, payload: Events[K]) => void;
+  readonly emit: EmitFunction<Events>;
 
   /**
    * Get plugin API or throw with clear error. Instance-only, fully typed.
    */
-  require: RequireFunction;
+  readonly require: RequireFunction;
 
   /** Check if a plugin is registered. */
-  has: (name: string) => boolean;
-} & Prettify<BuildPluginApis<P>>;
+  readonly has: HasFunction;
+} & BuildPluginApis<P>;
 ```
 
 Plugin APIs are intersected onto the app object via `BuildPluginApis`. This means `app.router.navigate()` is fully typed:
@@ -185,14 +194,14 @@ Step 3: createCore(coreConfig, { plugins: [routerPlugin, loggerPlugin] })
   | Captures all plugin instances as a union type
   | Returns: { createApp, createPlugin }
 
-Step 4: createApp({ plugins?, ...configOverrides, ...pluginConfigs })
+Step 4: createApp({ plugins?, config?, pluginConfigs?, onReady?, ... })
   | AllPlugins = framework plugins + consumer plugins
-  | Options typed as: { plugins?: [...] } & Partial<Config> & BuildPluginConfigs<AllPlugins>
+  | Options typed as: CreateAppOptions<Config, Events, AllPlugins, ExtraPlugins>
   | Returns: Promise<App<Config, Events, AllPlugins>>
 
 Result: app.router.navigate('/about')
-  | 'router' -> PluginName matches RouterPlugin
-  | RouterPlugin -> PluginApiType -> { navigate: (path: string) => void }
+  | 'router' -> ExtractName matches RouterPlugin
+  | RouterPlugin -> ExtractApi -> { navigate: (path: string) => void }
   | Fully typed, zero casts, zero manual annotations
 ```
 
@@ -226,9 +235,8 @@ const { createApp, createPlugin: frameworkCreatePlugin } = createCore(coreConfig
 
 // Step 4: Consumer
 const app = await createApp({
-  siteName: 'My Blog',
-  mode: 'prod',
-  router: { basePath: '/blog' },
+  config: { siteName: 'My Blog', mode: 'prod' },
+  pluginConfigs: { router: { basePath: '/blog' } },
 });
 
 // Result: fully typed

@@ -32,8 +32,8 @@ Every significant "why" in the v3 architecture:
 
 ```pseudo-typescript
 function createCoreConfig<
-  Config extends Record<string, any>,
-  Events extends Record<string, any> = {},
+  Config extends Record<string, unknown>,
+  Events extends Record<string, unknown> = Record<string, never>,
 >(
   id: string,
   options: { config: Config },
@@ -126,10 +126,10 @@ function createPlugin(
 
 ```pseudo-typescript
 function createCore(
-  coreConfig: { id: string; configDefaults: Config },
+  coreConfig: { readonly createPlugin: BoundCreatePlugin<Config, Events> },
   options: {
     plugins: PluginInstance[],          // framework default plugins
-    pluginConfigs?: Record<string, any>, // framework-level plugin config overrides
+    pluginConfigs?: Record<string, unknown>, // framework-level plugin config overrides
     onReady?: (ctx: { config: Readonly<Config> }) => void | Promise<void>,
     onError?: (error: Error) => void,
   },
@@ -141,8 +141,8 @@ function createCore(
   // and the framework callbacks. It returns createApp which already "knows" about
   // the defaults. It also re-exports createPlugin for consumer convenience --
   // consumers import { createApp, createPlugin } from 'my-framework'.
-
-  const { id, configDefaults } = coreConfig;
+  // coreConfig is passed for type flow only -- the argument is unused at runtime.
+  // id and configDefaults are captured in the createCoreConfig closure.
   const defaultPlugins = options.plugins;
   const frameworkPluginConfigs = options.pluginConfigs ?? {};
 
@@ -166,11 +166,11 @@ This is the longest section. It covers the entire init phase.
 async function createApp(consumerOptions?: {
   plugins?: PluginInstance[];
   config?: Partial<Config>;
-  pluginConfigs?: Record<string, any>;
-  onReady?: (context: { config: Readonly<Config> }) => void | Promise<void>;
-  onError?: (error: Error, context?: unknown) => void;
-  onStart?: (context: { config: Readonly<Config> }) => void | Promise<void>;
-  onStop?: (context: { config: Readonly<Config> }) => void | Promise<void>;
+  pluginConfigs?: Record<string, unknown>;
+  onReady?: (context: AppCallbackContext) => void | Promise<void>;
+  onError?: (error: Error, context: AppCallbackContext) => void;
+  onStart?: (context: AppCallbackContext) => void | Promise<void>;
+  onStop?: (context: AppCallbackContext) => void | Promise<void>;
 }): Promise<App<Config, Events, AllPlugins>> {
 
   // =========================================================================
@@ -351,10 +351,13 @@ async function createApp(consumerOptions?: {
         }
         return api;
       },
-      // has stays string-based (boolean check)
-      has: (name: string) => apis.has(name),
+      // has stays string-based (boolean check) -- checks pluginNameSet, not apis
+      has: (name: string) => pluginNameSet.has(name),
     };
   }
+
+  // Build pluginNameSet for has() lookups
+  const pluginNameSet = new Set(allPlugins.map(p => p.name));
 
   // Register hooks (context-aware)
   for (const plugin of allPlugins) {
@@ -397,8 +400,9 @@ async function createApp(consumerOptions?: {
   }
 
   // Call consumer onReady if provided (after framework onReady)
+  // Consumer callbacks receive full AppCallbackContext: config, emit, require, has, + plugin APIs
   if (consumerOnReady) {
-    await consumerOnReady({ config: globalConfig });
+    await consumerOnReady(buildCallbackContext());
   }
 
   // =========================================================================
@@ -435,10 +439,10 @@ async function createApp(consumerOptions?: {
       return api;
     },
 
-    // has stays string-based (boolean check)
+    // has stays string-based (boolean check) -- checks all registered plugins, not just those with APIs
     has: (name: string) => {
       guardStopped();
-      return apis.has(name);
+      return pluginNameSet.has(name);
     },
   };
 
@@ -464,7 +468,6 @@ async start() {
   if (started) {
     throw new Error(`[${id}] App already started.\n  start() can only be called once.`);
   }
-  started = true;
 
   for (const plugin of allPlugins) {
     if (plugin.spec.onStart) {
@@ -475,8 +478,10 @@ async start() {
 
   // Consumer onStart fires after all plugin onStart
   if (consumerOnStart) {
-    await consumerOnStart({ config: globalConfig });
+    await consumerOnStart(buildCallbackContext());
   }
+
+  started = true;
 }
 ```
 
@@ -523,8 +528,9 @@ async stop() {
     }
   } finally {
     // Consumer onStop fires even if a plugin's onStop threw
+    // Consumer receives full AppCallbackContext
     if (consumerOnStop) {
-      await consumerOnStop({ config: globalConfig });
+      await consumerOnStop(buildCallbackContext());
     }
   }
 

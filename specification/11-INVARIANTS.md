@@ -9,36 +9,45 @@
 
 These properties always hold. Breaking any of these is a kernel bug.
 
-### 1.1 Name Uniqueness
+### 1.1 Reserved Names
+
+**Plugin names cannot conflict with reserved app method names.** The reserved names are: `start`, `stop`, `emit`, `require`, `has`, `config`, `__proto__`, `constructor`, `prototype`.
+
+```
+TypeError: [moku-site] Plugin name "start" conflicts with a reserved app method.
+  Choose a different plugin name.
+```
+
+### 1.2 Name Uniqueness
 
 **Duplicate plugin names throw during init.**
 
 ```
-Error: [moku-site] Duplicate plugin name "router". Each plugin must have a unique name.
-  Found at positions 2 and 5 in the plugin list.
+TypeError: [moku-site] Duplicate plugin name: "router".
+  Each plugin must have a unique name.
 ```
 
 No silent overwrite. No merge. No "last wins." If you want to replace a plugin, remove the old one from your plugin list and add the new one.
 
-### 1.2 Dependency Validation
+### 1.3 Dependency Validation
 
-If a plugin declares `depends: ['logger']`, init validates:
+If a plugin declares `depends: [loggerPlugin]`, init validates:
 
 ```
-Error: [moku-site] Plugin "router" depends on "logger", but "logger" is not registered.
-  Add the logger plugin to your plugin list, before "router".
+TypeError: [moku-site] Plugin "router" depends on "logger", but "logger" is not registered.
+  Add "logger" to your plugin list before "router".
 
-Error: [moku-site] Plugin "router" depends on "logger", but "logger" appears after "router".
+TypeError: [moku-site] Plugin "router" depends on "logger", but "logger" appears after "router".
   Move "logger" before "router" in your plugin list.
 ```
 
 This is **validation only.** It does not change plugin order. It does not compute a topological sort. It checks that the order the consumer provided satisfies the declared constraints.
 
-### 1.3 Config Completeness
+### 1.4 Config Completeness
 
-If a plugin requires config (no `config`, non-void `C`), TypeScript rejects `createApp` without it. At runtime, the kernel also validates: if required config is missing, throw.
+If a plugin requires config (no `config`, non-void `C`), TypeScript rejects `createApp` without it. Config enforcement is compile-time only via the type system.
 
-### 1.4 Lifecycle Order
+### 1.5 Lifecycle Order
 
 Plugins execute lifecycle methods in array order. Always. Teardown in reverse. Always. No topological sort. No automatic reordering. No `@before` / `@after` annotations.
 
@@ -52,11 +61,11 @@ Plugins execute lifecycle methods in array order. Always. Teardown in reverse. A
 
 **Ordering is the consumer's responsibility.** If plugin B depends on plugin A, put A before B. `depends` validates this but does not fix it.
 
-### 1.5 Hook Execution Order
+### 1.6 Hook Execution Order
 
 When an event fires (via `emit`), handlers execute in plugin registration order, sequentially. Each handler is awaited before the next. No parallelism.
 
-### 1.6 Immutability
+### 1.7 Immutability
 
 After `createApp` resolves:
 - `app` is `Object.freeze()`'d
@@ -65,30 +74,30 @@ After `createApp` resolves:
 
 Plugin internal state (`ctx.state`) is mutable -- that's the point of state. But configs and the app structure are frozen.
 
-### 1.7 Idempotency
+### 1.8 Lifecycle Guards
 
 - `app.start()` callable once. Second call throws.
 - `app.stop()` callable once. Second call throws.
 - After `app.stop()`, all methods throw. The app is in a terminal state.
 
-### 1.8 require() Contract
+### 1.9 require() Contract
 
-`ctx.require('name')` either returns the plugin's API object or throws:
+`ctx.require(pluginInstance)` accepts only plugin instance references (not strings). It either returns the plugin's fully typed API object or throws:
 
 ```
 Error: [moku-site] Plugin "router" requires "logger", but "logger" is not registered.
-  Add the logger plugin to your plugin list, before "router".
+  Add "logger" to your plugin list.
 ```
 
-The error message includes the framework name, the requesting plugin, and the missing plugin. The suggestion to add it "before" the requester is always correct because of the ordering guarantee.
+The error message includes the framework name, the requesting plugin, and the missing plugin.
 
-`ctx.has('name')` returns `boolean`. Never throws.
+`ctx.has('name')` stays string-based. Returns `boolean`. Never throws. Checks all registered plugins (not just those with APIs).
 
-### 1.9 Default Plugin Immutability
+### 1.10 Default Plugin Immutability
 
 Consumers cannot remove framework default plugins. They can only configure them. The final plugin list is always `[...frameworkDefaults, ...consumerExtras]`.
 
-### 1.10 Phase-Appropriate Context
+### 1.11 Phase-Appropriate Context
 
 Context is restricted based on what is safe to access at each point:
 
@@ -104,11 +113,11 @@ Context is restricted based on what is safe to access at each point:
 
 `onStop` receives a minimal teardown context -- only `global` is available. Plugins should clean up their own resources without depending on other plugins (which may have already stopped in reverse order).
 
-### 1.11 Async Sequential Execution
+### 1.12 Async Sequential Execution
 
 All async lifecycle methods within a phase execute sequentially, one plugin at a time. Plugin A's `onInit` resolves before Plugin B's `onInit` begins. No parallelism within or across phases.
 
-### 1.12 Error Propagation
+### 1.13 Error Propagation
 
 Lifecycle methods can throw (or reject). When they do:
 
@@ -142,18 +151,18 @@ The consumer should never see Layer 1. If they need to, the framework is missing
 ### 2.3 Bypassing createApp Options Typing
 
 ```typescript
-// BAD: Using `as any` to bypass the flat object type system
-const app = await createApp({ siteName: 'Blog', blog: { x: 1 } } as any);
+// BAD: Using `as any` to bypass the structured options type system
+const app = await createApp({ config: { siteName: 'Blog' } } as any);
 
-// GOOD: Let TypeScript enforce the shape -- every key is typed
+// GOOD: Let TypeScript enforce the shape -- every namespace is typed
 const app = await createApp({
   plugins: [blogPlugin],
-  siteName: 'Blog',
-  blog: { postsPerPage: 5 },
+  config: { siteName: 'Blog' },
+  pluginConfigs: { blog: { postsPerPage: 5 } },
 });
 ```
 
-The flat object passed to `createApp` is fully typed: config keys come from the Config type, plugin config keys come from registered plugin names. Casting to `any` defeats the entire type system.
+The structured options passed to `createApp` are fully typed: `config` is `Partial<Config>`, `pluginConfigs` maps plugin names to their config types. Casting to `any` defeats the entire type system.
 
 ### 2.4 Leaking State
 
@@ -200,7 +209,7 @@ Shallow merge means nested objects are replaced wholesale. If you use nested con
 ctx.emit('auth:getToken');  // returns Promise<void>, not the token
 
 // GOOD: use require for request/response
-const auth = ctx.require('auth');
+const auth = ctx.require(authPlugin);
 const token = auth.getToken();
 ```
 
@@ -223,11 +232,11 @@ const authPlugin = createPlugin('auth', { ... });
 
 ```typescript
 // BAD: missing await -- app is a Promise, not an App
-const app = createApp({ siteName: 'Blog' });
+const app = createApp({ config: { siteName: 'Blog' } });
 app.router.navigate('home');  // runtime error: app.router is undefined
 
 // GOOD: await the Promise
-const app = await createApp({ siteName: 'Blog' });
+const app = await createApp({ config: { siteName: 'Blog' } });
 app.router.navigate('home');  // works
 ```
 
@@ -242,29 +251,32 @@ Error: [framework-name] <description>.
   <actionable suggestion>.
 ```
 
-Examples:
+Validation errors use `TypeError`. Lifecycle errors use `Error`.
 
 ```
-Error: [moku-site] Duplicate plugin name "router". Each plugin must have a unique name.
-  Found at positions 2 and 5 in the plugin list.
+TypeError: [moku-site] Plugin name "start" conflicts with a reserved app method.
+  Choose a different plugin name.
 
-Error: [moku-site] Plugin "router" depends on "auth", but "auth" is not registered.
-  Add the auth plugin to your plugin list before "router".
+TypeError: [moku-site] Duplicate plugin name: "router".
+  Each plugin must have a unique name.
 
-Error: [moku-site] Plugin "router" depends on "logger", but "logger" appears after "router".
+TypeError: [moku-site] Plugin "router" depends on "auth", but "auth" is not registered.
+  Add "auth" to your plugin list before "router".
+
+TypeError: [moku-site] Plugin "router" depends on "logger", but "logger" appears after "router".
   Move "logger" before "router" in your plugin list.
 
 Error: [moku-site] Plugin "router" requires "renderer", but "renderer" is not registered.
-  Add the renderer plugin to your plugin list, before "router".
+  Add "renderer" to your plugin list.
 
-Error: [moku-site] Plugin "analytics" requires config but none was provided.
-  Add an "analytics" key to your createApp options object.
+Error: [moku-site] App already started.
+  start() can only be called once.
 
-Error: [moku-site] app.start() has already been called.
-  start() can only be called once per app instance.
+Error: [moku-site] App not started.
+  Call start() before stop().
 
-Error: [moku-site] Cannot call start() after stop(). The app is in a terminal state.
-  Create a new app instance with createApp() to restart.
+Error: [moku-site] App is stopped. No further operations allowed.
+  Create a new app instance instead.
 ```
 
 ---

@@ -1,6 +1,6 @@
 # 05 - Config System
 
-**Domain:** Config resolution, defaults, BuildPluginConfigs, structured createApp namespaces
+**Domain:** Config resolution, defaults, pluginConfigs mapped type, structured createApp namespaces
 **Version:** v3 (3-step architecture)
 
 ---
@@ -156,66 +156,33 @@ const strictAnalyticsPlugin = createPlugin('analytics', {
 
 ---
 
-## 8. Type-Level Config Enforcement (BuildPluginConfigs)
+## 8. Type-Level Config Enforcement (CreateAppOptions)
+
+Plugin configs are typed inline within `CreateAppOptions` via a mapped type on `pluginConfigs`:
 
 ```typescript
-/**
- * Build the config map for createApp.
- *
- * Rules:
- *   C is void/{}          -> excluded (no config key)
- *   config provided -> OPTIONAL (Partial<C>)
- *   no config       -> REQUIRED (full C)
- */
-type BuildPluginConfigs<P extends PluginInstance> = Prettify<
-  & OmitNever<{
-      [K in P as IsEmptyConfig<PluginConfigType<K>> extends true ? never
-        : HasDefaults<K> extends true ? never
-        : PluginName<K>
-      ]: PluginConfigType<K>;                          // REQUIRED
-    }>
-  & OmitNever<{
-      [K in P as IsEmptyConfig<PluginConfigType<K>> extends true ? never
-        : HasDefaults<K> extends true ? PluginName<K>
-        : never
-      ]?: Partial<PluginConfigType<K>>;                // OPTIONAL
-    }>
->;
+pluginConfigs?: {
+  [K in P as ExtractConfig<K> extends Record<string, never>
+    ? never
+    : IsLiteralString<ExtractName<K>> extends true
+      ? ExtractName<K>
+      : never]?: Partial<ExtractConfig<K>>;
+};
 ```
 
-**Example result for consumer:**
+**Rules:**
 
-```typescript
-// Given: RouterPlugin (no defaults), LoggerPlugin (has defaults), TimerPlugin (void config)
-// BuildPluginConfigs produces:
-{
-  router: { default: string; pages: Record<string, unknown> };  // REQUIRED
-  logger?: Partial<LoggerConfig>;                                // OPTIONAL
-  // timer: not present at all
-}
-```
+- Plugins with `Record<string, never>` config (no config field, void C) are excluded — no key in `pluginConfigs`
+- Plugins with non-literal name type (`string`) are excluded — prevents index signature pollution
+- All included plugins get an optional `Partial<ExtractConfig<K>>` key
 
-These plugin config keys are merged into the flat `createApp` options type alongside global config keys (`Partial<Config>`) and the reserved `plugins` key.
+Config enforcement is **compile-time only** via the TypeScript type system. There is no runtime validation for missing required configs — the type system prevents this at the call site.
 
 ---
 
 ## 9. Config Immutability
 
 All resolved configs are `Object.freeze`'d after resolution. Both global config and per-plugin configs are frozen and read-only at runtime. This prevents accidental mutation after initialization.
-
----
-
-## 10. Runtime Validation
-
-At runtime, the kernel validates config completeness:
-
-- If a plugin requires config (no `config`, non-void `C`), and the consumer didn't provide it, throw with a clear error message.
-- TypeScript catches this at compile time, but runtime validation is a safety net.
-
-```
-Error: [moku-site] Plugin "router" requires config but none was provided.
-  Add a "router" key to your createApp options object.
-```
 
 ---
 

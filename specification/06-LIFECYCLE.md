@@ -24,12 +24,14 @@ Forward = plugin array order (first registered runs first). Reverse = last regis
 Runs during `await createApp(...)`. This single phase encompasses all initialization work. Internal sub-steps (not visible to plugin authors as separate phases):
 
 1. **Merge plugin lists:** `[...frameworkDefaultPlugins, ...consumerExtraPlugins]`
-2. **Validate names:** No duplicate plugin names in the final list. Throw if any collision.
-3. **Validate dependencies:** For each plugin with `depends`, verify all dependencies exist and appear earlier in the array. Throw with clear error if either fails.
-5. **Resolve config:** For each plugin, shallow merge `{ ...config, ...consumerConfig }`. Freeze the result.
+2. **Validate reserved names:** No plugin name can conflict with app methods (`start`, `stop`, `emit`, `require`, `has`, `config`).
+3. **Validate names:** No duplicate plugin names in the final list. Throw if any collision.
+4. **Validate dependencies:** For each plugin with `depends`, verify all dependencies exist and appear earlier in the array. Throw with clear error if either fails.
+5. **Resolve config:** For each plugin, shallow merge `{ ...plugin.config, ...frameworkOverride, ...consumerOverride }`. Freeze the result.
 6. **Create state:** For each plugin (forward order), call `createState({ global, config })`. Store mutable state.
-7. **Build API:** For each plugin (forward order), call `api(PluginContext)`. Register the API in the plugin registry.
-8. **Run onInit:** For each plugin (forward order), call `onInit(PluginContext)`. Sequential, awaited. This is where plugins validate dependencies with `require()`/`has()`.
+7. **Register hooks:** For each plugin (forward order), call `hooks(PluginContext)`, register handlers in the event bus.
+8. **Build API:** For each plugin (forward order), call `api(PluginContext)`. Register the API in the plugin registry.
+9. **Run onInit:** For each plugin (forward order), call `onInit(PluginContext)`. Sequential, awaited. This is where plugins validate dependencies with `require()`/`has()`.
 
 These sub-steps are presented as ONE phase with internal mechanics. Plugin authors write `onInit` -- the rest is kernel machinery.
 
@@ -98,19 +100,18 @@ Lifecycle methods can throw (or reject). When they do:
 
 ---
 
-## 7. Idempotency and State Guards
+## 7. State Guards
 
 - `start()` can only be called once. Calling it again throws: `"App already started."`
-- `stop()` can only be called once. Calling it again throws: `"App already stopped."` Calling it before start throws: `"App not started."`
-- After `stop()`, all app methods throw. The app is in a terminal state.
+- `stop()` requires `start()` first. Calling it before start throws: `"App not started."`
+- `stop()` can only be called once. After `stop()`, all app methods throw: `"App is stopped."` The app is in a terminal state.
 
 ```typescript
 const app = await createApp({ ... });
 await app.start();
 await app.start();   // throws: "App already started."
 await app.stop();
-await app.stop();    // throws: "App already stopped."
-app.router.navigate  // throws: app is stopped
+app.emit('any', {}); // throws: "App is stopped."
 ```
 
 ---
@@ -144,7 +145,7 @@ const dbPlugin = createPlugin('db', {
 // Consumer
 const app = await createApp({
   plugins: [dbPlugin],
-  db: { connectionString: 'postgres://...' },
+  pluginConfigs: { db: { connectionString: 'postgres://...' } },
 });
 
 await app.start();   // db.onStart opens connection

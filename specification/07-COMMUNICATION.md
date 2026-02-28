@@ -180,31 +180,16 @@ const dashboardPlugin = createPlugin('dashboard', {
 
 ---
 
-## 6. Kernel-Emitted Events
-
-Regardless of what the framework puts in `Events`, the kernel always emits these events:
-
-| Event | When | Payload |
-|---|---|---|
-| `app:init` | After all plugins initialized | `{ config }` |
-| `app:start` | Before plugin onStart calls | `{ config }` |
-| `app:stop` | After plugin onStop calls | `{ config }` |
-
-The framework should include these keys in its `Events` type so that payload types are enforced at compile time.
-
----
-
-## 7. Convention: Event Naming
+## 6. Convention: Event Naming
 
 Convention: namespace events with the emitting plugin's name. `router:navigate`, `auth:login`, `build:complete`. This prevents collisions. Convention, not enforced.
 
-- `app:*` -- kernel events
 - `framework-domain:*` -- framework-level events (e.g., `page:render`, `build:start`)
 - `pluginName:eventName` -- per-plugin events
 
 ---
 
-## 8. What About Middleware / Pipes?
+## 7. What About Middleware / Pipes?
 
 **Not in the kernel.** If a plugin needs request transformation, build pipeline, or render chain, it implements that internally. The plugin exposes an API method for other plugins to register middleware:
 

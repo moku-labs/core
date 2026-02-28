@@ -474,17 +474,33 @@ function buildApp(
         throw new Error(`[${runtime.id}] App already started.\n  start() can only be called once.`);
       }
 
-      for (const plugin of flatPlugins) {
-        if (plugin.spec.onStart) {
-          await plugin.spec.onStart(buildPluginContext(plugin));
+      const startedPlugins: AnyPluginInstance[] = [];
+      try {
+        for (const plugin of flatPlugins) {
+          if (plugin.spec.onStart) {
+            await plugin.spec.onStart(buildPluginContext(plugin));
+          }
+          startedPlugins.push(plugin);
         }
-      }
 
-      if (consumer?.onStart) {
-        await consumer.onStart(buildCallbackContext(runtime));
-      }
+        if (consumer?.onStart) {
+          await consumer.onStart(buildCallbackContext(runtime));
+        }
 
-      started = true;
+        started = true;
+      } catch (startError) {
+        // Rollback: stop already-started plugins in reverse, then enter terminal state.
+        // Stop errors during rollback are intentionally swallowed here — they are
+        // already reported via onError by executeStop. The start error is the one
+        // that matters to the caller.
+        stopped = true;
+        try {
+          await executeStop(startedPlugins, runtime.globalConfig, onError);
+        } catch {
+          // Reported via onError — intentional silent catch (see above)
+        }
+        throw startError;
+      }
     },
 
     /**
@@ -557,9 +573,25 @@ function buildApp(
     }
   };
 
-  // Mount plugin APIs directly on app: app.router, app.blog, etc.
+  // Mount plugin APIs with stopped guard (Proxy intercepts property access after stop)
   for (const [name, api] of runtime.apis) {
-    app[name] = api;
+    app[name] = new Proxy(api, {
+      /**
+       * Intercepts property access to enforce the stopped guard on mounted plugin APIs.
+       * @param target - The original plugin API object.
+       * @param property - The property being accessed.
+       * @param receiver - The proxy or object that the property is accessed on.
+       * @returns The property value from the target.
+       * @example
+       * ```ts
+       * app.router.navigate('/about'); // throws after app.stop()
+       * ```
+       */
+      get(target, property, receiver) {
+        guardStopped();
+        return Reflect.get(target, property, receiver);
+      }
+    });
   }
 
   return Object.freeze(app);

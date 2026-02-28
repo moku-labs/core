@@ -33,7 +33,7 @@ Used by: `createState`. At this stage, the plugin's state does not exist yet (it
 ### PluginContext
 
 ```typescript
-type PluginContext<Config, Events, C, S, Deps> = {
+type PluginContext<Config, Events extends Record<string, unknown>, C, S> = {
   /** Global config. Frozen. */
   readonly global: Readonly<Config>;
   /** This plugin's resolved config. Frozen. */
@@ -44,7 +44,7 @@ type PluginContext<Config, Events, C, S, Deps> = {
    * Fire an event. Strictly typed:
    * Only known names (in Events + PluginEvents + DepsEvents) accepted with typed required payload.
    */
-  emit: EmitFunction;
+  emit: EmitFunction<Events>;
   /**
    * Get plugin API or throw. Instance-only, fully typed.
    */
@@ -54,7 +54,9 @@ type PluginContext<Config, Events, C, S, Deps> = {
 };
 ```
 
-Used by: `api`, `onInit`, `onStart`. Everything is live. The plugin's mutable state is available. Other plugins' APIs are accessible via `require`. Events can be emitted.
+Used by: `api`, `onInit`, `onStart`, `hooks`. Everything is live. The plugin's mutable state is available. Other plugins' APIs are accessible via `require`. Events can be emitted.
+
+The `Events` parameter in PluginContext is the merged event map (`Events & PluginEvents & DepsEvents`), computed by the PluginSpec type. Dependencies are handled at the PluginSpec level, not within PluginContext itself.
 
 ### TeardownContext
 
@@ -197,6 +199,25 @@ ctx.emit('page:render', { path: '/about', html: '<h1>About</h1>' });
 // Unknown event -- compile error (no escape hatch)
 ctx.emit('my:custom:event', { anything: true });  // ERROR
 ```
+
+---
+
+## 9. Consumer Callback Context (AppCallbackContext)
+
+Consumer lifecycle callbacks (`onReady`, `onStart`, `onStop`, `onError`) passed to `createApp` receive a richer context than plugin methods:
+
+```typescript
+type AppCallbackContext<Config, Events, P> = {
+  readonly config: Readonly<Config>;
+  readonly emit: EmitFunction<Events>;
+  readonly require: RequireFunction;
+  readonly has: HasFunction;
+} & BuildPluginApis<P>;
+```
+
+This includes frozen global config, event emission, plugin lookup, and all mounted plugin APIs. Consumer callbacks can access `ctx.router.navigate()`, `ctx.emit(...)`, etc.
+
+Note: Framework-level `onReady` (passed to `createCore`) receives only `{ config: Readonly<Config> }` -- a minimal context since it runs before consumer callbacks.
 
 ---
 

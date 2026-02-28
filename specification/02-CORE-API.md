@@ -20,14 +20,14 @@ One function at the main entry point. That's the package.
 
 ```typescript
 function createCoreConfig<
-  Config extends Record<string, any>,
-  Events extends Record<string, any> = {},
+  Config extends Record<string, unknown>,
+  Events extends Record<string, unknown> = Record<string, never>,
 >(
   id: string,
   options: { config: Config },
 ): {
-  createPlugin: CreatePluginFn<Config, Events>;
-  createCore: CreateCoreFn<Config, Events>;
+  createPlugin: BoundCreatePluginFunction<Config, Events>;
+  createCore: BoundCreateCoreFunction<Config, Events>;
 };
 ```
 
@@ -36,9 +36,9 @@ function createCoreConfig<
 | Param | Purpose | Set by | Default |
 |---|---|---|---|
 | `Config` | Shape of global config every app of this framework needs | Framework author (Layer 2) | (required) |
-| `Events` | Map of event names to payload types (framework events + known plugin events) | Framework author (Layer 2) | `{}` |
+| `Events` | Map of event names to payload types (framework events + known plugin events) | Framework author (Layer 2) | `Record<string, never>` |
 
-When `Events` is `{}` (the default), `emit()` accepts no events (no valid keys). When populated, `emit()` strictly enforces event names and payload types. There is no untyped escape hatch -- only known event names are accepted.
+When `Events` is `Record<string, never>` (the default), `emit()` accepts no events (no valid keys). When populated, `emit()` strictly enforces event names and payload types. There is no untyped escape hatch -- only known event names are accepted.
 
 **`id`:** Human-readable framework name. Used in error messages: `"[moku-site] Duplicate plugin name: router"`
 
@@ -79,22 +79,22 @@ export const { createPlugin, createCore } = coreConfig;
 
 ```typescript
 function createCore(
-  coreConfig: CoreConfig<Config, Events>,
+  coreConfig: { readonly createPlugin: BoundCreatePluginFunction<Config, Events> },
   options: {
     plugins: PluginInstance[];
-    pluginConfigs?: Record<string, any>;
+    pluginConfigs?: Record<string, unknown>;
     onReady?: (ctx: { config: Readonly<Config> }) => void | Promise<void>;
     onError?: (error: Error) => void;
   },
 ): {
   createApp: CreateAppFn<Config, Events, DefaultPlugins>;
-  createPlugin: CreatePluginFn<Config, Events>;
+  createPlugin: BoundCreatePluginFunction<Config, Events>;
 };
 ```
 
 **Parameters:**
 
-- **`coreConfig`** -- The object returned by `createCoreConfig`. Carries the framework ID, Config defaults, and bound types.
+- **`coreConfig`** -- The object returned by `createCoreConfig`. Passed for type flow only (the argument is unused at runtime). The `createPlugin` property carries the bound type information.
 - **`options.plugins`** -- Default plugins that ship with the framework. Always loaded. Consumer cannot remove them.
 - **`options.pluginConfigs`** -- Default config overrides for framework plugins. Merged with consumer overrides.
 - **`options.onReady`** -- Optional callback fired after all plugins have completed init.
@@ -130,14 +130,16 @@ function createApp(
   options?: {
     plugins?: PluginInstance[];
     config?: Partial<Config>;
-    pluginConfigs?: { [pluginName: string]?: PluginConfig };
-    onReady?: (context: { config: Readonly<Config> }) => void | Promise<void>;
-    onError?: (error: Error, context?: unknown) => void;
-    onStart?: (context: { config: Readonly<Config> }) => void | Promise<void>;
-    onStop?: (context: { config: Readonly<Config> }) => void | Promise<void>;
+    pluginConfigs?: { [pluginName: string]?: Partial<PluginConfig> };
+    onReady?: (context: AppCallbackContext) => void | Promise<void>;
+    onError?: (error: Error, context: AppCallbackContext) => void;
+    onStart?: (context: AppCallbackContext) => void | Promise<void>;
+    onStop?: (context: AppCallbackContext) => void | Promise<void>;
   },
 ): Promise<App<Config, Events, AllPlugins>>;
 ```
+
+`AppCallbackContext` includes `config` (frozen global config), `emit`, `require`, `has`, and all mounted plugin APIs. This gives consumer callbacks full access to the app's capabilities.
 
 **Structured namespaces.** The `options` parameter uses explicit namespaces:
 
@@ -253,7 +255,7 @@ type App<Config, Events, Plugins> = Readonly<{
 - The entire app object is frozen (`Object.freeze`) after creation.
 - Plugin APIs are mounted directly on the app: `app.router`, `app.blog`, etc.
 - All methods throw after `stop()` is called (terminal state enforcement).
-- `start()` and `stop()` are idempotent -- calling them multiple times is safe.
+- `start()` and `stop()` are callable once. A second call throws.
 
 ---
 
