@@ -40,6 +40,7 @@ One export at Layer 1 (`createCoreConfig`). One setup call at Layer 2 (`createCo
 | 12 | [Plugin Patterns](./12-PLUGIN-PATTERNS.md) | Plugin = connection point, file structure, LLM prompt |
 | 13 | [Kernel Pseudocode](./13-KERNEL-PSEUDOCODE.md) | Reference implementation, design decisions log |
 | 14 | [Event Registration](./14-EVENT-REGISTRATION.md) | Register callback pattern for typed event declarations |
+| 15 | [Plugin Structure](./15-PLUGIN-STRUCTURE.md) | Complexity tiers, domain scenarios, file conventions |
 
 ---
 
