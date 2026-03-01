@@ -120,6 +120,7 @@ import {
 
 /**
  * Structural plugin shape used for generic constraints without variance issues.
+ *
  * @example
  * ```ts
  * const pluginRef: PluginLike = somePlugin;
@@ -138,6 +139,7 @@ type PluginLike = {
 
 /**
  * Readonly dependency tuple accepted by `depends`.
+ *
  * @example
  * ```ts
  * const deps: DependencyPluginTuple = [];
@@ -151,6 +153,7 @@ type DependencyPluginTuple = readonly PluginLike[];
 
 /**
  * Extracts API type from a plugin-like value.
+ *
  * @example
  * ```ts
  * type Api = ExtractPluginApi<typeof somePlugin>;
@@ -166,6 +169,7 @@ type ExtractPluginApi<PluginCandidate> = PluginCandidate extends {
 
 /**
  * Extracts event map type from a plugin-like value.
+ *
  * @example
  * ```ts
  * type Events = ExtractPluginEvents<typeof somePlugin>;
@@ -187,6 +191,7 @@ type ExtractPluginEvents<PluginCandidate> = PluginCandidate extends {
 
 /**
  * Event map contributed by all dependency plugins.
+ *
  * @example
  * ```ts
  * type DepEvents = DependencyEvents<readonly [authPlugin, routerPlugin]>;
@@ -199,6 +204,7 @@ type DependencyEvents<DependencyPlugins extends DependencyPluginTuple> =
 
 /**
  * Intersection of framework events, plugin events, and dependency events.
+ *
  * @example
  * ```ts
  * type AllEvents = MergedPluginEvents<SiteConfigEvents, RouterEvents, readonly [authPlugin]>;
@@ -222,6 +228,7 @@ type MergedPluginEvents<
  * - `AllEvents`: merged events the plugin can emit
  * - `PluginConfig`: this plugin's config slice
  * - `PluginState`: mutable plugin state
+ *
  * @example
  * ```ts
  * type Ctx = PluginExecutionContext<
@@ -240,6 +247,7 @@ type PluginExecutionContext<
 > = {
   /**
    * Frozen app-wide config from `createCoreConfig`. Shared by all plugins.
+   *
    * @example
    * ```ts
    * const siteUrl = ctx.global.siteUrl;
@@ -249,6 +257,7 @@ type PluginExecutionContext<
   /**
    * Frozen plugin-specific config. Defaults from the plugin spec, shallow-merged
    * with consumer overrides.
+   *
    * @example
    * ```ts
    * const base = ctx.config.basePath; // from plugin defaults or consumer override
@@ -257,6 +266,7 @@ type PluginExecutionContext<
   readonly config: Readonly<PluginConfig>;
   /**
    * Mutable plugin state created by `createState`. The only mutable store in the system.
+   *
    * @example
    * ```ts
    * ctx.state.count += 1;
@@ -266,6 +276,7 @@ type PluginExecutionContext<
   state: PluginState;
   /**
    * Dispatch a typed event. Only known event names are accepted (no escape hatch).
+   *
    * @example
    * ```ts
    * ctx.emit("auth:login", { userId: "123" });
@@ -275,6 +286,7 @@ type PluginExecutionContext<
   /**
    * Get a registered plugin's API by instance reference. Throws if the plugin is not registered.
    * Accepts any plugin instance, not just declared dependencies (not strings).
+   *
    * @example
    * ```ts
    * const http = ctx.require(httpPlugin);
@@ -286,6 +298,7 @@ type PluginExecutionContext<
   ) => ExtractPluginApi<PluginCandidate>;
   /**
    * Check if a plugin is registered by name. String-based (boolean check only).
+   *
    * @example
    * ```ts
    * if (ctx.has("analytics")) { ... }
@@ -314,6 +327,7 @@ type EventDescriptor<PayloadType = unknown> = {
  * - `register<T>(description?)` — register a single event with payload type `T`.
  * - `register.map<EventMap>(descriptions?)` — bulk-register all events from a
  *   pre-declared event map type. Eliminates per-event `register<Events["name"]>()` calls.
+ *
  * @example
  * ```ts
  * // Individual registration (inline event types):
@@ -350,6 +364,7 @@ type RegisterFunction = {
  * - `PluginState`: mutable state returned by `createState`
  * - `PluginApi`: API returned by `api`
  * - `DependencyPlugins`: tuple from `depends`
+ *
  * @example
  * ```ts
  * type RouterSpec = CreatePluginSpec<
@@ -375,6 +390,7 @@ type CreatePluginSpec<
   /**
    * Declare plugin-specific events via a register callback.
    * Used for compile-time type inference only — the kernel does not call this at runtime.
+   *
    * @example
    * ```ts
    * events: (register) => ({
@@ -389,6 +405,7 @@ type CreatePluginSpec<
   /**
    * Default config values for this plugin. Consumers can override via `pluginName: { ... }`.
    * Shallow-merged at startup, then frozen.
+   *
    * @example
    * ```ts
    * config: { basePath: "/", trailing: false }
@@ -398,6 +415,7 @@ type CreatePluginSpec<
   /**
    * Plugins this plugin depends on. Dependency APIs are available via `ctx.require()`.
    * Dependencies must appear earlier in the plugins array (no topological sort).
+   *
    * @example
    * ```ts
    * depends: [authPlugin, httpPlugin]
@@ -407,6 +425,7 @@ type CreatePluginSpec<
   /**
    * Factory for mutable plugin state. Called once at startup with a minimal context
    * (global config + plugin config). The returned object is the only mutable store.
+   *
    * @example
    * ```ts
    * createState: (ctx) => ({ count: 0, cache: new Map() })
@@ -417,6 +436,7 @@ type CreatePluginSpec<
    * Public API factory. Receives full plugin context; returns the API object
    * other plugins access via `ctx.require(thisPlugin)`.
    * Must be synchronous and side-effect-free — do not call `ctx.emit()` from this factory.
+   *
    * @example
    * ```ts
    * api: (ctx) => ({
@@ -436,6 +456,7 @@ type CreatePluginSpec<
   /**
    * Called after all plugins are registered and APIs are built. Runs in forward
    * plugin order, sequentially awaited. Use for setup that depends on other plugins.
+   *
    * @example
    * ```ts
    * onInit: (ctx) => {
@@ -455,6 +476,7 @@ type CreatePluginSpec<
   /**
    * Called when the app starts. Runs in forward plugin order, sequentially awaited.
    * Use for runtime startup (open connections, start listeners).
+   *
    * @example
    * ```ts
    * onStart: async (ctx) => {
@@ -473,6 +495,7 @@ type CreatePluginSpec<
   /**
    * Called when the app stops. Runs in **reverse** plugin order, sequentially awaited.
    * Use for teardown (close connections, flush buffers). Receives only global config.
+   *
    * @example
    * ```ts
    * onStop: async (ctx) => {
@@ -485,6 +508,7 @@ type CreatePluginSpec<
    * Event subscription factory. Receives full plugin context; returns a map of
    * event handlers. Same closure pattern as `api`. Handlers can access `ctx.state`,
    * `ctx.emit`, `ctx.require`, etc.
+   *
    * @example
    * ```ts
    * hooks: (ctx) => ({
@@ -519,6 +543,7 @@ type CreatePluginSpec<
  *
  * All type parameters are inferred from the spec object — no explicit generics needed.
  * Per-plugin events use the register callback pattern instead of explicit type arguments.
+ *
  * @example
  * ```ts
  * const { createPlugin } = createCoreConfig<MyConfig, MyEvents>("my-app", { config: defaults });
@@ -581,6 +606,7 @@ type BoundCreatePluginFunction<
 
 /**
  * Valid lifecycle method names accepted in plugin specs.
+ *
  * @example
  * ```ts
  * const method: LifecycleMethodName = "onInit";
@@ -590,6 +616,7 @@ type LifecycleMethodName = "onInit" | "onStart" | "onStop";
 
 /**
  * Minimal runtime shape validated inside `createPlugin`.
+ *
  * @example
  * ```ts
  * const runtimeSpec: RuntimePluginSpec = { onInit: () => {} };
@@ -611,6 +638,7 @@ type RuntimePluginSpec = Record<string, unknown> & {
 
 /**
  * Asserts that a plugin name is a non-empty string.
+ *
  * @param frameworkId - Framework identifier used in error messages.
  * @param name - Candidate plugin name.
  * @example
@@ -631,6 +659,7 @@ function assertValidPluginName(frameworkId: string, name: unknown): asserts name
 
 /**
  * Asserts that the plugin spec is a non-null object.
+ *
  * @param frameworkId - Framework identifier used in error messages.
  * @param pluginName - Validated plugin name.
  * @param spec - Candidate plugin spec.
@@ -656,6 +685,7 @@ function assertValidPluginSpec(
 
 /**
  * Validates lifecycle handlers (`onInit`, `onStart`, `onStop`) if provided.
+ *
  * @param frameworkId - Framework identifier used in error messages.
  * @param pluginName - Validated plugin name.
  * @param spec - Runtime plugin spec.
@@ -686,6 +716,7 @@ function assertValidLifecycleHandlers(
  * Validates that events is a function (the register callback factory) if provided.
  * The kernel does not call events at runtime — it exists for compile-time type inference.
  * This validation catches typos like `events: { ... }` instead of `events: register => ({ ... })`.
+ *
  * @param frameworkId - Framework identifier used in error messages.
  * @param pluginName - Validated plugin name.
  * @param events - Candidate events value from plugin spec.
@@ -710,6 +741,7 @@ function assertValidEvents(frameworkId: string, pluginName: string, events: unkn
 /**
  * Validates that hooks is a function (the context-receiving factory).
  * The return value (handler map) is validated at kernel time when hooks(ctx) is called.
+ *
  * @param frameworkId - Framework identifier used in error messages.
  * @param pluginName - Validated plugin name.
  * @param hooks - Candidate hooks value from plugin spec.
@@ -733,6 +765,7 @@ function assertValidHooks(frameworkId: string, pluginName: string, hooks: unknow
 
 /**
  * Validates that `api` is a function if provided.
+ *
  * @param frameworkId - Framework identifier used in error messages.
  * @param pluginName - Validated plugin name.
  * @param api - Candidate api value from plugin spec.
@@ -752,6 +785,7 @@ function assertValidApi(frameworkId: string, pluginName: string, api: unknown): 
 
 /**
  * Validates that `createState` is a function if provided.
+ *
  * @param frameworkId - Framework identifier used in error messages.
  * @param pluginName - Validated plugin name.
  * @param createState - Candidate createState value from plugin spec.
@@ -783,6 +817,7 @@ function assertValidCreateState(
  * Generic parameters:
  * - `GlobalConfig`: app-wide config from `createCoreConfig`
  * - `GlobalEventMap`: app-wide events from `createCoreConfig`
+ *
  * @param frameworkId - The framework identifier for error messages.
  * @returns A createPlugin function bound to the framework's Config and Events types.
  * @example
@@ -797,6 +832,7 @@ function createPluginFactory<
 >(frameworkId: string): BoundCreatePluginFunction<GlobalConfig, GlobalEventMap> {
   /**
    * Creates a plugin instance with inferred types from the spec object.
+   *
    * @param name - Unique plugin name (inferred as literal string type).
    * @param spec - Plugin specification with config, state, api, lifecycle, hooks.
    * @returns A PluginInstance carrying phantom types for compile-time inference.

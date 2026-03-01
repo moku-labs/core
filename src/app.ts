@@ -101,6 +101,7 @@ interface KernelRuntime {
 
 /**
  * Cast a value to Record if it is a non-null object, or return empty object.
+ *
  * @param value - The value to cast.
  * @returns The value as a Record, or an empty object if not a non-null object.
  * @example
@@ -115,6 +116,7 @@ function asRecord(value: unknown): Record<string, unknown> {
 
 /**
  * Create a require function that looks up a plugin API by instance reference.
+ *
  * @param runtime - The kernel runtime containing the API map.
  * @param formatError - Formats the error message using the plugin instance name.
  * @returns A function that returns the API for a given plugin instance or throws.
@@ -137,6 +139,7 @@ function createRequire(
 
 /**
  * Create a has function from the runtime's plugin name set.
+ *
  * @param runtime - The kernel runtime containing the plugin name set.
  * @returns A function that checks if a plugin name is registered.
  * @example
@@ -155,6 +158,7 @@ function createHas(runtime: KernelRuntime): (name: string) => boolean {
 
 /**
  * Resolve per-plugin configs: 3-level merge (plugin defaults, framework, consumer), freeze.
+ *
  * @param flatPlugins - The flattened plugin list.
  * @param frameworkPluginConfigs - Framework-level plugin config overrides.
  * @param consumerPluginConfigs - Consumer-level plugin config overrides.
@@ -184,6 +188,7 @@ function resolvePluginConfigs(
 
 /**
  * Create plugin state using MinimalContext (global + config only).
+ *
  * @param flatPlugins - The flattened plugin list.
  * @param globalConfig - The frozen global config object.
  * @param resolvedConfigs - The resolved per-plugin config map.
@@ -218,6 +223,7 @@ function createPluginStates(
 
 /**
  * Build event bus: hookMap with async dispatch, fire-and-forget emit, and registerHook.
+ *
  * @param onError - Optional error handler for hook execution failures.
  * @returns An object with emit and registerHook functions.
  * @example
@@ -235,6 +241,7 @@ function buildEventBus(onError: ((error: Error) => void) | undefined): {
 
   /**
    * Dispatch an event to all registered handlers sequentially.
+   *
    * @param eventName - The event name to dispatch.
    * @param payload - The event payload.
    * @example
@@ -256,6 +263,7 @@ function buildEventBus(onError: ((error: Error) => void) | undefined): {
 
   /**
    * Fire-and-forget emit that dispatches without awaiting.
+   *
    * @param eventName - The event name to emit.
    * @param payload - The optional event payload.
    * @example
@@ -269,6 +277,7 @@ function buildEventBus(onError: ((error: Error) => void) | undefined): {
 
   /**
    * Register a hook handler for a given event name.
+   *
    * @param eventName - The event name to listen for.
    * @param handler - The handler to invoke when the event fires.
    * @example
@@ -290,6 +299,7 @@ function buildEventBus(onError: ((error: Error) => void) | undefined): {
 
 /**
  * Register hooks from all plugins. Each plugin's hooks(ctx) produces a handler map.
+ *
  * @param flatPlugins - The flattened plugin list.
  * @param buildPluginContext - Factory that builds context for a plugin.
  * @param registerHook - Function to register a hook handler for an event.
@@ -320,6 +330,7 @@ function registerPluginHooks(
 
 /**
  * Create a factory that builds PluginContext for a given plugin.
+ *
  * @param runtime - The kernel runtime with shared state.
  * @param resolvedConfigs - The resolved per-plugin config map.
  * @param states - The plugin state map.
@@ -354,6 +365,7 @@ function createContextFactory(
 
 /**
  * Build callback context for consumer lifecycle callbacks (onReady, onStart, onStop).
+ *
  * @param runtime - The kernel runtime with shared state and APIs.
  * @returns A dynamic object with config, emit, require, has, and all plugin APIs.
  * @example
@@ -386,6 +398,7 @@ function buildCallbackContext(runtime: KernelRuntime): DynamicObject {
 
 /**
  * Run onStop for all plugins in reverse order.
+ *
  * @param flatPlugins - The flattened plugin list.
  * @param globalConfig - The frozen global config object.
  * @example
@@ -405,6 +418,7 @@ async function executeStop(
 
 /**
  * Build the frozen app object with start, stop, emit, require, has and mounted plugin APIs.
+ *
  * @param runtime - The kernel runtime with shared state and APIs.
  * @param flatPlugins - The flattened plugin list.
  * @param buildPluginContext - Factory that builds context for a plugin.
@@ -434,6 +448,7 @@ function buildApp(
   const app: DynamicObject = {
     /**
      * Run onStart for all plugins, then consumer onStart.
+     *
      * @example
      * ```ts
      * await app.start();
@@ -459,6 +474,7 @@ function buildApp(
 
     /**
      * Run onStop for all plugins in reverse, then consumer onStop.
+     *
      * @example
      * ```ts
      * await app.stop();
@@ -477,6 +493,7 @@ function buildApp(
 
     /**
      * Emit an event with an optional payload.
+     *
      * @param eventName - The event name to emit.
      * @param payload - The optional event payload.
      * @example
@@ -490,6 +507,7 @@ function buildApp(
 
     /**
      * Look up a plugin API by instance reference.
+     *
      * @param instance - The plugin instance to look up.
      * @returns The plugin's API object.
      * @example
@@ -501,6 +519,7 @@ function buildApp(
 
     /**
      * Check if a plugin name is registered.
+     *
      * @param name - The plugin name to check.
      * @returns True if the plugin is registered.
      * @example
@@ -529,6 +548,7 @@ function buildApp(
  * Receives pre-flattened, pre-validated plugins and all captured context from
  * createCore. Performs: config resolution, state creation, event bus setup,
  * API building, lifecycle execution, returns frozen app object.
+ *
  * @param parameters - All kernel inputs captured from the factory chain.
  * @returns A promise that resolves to the frozen app object.
  * @example

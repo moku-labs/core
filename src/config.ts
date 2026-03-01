@@ -28,6 +28,7 @@ import { type BoundCreatePluginFunction, createPluginFactory } from "./plugin";
 
 /**
  * Return type of createCoreConfig. Named type required for isolatedDeclarations.
+ *
  * @example
  * ```ts
  * const result: CoreConfigResult<SiteConfig, SiteEvents> = createCoreConfig("app", { config: defaults });
@@ -53,6 +54,7 @@ interface CoreConfigResult<
  *
  * This is the ONLY export from `@moku-labs/core`. All downstream types flow from
  * the generics captured here.
+ *
  * @param id - Framework identifier used in error messages.
  * @param options - Configuration options containing the default config values.
  * @param options.config - Default configuration values for the framework.

@@ -35,6 +35,7 @@ import { validatePlugins } from "./utilities";
 
 /**
  * Options for createCore (Step 2).
+ *
  * @example
  * ```ts
  * createCore(coreConfig, { plugins: [routerPlugin], onReady: (ctx) => console.log(ctx.config) });
@@ -75,6 +76,7 @@ interface ConsumerAppOptions {
 /**
  * Return type of createCore (Step 2).
  * Carries the Plugins type parameter to thread type information through createApp.
+ *
  * @example
  * ```ts
  * const { createApp, createPlugin } = createCore(coreConfig, { plugins: [...] });
@@ -88,6 +90,7 @@ interface CreateCoreResult<
   /**
    * Step 3: Creates and initializes the application.
    * Generic over ExtraPlugins to merge consumer plugins into the return type.
+   *
    * @param options - Consumer-level config overrides, plugin configs, extra plugins.
    * @returns A promise that resolves to the frozen, fully typed App object.
    */
@@ -110,6 +113,7 @@ interface CreateCoreResult<
 /**
  * Bound createCore function type. Generic method captures the Plugins tuple
  * from options.plugins to thread type information into CreateCoreResult.
+ *
  * @example
  * ```ts
  * const framework = createCore(coreConfig, { plugins: [routerPlugin] });
@@ -135,6 +139,7 @@ type BoundCreateCoreFunction<
  * Generic parameters:
  * - `Config`: app-wide config from `createCoreConfig`
  * - `Events`: app-wide events from `createCoreConfig`
+ *
  * @param frameworkId - The framework identifier for error messages.
  * @param configDefaults - Default config values captured from Step 1.
  * @param createPlugin - Bound createPlugin function from Step 1.
@@ -156,6 +161,7 @@ function createCoreFactory<
 ): BoundCreateCoreFunction<Config, Events> {
   /**
    * Step 2: Captures framework default plugins and returns createApp.
+   *
    * @param _coreConfig - The CoreConfigResult object (for type flow only).
    * @param coreOptions - Framework-level defaults: plugins, pluginConfigs, onReady, onError.
    * @returns An object with createApp (async function) and createPlugin (same reference).
@@ -178,6 +184,7 @@ function createCoreFactory<
      * Step 3: Creates and initializes the application.
      * Merges consumer options with framework defaults, flattens and validates
      * plugins, then delegates to the kernel for lifecycle execution.
+     *
      * @param consumerOptions - Consumer-level config, plugins, and callbacks.
      * @returns A promise that resolves to the frozen App object.
      * @example
