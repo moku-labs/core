@@ -1,7 +1,7 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 
-import { coreConfig, createPlugin } from "./config";
-import { envPlugin } from "./env";
+import { coreConfig, createPlugin } from "../../../config";
+import { envPlugin } from "../..";
 
 // ---------------------------------------------------------------------------
 // Nano tier: env plugin (config + api, < 30 lines)

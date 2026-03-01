@@ -1,3 +1,10 @@
+/**
+ * Analytics plugin — Complex tier.
+ *
+ * Event tracking with pluggable provider backends.
+ * Depends on router for automatic page view tracking.
+ * @see README.md
+ */
 import { createPlugin } from "../config";
 import { routerPlugin } from "../router";
 import { createAnalyticsApi } from "./api";

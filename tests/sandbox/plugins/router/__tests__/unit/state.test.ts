@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { createRouterState } from "../state";
+import { createRouterState } from "../../state";
 
 // ---------------------------------------------------------------------------
 // Unit test: createRouterState (no kernel needed)

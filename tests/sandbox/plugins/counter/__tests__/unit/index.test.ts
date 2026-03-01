@@ -1,7 +1,7 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 
-import { coreConfig, createPlugin } from "./config";
-import { counterPlugin } from "./counter";
+import { coreConfig, createPlugin } from "../../../config";
+import { counterPlugin } from "../..";
 
 // ---------------------------------------------------------------------------
 // Micro tier: counter plugin (config + createState + api, 30-80 lines)

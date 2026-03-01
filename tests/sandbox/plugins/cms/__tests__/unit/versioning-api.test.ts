@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { CmsCtx, CmsState, ContentItem } from "../../types";
-import { createVersioningApi } from "../api";
+import { createVersioningApi } from "../../versioning/api";
 
 // ---------------------------------------------------------------------------
 // Unit test: createVersioningApi (mock context, no kernel)

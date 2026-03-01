@@ -1,3 +1,10 @@
+/**
+ * Router plugin — Standard tier.
+ *
+ * Client-side routing with navigation guards and history tracking.
+ * Emits `router:navigate` and `router:not-found`.
+ * @see README.md
+ */
 import { createPlugin } from "../config";
 import { createRouterApi } from "./api";
 import { handleAppError } from "./handlers";

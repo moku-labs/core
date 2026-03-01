@@ -1,7 +1,7 @@
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 
-import { createAnalyticsApi } from "../api";
-import type { AnalyticsCtx, AnalyticsState } from "../types";
+import { createAnalyticsApi } from "../../api";
+import type { AnalyticsCtx, AnalyticsState } from "../../types";
 
 // ---------------------------------------------------------------------------
 // Unit test: createAnalyticsApi (mock context, no kernel)

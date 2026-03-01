@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
-import type { AnalyticsProvider } from "../providers/types";
-import { shouldSample, trackEvent } from "../tracker";
-import type { TrackedEvent } from "../types";
+import type { AnalyticsProvider } from "../../providers/types";
+import { shouldSample, trackEvent } from "../../tracker";
+import type { TrackedEvent } from "../../types";
 
 // ---------------------------------------------------------------------------
 // Unit test: tracker logic (no kernel)

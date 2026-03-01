@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-
+import { createMediaApi } from "../../media/api";
 import type { CmsCtx, CmsState } from "../../types";
-import { createMediaApi } from "../api";
 
 // ---------------------------------------------------------------------------
 // Unit test: createMediaApi (mock context, no kernel)

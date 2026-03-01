@@ -10,6 +10,24 @@ export const createMediaApi = (ctx: CmsCtx): MediaApi => {
   };
 
   return {
+    /**
+     * Upload a media file. Validates the mime type against the allowlist
+     * and checks the file size against `maxUploadSize`. Stores the asset
+     * in state and emits `cms:upload` on success.
+     * @param input - The upload descriptor (filename, mimeType, size).
+     * @returns The created media asset with generated ID and URL.
+     * @throws {Error} When the mime type is not in the allowlist.
+     * @throws {Error} When the file size exceeds `maxUploadSize`.
+     * @example
+     * ```typescript
+     * const asset = app.cms.media.upload({
+     *   filename: "photo.jpg",
+     *   mimeType: "image/jpeg",
+     *   size: 1024
+     * });
+     * console.log(asset.url); // "/media/media-1/photo.jpg"
+     * ```
+     */
     upload: (input: UploadInput): MediaAsset => {
       if (!isValidMimeType(input.mimeType)) {
         throw new Error(
@@ -38,14 +56,30 @@ export const createMediaApi = (ctx: CmsCtx): MediaApi => {
       return asset;
     },
 
+    /**
+     * Retrieve a media asset by its ID. Used to look up a single asset
+     * for display or download.
+     * @param id - The media asset ID.
+     * @returns The media asset, or undefined if not found.
+     */
     getAsset: (id: string): MediaAsset | undefined => {
       return ctx.state.media.get(id);
     },
 
+    /**
+     * List all uploaded media assets. Returns a snapshot array —
+     * useful for media library views and admin panels.
+     * @returns An array of all stored media assets.
+     */
     list: (): MediaAsset[] => {
       return [...ctx.state.media.values()];
     },
 
+    /**
+     * Delete a media asset by ID. Removes it from the state store.
+     * @param id - The media asset ID to delete.
+     * @returns True if the asset was found and deleted, false otherwise.
+     */
     delete: (id: string): boolean => {
       return ctx.state.media.delete(id);
     }

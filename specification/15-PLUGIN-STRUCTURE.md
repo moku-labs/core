@@ -15,8 +15,8 @@ The answer is driven by one metric: **how much domain logic does each spec field
 
 | Trigger | Action |
 |---------|--------|
-| 1-2 spec fields, < 30 lines total | Nano — single file, no directory |
-| 2-3 spec fields, < 80 lines total | Micro — single file, no directory |
+| 1-2 spec fields, < 30 lines total | Nano — directory: `index.ts`, `__tests__/unit/`, `README.md` |
+| 2-3 spec fields, < 80 lines total | Micro — directory: `index.ts`, `__tests__/unit/`, `README.md` |
 | Any domain function > 20 lines | Extract to its own file → Standard |
 | Multiple domain concerns with shared types | Standard — directory with domain files |
 | Sub-domains with internal structure (providers, transforms) | Complex — subdirectories |
@@ -28,17 +28,29 @@ Start at the simplest tier that fits. Promote when the file outgrows its tier. N
 
 ## 2. Complexity Tiers
 
-### 2.1 Nano (single file, < 30 lines)
+### 2.1 Nano (directory, < 30 lines)
 
 Config-only plugins, trivial API with no state, feature flags, environment detection.
 
 ```
 plugins/
-  env.ts
+  env/
+    index.ts                 # Plugin definition.
+    README.md                # Plugin documentation.
+    __tests__/
+      unit/
+        index.test.ts        # Unit tests.
 ```
 
 ```typescript
-// plugins/env.ts
+// plugins/env/index.ts
+
+/**
+ * Env plugin — Nano tier.
+ *
+ * Environment detection: dev/prod mode and CI flag.
+ * @see README.md
+ */
 import { createPlugin } from '../config';
 
 export const envPlugin = createPlugin('env', {
@@ -54,19 +66,29 @@ export const envPlugin = createPlugin('env', {
 });
 ```
 
-Tests live alongside: `env.test.ts`.
-
-### 2.2 Micro (single file, 30-80 lines)
+### 2.2 Micro (directory, 30-80 lines)
 
 Simple state + API, self-contained domain logic that fits in one screen.
 
 ```
 plugins/
-  counter.ts
+  counter/
+    index.ts                 # Plugin definition.
+    README.md                # Plugin documentation.
+    __tests__/
+      unit/
+        index.test.ts        # Unit tests.
 ```
 
 ```typescript
-// plugins/counter.ts
+// plugins/counter/index.ts
+
+/**
+ * Counter plugin — Micro tier.
+ *
+ * Increment/decrement counter with configurable step.
+ * @see README.md
+ */
 import { createPlugin } from '../config';
 
 export const counterPlugin = createPlugin('counter', {
@@ -95,14 +117,25 @@ plugins/
     state.ts                 # createRouterState factory.
     api.ts                   # createRouterApi factory.
     handlers.ts              # Event handler factories.
+    README.md                # Plugin documentation.
     __tests__/
-      state.test.ts
-      api.test.ts
-      router.test.ts         # Integration test.
+      unit/
+        state.test.ts        # Unit test.
+        api.test.ts          # Unit test.
+      integration/
+        router.test.ts       # Integration test.
 ```
 
 ```typescript
 // plugins/router/index.ts
+
+/**
+ * Router plugin — Standard tier.
+ *
+ * Client-side routing with navigation guards and history tracking.
+ * Emits `router:navigate` and `router:not-found`.
+ * @see README.md
+ */
 import { createPlugin } from '../../config';
 import { rendererPlugin } from '../renderer';
 import { createRouterState } from './state';
@@ -143,16 +176,27 @@ plugins/
       google.ts              # Google Analytics adapter.
       plausible.ts           # Plausible adapter.
       types.ts               # Provider interface.
+    README.md                # Plugin documentation.
     __tests__/
-      tracker.test.ts
-      api.test.ts
-      providers/
-        google.test.ts
-        plausible.test.ts
+      unit/
+        api.test.ts          # Unit test.
+        tracker.test.ts      # Unit test.
+        google-provider.test.ts   # Unit test.
+        plausible-provider.test.ts # Unit test.
+      integration/
+        analytics.test.ts    # Integration test.
 ```
 
 ```typescript
 // plugins/analytics/index.ts
+
+/**
+ * Analytics plugin — Complex tier.
+ *
+ * Event tracking with pluggable providers.
+ * Emits `analytics:track`, `analytics:identify`, `analytics:error`.
+ * @see README.md
+ */
 import { createPlugin } from '../../config';
 import { createAnalyticsState } from './state';
 import { createAnalyticsApi } from './api';
@@ -189,23 +233,15 @@ plugins/
       state.ts               # Content registry, draft store.
       api.ts                 # create(), update(), delete(), query().
       validator.ts           # Schema validation for content types.
-      __tests__/
-        api.test.ts
-        validator.test.ts
     media/
       types.ts               # MediaAsset, UploadOptions.
       state.ts               # Asset registry, upload queue.
       api.ts                 # upload(), transform(), resolve().
       processing.ts          # Image resize, format conversion.
-      __tests__/
-        api.test.ts
-        processing.test.ts
     versioning/
       types.ts               # Version, Diff, ChangeSet.
       state.ts               # Version history, branch state.
       api.ts                 # commit(), revert(), diff(), history().
-      __tests__/
-        api.test.ts
     publishing/
       types.ts               # PublishTarget, Pipeline, Schedule.
       state.ts               # Publish queue, schedule registry.
@@ -214,16 +250,30 @@ plugins/
         static.ts            # Static site generation target.
         api-endpoint.ts      # API publishing target.
         types.ts             # PublishTarget interface.
-      __tests__/
-        api.test.ts
-        targets/
-          static.test.ts
+    README.md                # Plugin documentation.
     __tests__/
-      cms.test.ts            # Full integration test.
+      unit/
+        content-api.test.ts       # Unit test.
+        content-validator.test.ts # Unit test.
+        media-api.test.ts         # Unit test.
+        media-processing.test.ts  # Unit test.
+        versioning-api.test.ts    # Unit test.
+        publishing-api.test.ts    # Unit test.
+        publishing-static.test.ts # Unit test.
+      integration/
+        cms.test.ts               # Full integration test.
 ```
 
 ```typescript
 // plugins/cms/index.ts
+
+/**
+ * CMS plugin — Very Complex tier.
+ *
+ * Content management with CRUD, media uploads, and versioning.
+ * Depends on db and http. Emits `cms:publish`, `cms:draft`, `cms:upload`.
+ * @see README.md
+ */
 import { createPlugin } from '../../config';
 import { dbPlugin } from '../db';
 import { httpPlugin } from '../http';
@@ -265,7 +315,7 @@ export const cmsPlugin = createPlugin('cms', {
 - The root `index.ts` still only wires. It imports module APIs and composes them into a namespaced public API.
 - The public API uses **namespaced objects** (`app.cms.content.create()`, `app.cms.media.upload()`) to organize the surface area.
 - Module directories do NOT import from each other directly. Cross-module coordination goes through the root state or shared types.
-- One integration test at the plugin root (`__tests__/cms.test.ts`) tests the full plugin. Module-level tests cover each module independently.
+- One integration test at the plugin root (`__tests__/integration/cms.test.ts`) tests the full plugin. Module-level unit tests live flat in `__tests__/unit/` with hyphenated names (e.g. `content-api.test.ts`, `media-processing.test.ts`).
 
 **When to split instead:** If modules have no shared state, no shared events, and no cross-module coordination — they should be separate plugins, not one very complex plugin. The very complex tier exists for cases where the modules are genuinely coupled and must share internal state.
 
@@ -281,11 +331,16 @@ Formatters, validators, helpers, environment detection. Pure functions, no state
 
 ```
 plugins/
-  format.ts                  # ~20 lines. Pure API, no state.
+  format/
+    index.ts                 # ~20 lines. Pure API, no state.
+    README.md                # Plugin documentation.
+    __tests__/
+      unit/
+        index.test.ts        # Unit tests.
 ```
 
 ```typescript
-// plugins/format.ts
+// plugins/format/index.ts
 import { createPlugin } from '../config';
 
 export const formatPlugin = createPlugin('format', {
@@ -320,10 +375,13 @@ plugins/
     commands/
       help.ts                # Built-in help command.
       version.ts             # Built-in version command.
+    README.md                # Plugin documentation.
     __tests__/
-      api.test.ts
-      commands/
-        help.test.ts
+      unit/
+        api.test.ts          # Unit test.
+        help-command.test.ts # Unit test.
+      integration/
+        cli.test.ts          # Integration test.
 ```
 
 ```typescript
@@ -364,8 +422,12 @@ plugins/
     types.ts                 # CompilerOptions, DiagnosticResult.
     state.ts                 # Cached program, file registry.
     api.ts                   # compile(), check(), watch().
+    README.md                # Plugin documentation.
     __tests__/
-      api.test.ts
+      unit/
+        api.test.ts          # Unit test.
+      integration/
+        typescript.test.ts   # Integration test.
 ```
 
 Multi-phase build pipeline:
@@ -383,11 +445,14 @@ plugins/
       css.ts                 # CSS processing.
       assets.ts              # Static asset handling.
       types.ts               # Transform interface.
+    README.md                # Plugin documentation.
     __tests__/
-      api.test.ts
-      transforms/
-        typescript.test.ts
-        css.test.ts
+      unit/
+        api.test.ts          # Unit test.
+        typescript-transform.test.ts # Unit test.
+        css-transform.test.ts # Unit test.
+      integration/
+        bundler.test.ts      # Integration test.
 ```
 
 Build plugins benefit from a `transforms/` or `phases/` subdirectory. Each transform is a pure function that can be tested independently.
@@ -408,9 +473,13 @@ plugins/
     state.ts                 # Server instance, middleware stack.
     api.ts                   # listen(), use(), route().
     handlers.ts              # Error handler, not-found handler.
+    README.md                # Plugin documentation.
     __tests__/
-      api.test.ts
-      handlers.test.ts
+      unit/
+        api.test.ts          # Unit test.
+        handlers.test.ts     # Unit test.
+      integration/
+        http.test.ts         # Integration test.
 ```
 
 ```typescript
@@ -446,8 +515,12 @@ plugins/
     types.ts                 # QueryResult, Migration types.
     state.ts                 # Connection pool, migration state.
     api.ts                   # query(), migrate(), transaction().
+    README.md                # Plugin documentation.
     __tests__/
-      api.test.ts
+      unit/
+        api.test.ts          # Unit test.
+      integration/
+        db.test.ts           # Integration test.
 ```
 
 ### 3.5 SPA Plugins
@@ -466,9 +539,13 @@ plugins/
     state.ts                 # Current route, history stack, guards.
     api.ts                   # navigate(), back(), addGuard().
     handlers.ts              # popstate handler, link click handler.
+    README.md                # Plugin documentation.
     __tests__/
-      state.test.ts
-      api.test.ts
+      unit/
+        state.test.ts        # Unit test.
+        api.test.ts          # Unit test.
+      integration/
+        spa-router.test.ts   # Integration test.
 ```
 
 Store with slices and middleware:
@@ -486,10 +563,13 @@ plugins/
     middleware/
       logger.ts              # Action logger.
       thunk.ts               # Async action middleware.
+    README.md                # Plugin documentation.
     __tests__/
-      api.test.ts
-      slices/
-        index.test.ts
+      unit/
+        api.test.ts          # Unit test.
+        slices.test.ts       # Unit test.
+      integration/
+        store.test.ts        # Integration test.
 ```
 
 SPA plugins often need browser-specific lifecycle (popstate, DOMContentLoaded). These belong in `handlers.ts` or `onStart`, never in `api.ts`.
@@ -504,7 +584,12 @@ Theme (micro):
 
 ```
 plugins/
-  theme.ts                   # ~50 lines. Config (palette) + API (get/set).
+  theme/
+    index.ts                 # ~50 lines. Config (palette) + API (get/set).
+    README.md                # Plugin documentation.
+    __tests__/
+      unit/
+        index.test.ts        # Unit tests.
 ```
 
 i18n (standard):
@@ -516,8 +601,12 @@ plugins/
     types.ts                 # Locale, TranslationMap.
     state.ts                 # Current locale, loaded translations.
     api.ts                   # t(), setLocale(), getLocale().
+    README.md                # Plugin documentation.
     __tests__/
-      api.test.ts
+      unit/
+        api.test.ts          # Unit test.
+      integration/
+        i18n.test.ts         # Integration test.
 ```
 
 ```typescript
@@ -559,10 +648,14 @@ plugins/
     state.ts                 # Current user, session token.
     api.ts                   # login(), logout(), getUser(), isAuthenticated().
     handlers.ts              # Token refresh, session expiry handlers.
+    README.md                # Plugin documentation.
     __tests__/
-      state.test.ts
-      api.test.ts
-      handlers.test.ts
+      unit/
+        state.test.ts        # Unit test.
+        api.test.ts          # Unit test.
+        handlers.test.ts     # Unit test.
+      integration/
+        auth.test.ts         # Integration test.
 ```
 
 ```typescript
@@ -614,52 +707,65 @@ plugins/
     webhooks/
       handler.ts             # Webhook verification + dispatch.
       events.ts              # Webhook event type map.
+    README.md                # Plugin documentation.
     __tests__/
-      api.test.ts
-      providers/
-        stripe.test.ts
-        paypal.test.ts
-      webhooks/
-        handler.test.ts
+      unit/
+        api.test.ts          # Unit test.
+        stripe-provider.test.ts  # Unit test.
+        paypal-provider.test.ts  # Unit test.
+        webhook-handler.test.ts  # Unit test.
+      integration/
+        payments.test.ts     # Integration test.
 ```
 
 ---
 
 ## 4. Testing Layout
 
-### Two Patterns
+### Test Directory Structure
 
-| Pattern | When |
-|---------|------|
-| Adjacent `.test.ts` file | Nano and micro plugins |
-| Colocated `__tests__/` directory | Standard, complex, and very complex plugins |
+All test files live under a `__tests__/` directory within each plugin, separated into `unit/` and `integration/` subdirectories. Both `unit/` and `integration/` are **flat** — no nested subdirectories. Use hyphenated file names to disambiguate when multiple source files share the same base name (e.g. `content-api.test.ts`, `media-api.test.ts`). Source directories contain only source files.
+
+| Directory | Contents | When |
+|-----------|----------|------|
+| `__tests__/unit/` | Unit tests — flat, no subdirectories | All tiers |
+| `__tests__/integration/` | Integration tests using `createApp` — flat | Standard+ |
 
 ```
 # Nano/Micro
 plugins/
-  env.ts
-  env.test.ts
+  env/
+    index.ts
+    README.md
+    __tests__/
+      unit/
+        index.test.ts        # Unit tests.
 
-# Standard/Complex
+# Standard/Complex/Very Complex
 plugins/
   router/
     api.ts
     state.ts
+    README.md
     __tests__/
-      api.test.ts
-      state.test.ts
-      router.test.ts        # Integration test
+      unit/
+        api.test.ts          # Unit test.
+        state.test.ts        # Unit test.
+      integration/
+        router.test.ts       # Integration test.
 ```
 
 ### Test File Naming
 
 | Source | Test |
 |-------|------|
-| `api.ts` | `__tests__/api.test.ts` |
-| `state.ts` | `__tests__/state.test.ts` |
-| `handlers.ts` | `__tests__/handlers.test.ts` |
-| `counter.ts` (nano/micro) | `counter.test.ts` |
-| Plugin integration | `__tests__/<plugin-name>.test.ts` |
+| `api.ts` | `__tests__/unit/api.test.ts` |
+| `state.ts` | `__tests__/unit/state.test.ts` |
+| `handlers.ts` | `__tests__/unit/handlers.test.ts` |
+| `index.ts` (nano/micro) | `__tests__/unit/index.test.ts` |
+| `providers/google.ts` | `__tests__/unit/google-provider.test.ts` |
+| `content/api.ts` (very complex) | `__tests__/unit/content-api.test.ts` |
+| Plugin integration | `__tests__/integration/<plugin-name>.test.ts` |
 
 ### Unit Testing Domain Files
 
@@ -719,10 +825,10 @@ export const routerPlugin = createPlugin('router', {
 Domain factories can be unit tested with mock contexts — no kernel required:
 
 ```typescript
-// plugins/router/__tests__/api.test.ts
+// plugins/router/__tests__/unit/api.test.ts
 import { describe, it, expect, vi } from 'vitest';
-import { createRouterApi } from '../api';
-import type { RouterCtx } from '../types';
+import { createRouterApi } from '../../api';
+import type { RouterCtx } from '../../types';
 
 describe('createRouterApi', () => {
   it('navigates to path and updates state', () => {
@@ -768,6 +874,8 @@ Integration tests use `createApp` to verify the full plugin wiring.
 | Export config, state, API type definitions | Export runtime values |
 | Use `import type` for all imports | Contain function implementations |
 | Define types shared across 2+ domain files | Duplicate types from the kernel |
+| Have JSDoc on State types with field-level comments | Have JSDoc on internal `XxxCtx` types |
+| Have JSDoc on each method in `XxxApi` type interfaces | |
 
 Only create `types.ts` when types are shared across 2+ files. If only `index.ts` uses them, inline them.
 
@@ -778,6 +886,7 @@ Only create `types.ts` when types are shared across 2+ files. If only `index.ts`
 | Export a `create<Name>State` factory | Access anything beyond `{ global, config }` |
 | Accept MinimalContext-shaped argument | Call `require`, `has`, or `emit` |
 | Return the initial state object | Perform side effects |
+| Have JSDoc on the factory explaining initial values | |
 
 ### api.ts
 
@@ -795,9 +904,201 @@ Only create `types.ts` when types are shared across 2+ files. If only `index.ts`
 | Accept context or relevant parameters | Contain wiring logic |
 | Handle a single event concern per function | Mix multiple event domains |
 
+### README.md
+
+| MUST | MUST NOT |
+|------|----------|
+| Describe plugin purpose and tier | Duplicate implementation details |
+| Include config table, API methods, events table | Contain code that should be in source |
+| List dependencies and usage examples | Be auto-generated boilerplate |
+
 ---
 
-## 6. Naming Conventions
+## 6. Documentation Requirements
+
+### JSDoc
+
+All **public-facing types** (Config, API, Events, State, exported domain types) MUST have JSDoc with `@example` tags showing usage. Internal context types (`XxxCtx`) should NOT have JSDoc — they are wiring-only types consumed by domain factories.
+
+**API method JSDoc:** Every method returned from API factories (`create<Name>Api`) AND every method in exported `XxxApi` type interfaces MUST have a JSDoc comment with:
+- A description explaining **what** it does and **why** it exists
+- `@param` for each parameter
+- `@returns` describing the return value
+- `@throws {Error}` for methods that throw (the `{Error}` type is required by linter)
+- `@example` for complex methods (multi-step usage, non-obvious behavior)
+
+**State type JSDoc:** State types MUST have JSDoc with an `@example` showing a realistic populated state. Each field MUST have an inline JSDoc comment explaining what it holds, how it gets populated, and its initial value.
+
+**State factory JSDoc:** Every `create<Name>State` factory function MUST have a JSDoc comment explaining the initial values and how the state evolves during the plugin lifecycle.
+
+```typescript
+// types.ts — public types get JSDoc with @example
+
+/**
+ * Router plugin configuration.
+ * @example
+ * ```typescript
+ * { basePath: "/app", notFoundPath: "/404" }
+ * ```
+ */
+export type RouterConfig = {
+  /** Base path prefix for all routes. */
+  basePath: string;
+  /** Redirect path when no route matches. */
+  notFoundPath: string;
+};
+
+/**
+ * Internal mutable state for the router plugin.
+ * @example
+ * ```typescript
+ * // After navigating: "/" → "/dashboard" → "/settings"
+ * {
+ *   currentPath: "/settings",
+ *   history: ["/", "/dashboard"],
+ *   guards: [authGuard],
+ *   initialized: true
+ * }
+ * ```
+ */
+export type RouterState = {
+  /** The currently active route path. Set by `navigate()` and `back()`. Initialized to `config.basePath`. */
+  currentPath: string;
+  /** Stack of previously visited paths. Pushed on `navigate()`, popped on `back()`. Starts empty. */
+  history: string[];
+  /** Registered navigation guards. Each is called before route changes — return false to block. */
+  guards: NavigationGuard[];
+  /** Whether the router has completed initialization. Set to true during `onStart`. */
+  initialized: boolean;
+};
+
+// Internal context types — NO JSDoc
+export type RouterCtx = { ... };
+```
+
+```typescript
+// types.ts — Api type interfaces document each method
+
+export type RouterApi = {
+  /**
+   * Navigate to a path. Checks all registered guards before allowing
+   * the transition. If any guard rejects, the navigation is blocked
+   * and state remains unchanged. Emits `router:navigate` on success.
+   * @param path - The target path to navigate to.
+   * @returns The navigation result indicating whether the route change was blocked.
+   */
+  navigate: (path: string) => NavigationResult;
+
+  /**
+   * Get the current path. Used to read where the router is currently
+   * pointing without triggering any navigation or side effects.
+   * @returns The current active path.
+   */
+  current: () => string;
+};
+```
+
+```typescript
+// api.ts — implementation methods mirror the Api type JSDoc
+
+export const createRouterApi = (ctx: RouterCtx) => ({
+  /**
+   * Navigate to a path. Checks all registered guards before allowing
+   * the transition. If any guard rejects, the navigation is blocked
+   * and state remains unchanged. Emits `router:navigate` on success.
+   * @param path - The target path to navigate to.
+   * @returns The navigation result indicating whether the route change was blocked.
+   * @example
+   * ```typescript
+   * const result = app.router.navigate("/dashboard");
+   * if (result.blocked) console.log("Blocked by a guard");
+   * ```
+   */
+  navigate: (path: string): NavigationResult => { ... },
+
+  /**
+   * Get the current path. Used to read where the router is currently
+   * pointing without triggering any navigation or side effects.
+   * @returns The current active path.
+   */
+  current: (): string => ctx.state.currentPath,
+});
+```
+
+```typescript
+// state.ts — factory gets JSDoc explaining initial values
+
+/**
+ * Create the initial router state. Sets `currentPath` to the configured
+ * `basePath` so the router starts at the application root. History and
+ * guards start empty; `initialized` is set to true during `onStart`.
+ * @param ctx - Minimal context with config for reading `basePath`.
+ * @returns A fresh router state object.
+ */
+export const createRouterState = (ctx: StateCtx): RouterState => ({
+  currentPath: ctx.config.basePath,
+  history: [],
+  guards: [],
+  initialized: false
+});
+```
+
+**Module-level JSDoc** on `index.ts`: 3-5 lines covering tier, purpose, key events/deps, and a `@see README.md` reference:
+
+```typescript
+/**
+ * Router plugin — Standard tier.
+ *
+ * Client-side routing with navigation guards and history tracking.
+ * Emits `router:navigate` and `router:not-found`.
+ * @see README.md
+ */
+import { createPlugin } from '../config';
+```
+
+### README.md
+
+Every plugin directory gets a `README.md`. Template sections:
+
+```markdown
+# Plugin Name
+
+Brief description (1-2 sentences).
+
+**Tier:** Nano | Micro | Standard | Complex | Very Complex
+
+## Config
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+
+## API
+
+### `methodName(args): ReturnType`
+Description.
+
+## Events
+
+| Event | Payload | Description |
+|-------|---------|-------------|
+
+## Dependencies
+
+- `pluginName` — reason
+
+## Usage
+
+\`\`\`typescript
+const app = await createApp({ ... });
+app.pluginName.method();
+\`\`\`
+```
+
+Nano/micro plugins omit sections that don't apply (e.g., Events, Dependencies).
+
+---
+
+## 7. Naming Conventions
 
 ### Plugin Instance
 
@@ -835,7 +1136,7 @@ Convention: `pluginName:action`
 
 ---
 
-## 7. Anti-Patterns
+## 8. Anti-Patterns
 
 | Anti-Pattern | Why It's Wrong | Fix |
 |--------------|---------------|-----|
@@ -845,32 +1146,35 @@ Convention: `pluginName:action`
 | **Barrel file chains** — `providers/index.ts` re-exporting from `google/index.ts` | Deep re-export chains are hard to follow. | One level of barrel maximum. |
 | **Domain logic in handlers.ts** — complex business rules inside event handlers | Handlers should be thin dispatchers. | Delegate to domain functions; handlers call them. |
 | **Cross-plugin internal imports** — Plugin A importing from Plugin B's `state.ts` | Breaks encapsulation. Plugins communicate through `ctx.require()`. | Only import plugin instances for `depends`. Access APIs through `ctx.require()`. |
+| **No README** — plugin directory has no README.md | Plugin purpose, config, and API are undiscoverable. | Add README.md with description, config, API, events, usage. |
+| **No JSDoc on public types** — Config/API/Events/State/API methods lack documentation | Consumers cannot understand the plugin without reading source. | Add JSDoc with `@example` to public types. Add `@param`, `@returns`, `@throws {Error}`, `@example` to API methods. Document State fields with inline JSDoc. Document `create<Name>State` factories. |
+| **Undocumented state fields** — State type has no field-level JSDoc | State semantics are invisible — unclear what each field holds or how it evolves. | Add inline JSDoc to every State field explaining purpose, population source, and initial value. |
 
 ---
 
-## 8. Decision Flowchart
+## 9. Decision Flowchart
 
 ```
 How many spec fields does your plugin use?
 │
 ├─ 1-2 fields, < 30 lines total?
-│  └─ NANO — single .ts file
+│  └─ NANO — directory: index.ts + __tests__/unit/ + README.md
 │
 ├─ 2-3 fields, < 80 lines total?
-│  └─ MICRO — single .ts file
+│  └─ MICRO — directory: index.ts + __tests__/unit/ + README.md
 │
 ├─ 3+ fields, or any domain function > 20 lines?
 │  │
 │  ├─ Does it have sub-domains (providers, strategies, transforms)?
 │  │  │
 │  │  ├─ Multiple coordinating modules with own state/API?
-│  │  │  └─ VERY COMPLEX — module directories
+│  │  │  └─ VERY COMPLEX — module directories + __tests__/unit/ + __tests__/integration/ + README.md
 │  │  │
 │  │  └─ Single sub-domain concern?
-│  │     └─ COMPLEX — directory with subdirectories
+│  │     └─ COMPLEX — directory with subdirectories + __tests__/unit/ + __tests__/integration/ + README.md
 │  │
 │  └─ No sub-domains?
-│     └─ STANDARD — directory with domain files
+│     └─ STANDARD — directory with domain files + __tests__/unit/ + __tests__/integration/ + README.md
 │
 └─ Still unsure?
    └─ Start with MICRO. Promote when the file outgrows it.

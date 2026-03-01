@@ -1,8 +1,8 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 
-import { coreConfig } from "../../config";
-import { routerPlugin } from "../../router";
-import { analyticsPlugin } from "../index";
+import { coreConfig } from "../../../config";
+import { routerPlugin } from "../../../router";
+import { analyticsPlugin } from "../../index";
 
 // ---------------------------------------------------------------------------
 // Integration test: analytics plugin with createApp

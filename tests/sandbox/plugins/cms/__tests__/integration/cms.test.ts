@@ -1,8 +1,8 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
-import { analyticsPlugin } from "../../analytics";
-import { coreConfig } from "../../config";
-import { routerPlugin } from "../../router";
-import { cmsPlugin } from "../index";
+import { analyticsPlugin } from "../../../analytics";
+import { coreConfig } from "../../../config";
+import { routerPlugin } from "../../../router";
+import { cmsPlugin } from "../../index";
 
 // ---------------------------------------------------------------------------
 // Integration test: CMS plugin (very complex tier) with createApp

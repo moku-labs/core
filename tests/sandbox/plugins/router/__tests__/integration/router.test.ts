@@ -1,7 +1,7 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 
-import { coreConfig } from "../../config";
-import { routerPlugin } from "../index";
+import { coreConfig } from "../../../config";
+import { routerPlugin } from "../../index";
 
 // ---------------------------------------------------------------------------
 // Integration test: router plugin with createApp

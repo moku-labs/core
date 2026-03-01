@@ -1,7 +1,7 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 
-import { createRouterApi } from "../api";
-import type { RouterCtx, RouterState } from "../types";
+import { createRouterApi } from "../../api";
+import type { RouterCtx, RouterState } from "../../types";
 
 // ---------------------------------------------------------------------------
 // Unit test: createRouterApi (mock context, no kernel)

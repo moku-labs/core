@@ -1,7 +1,6 @@
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
-
+import { createContentApi } from "../../content/api";
 import type { CmsCtx, CmsState } from "../../types";
-import { createContentApi } from "../api";
 
 // ---------------------------------------------------------------------------
 // Unit test: createContentApi (mock context, no kernel)

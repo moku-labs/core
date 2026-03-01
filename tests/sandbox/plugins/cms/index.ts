@@ -1,3 +1,10 @@
+/**
+ * CMS plugin — Very Complex tier.
+ *
+ * Content management with CRUD, media uploads, and versioning.
+ * Depends on router and analytics.
+ * @see README.md
+ */
 import { analyticsPlugin } from "../analytics";
 import { createPlugin } from "../config";
 import { routerPlugin } from "../router";

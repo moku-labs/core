@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { isValidMimeType, transformAsset } from "../processing";
+import { isValidMimeType, transformAsset } from "../../media/processing";
 
 // ---------------------------------------------------------------------------
 // Unit test: media processing (no kernel)

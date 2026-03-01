@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { validateContent } from "../validator";
+import { validateContent } from "../../content/validator";
 
 // ---------------------------------------------------------------------------
 // Unit test: content validator (no kernel)
