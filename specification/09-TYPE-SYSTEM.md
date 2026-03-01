@@ -1,13 +1,13 @@
 # 09 - Type System
 
 **Domain:** Plugin instance types, type helpers, BuildPluginApis, App type, type flow
-**Version:** v3 (3-step architecture)
+**Architecture:** 3-step (createCoreConfig -> createCore -> createApp)
 
 ---
 
 ## 1. Design Philosophy
 
-Types flow through closures, not explicit generics. The v3 architecture captures types at each step of the factory chain:
+Types flow through closures, not explicit generics. The architecture captures types at each step of the factory chain:
 
 - `createCoreConfig<Config, Events>` captures the global type contract
 - `createPlugin(name, spec)` infers everything from the spec object -- config, state, API, and event types

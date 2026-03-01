@@ -319,7 +319,7 @@ describe("strict hooks typing (no escape hatch)", () => {
 describe("ctx.global is read-only config (SAND-06)", () => {
   it("ctx.global is Readonly<Config> with no state field", () => {
     // In a plugin's api/onInit, ctx.global has siteName and mode (from SiteConfig).
-    // ctx.global does NOT have a state field -- global state is deferred in v3.
+    // ctx.global does NOT have a state field -- global state is deferred.
     // ctx.global does NOT have setState -- no mutation of global config.
     // ctx.global is readonly -- properties cannot be assigned.
 

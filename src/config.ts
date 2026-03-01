@@ -1,5 +1,5 @@
 // =============================================================================
-// @moku-labs/core v3 — Config Factory (Step 1 of Factory Chain)
+// @moku-labs/core — Config Factory (Step 1 of Factory Chain)
 // =============================================================================
 // This is the ONLY export from the package. It captures Config and Events
 // generics in a closure and returns { createPlugin, createCore }.

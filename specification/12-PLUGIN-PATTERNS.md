@@ -1,7 +1,7 @@
 # 12 - Plugin Patterns and LLM Guide
 
 **Domain:** Plugin = connection point, file structure, conventions, LLM system prompt
-**Architecture:** v3 3-step (createCoreConfig -> createCore -> createApp)
+**Architecture:** 3-step (createCoreConfig -> createCore -> createApp)
 
 ---
 

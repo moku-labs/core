@@ -1,5 +1,5 @@
 // =============================================================================
-// @moku-labs/core v3 - createApp Kernel
+// @moku-labs/core - createApp Kernel
 // =============================================================================
 // The runtime heart of the framework. Called by createCore's createApp wrapper
 // after plugin list merging and validatePlugins have run.

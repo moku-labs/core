@@ -1,7 +1,7 @@
 # 03 - Plugin System
 
 **Domain:** PluginSpec, createPlugin, depends, lifecycle methods
-**Architecture:** Plugins are the only extensibility primitive in v3
+**Architecture:** Plugins are the only extensibility primitive
 
 ---
 

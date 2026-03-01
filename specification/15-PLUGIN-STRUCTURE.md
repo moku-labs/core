@@ -1,7 +1,7 @@
 # 15 - Plugin Structure and Code Organization
 
 **Domain:** Complexity tiers, domain-specific file layouts, promotion triggers, naming conventions
-**Architecture:** v3 3-step (createCoreConfig -> createCore -> createApp)
+**Architecture:** 3-step (createCoreConfig -> createCore -> createApp)
 
 ---
 

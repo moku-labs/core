@@ -1,7 +1,7 @@
 # 08 - Context Object
 
 **Domain:** ctx object, context tiers, phase-appropriate context rules
-**Version:** v3 (3-step architecture)
+**Architecture:** 3-step (createCoreConfig -> createCore -> createApp)
 
 ---
 
@@ -15,7 +15,7 @@ The context is the plugin's window into the kernel. It provides access to config
 
 ## 2. Context Tiers
 
-v3 has three context tiers, each providing progressively more functionality:
+There are three context tiers, each providing progressively more functionality:
 
 ### MinimalContext
 

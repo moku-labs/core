@@ -1,7 +1,7 @@
 # 06 - Lifecycle
 
 **Domain:** 3 lifecycle phases, ordering, async execution, error handling
-**Version:** v3 (3-step architecture)
+**Architecture:** 3-step (createCoreConfig -> createCore -> createApp)
 
 ---
 

@@ -1,13 +1,13 @@
 # 13 - Kernel Pseudocode (Reference Implementation)
 
-**Domain:** Complete v3 reference implementation in pseudo-TypeScript, design decisions log
-**Version:** v3 (3-step factory chain)
+**Domain:** Complete reference implementation in pseudo-TypeScript, design decisions log
+**Architecture:** 3-step factory chain (createCoreConfig -> createCore -> createApp)
 
 ---
 
 ## 1. Design Decisions Log
 
-Every significant "why" in the v3 architecture:
+Every significant "why" in the architecture:
 
 | # | Decision | Alternative Considered | Why This Choice |
 |---|----------|----------------------|-----------------|

@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **@moku-labs/core** is a micro-kernel plugin framework for TypeScript. One export (`createCore`), three layers (core -> framework -> consumer), each constraining the layer above. The entire API fits in an LLM context window by design.
 
-**Status:** Implementation in progress (v3 architecture).
+**Status:** Alpha — implementation in progress.
 
 ## Architecture: Three Layers
 

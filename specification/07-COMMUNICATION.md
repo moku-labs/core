@@ -1,7 +1,7 @@
 # 07 - Communication Model
 
 **Domain:** emit, hooks, Events, PluginEvents, event merging via depends
-**Version:** v3 (3-step architecture)
+**Architecture:** 3-step (createCoreConfig -> createCore -> createApp)
 
 ---
 
@@ -21,7 +21,7 @@ A single `emit` method handles all event communication. Known event names get fu
 
 ## 2. Event Sources
 
-v3 has two sources of typed events:
+There are two sources of typed events:
 
 ### Global Events
 

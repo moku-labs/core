@@ -1,7 +1,7 @@
 # 05 - Config System
 
 **Domain:** Config resolution, defaults, pluginConfigs mapped type, structured createApp namespaces
-**Version:** v3 (3-step architecture)
+**Architecture:** 3-step (createCoreConfig -> createCore -> createApp)
 
 ---
 
@@ -52,7 +52,7 @@ If `config` has a nested object `{ database: { host: 'localhost', port: 5432 } }
 
 ## 4. Per-Plugin Config in createApp
 
-In v3, consumers pass plugin configs in the `pluginConfigs` namespace, keyed by plugin name:
+Consumers pass plugin configs in the `pluginConfigs` namespace, keyed by plugin name:
 
 ```typescript
 const app = await createApp({

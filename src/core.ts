@@ -1,5 +1,5 @@
 // =============================================================================
-// @moku-labs/core v3 — Core Factory (Step 2+3 of Factory Chain)
+// @moku-labs/core — Core Factory (Step 2+3 of Factory Chain)
 // =============================================================================
 // Creates the bound createCore function that captures framework defaults
 // (plugins, pluginConfigs, callbacks) and returns createApp + createPlugin.

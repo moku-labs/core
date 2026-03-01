@@ -7,7 +7,7 @@
 
 ## 1. Overview
 
-The factory chain is the defining architectural feature of Moku v3. Three function calls, each capturing context in closures and progressively binding types:
+The factory chain is the defining architectural feature of Moku. Three function calls, each capturing context in closures and progressively binding types:
 
 ```
 Step 1: createCoreConfig<Config, Events>(id, options)

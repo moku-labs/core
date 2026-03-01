@@ -1,7 +1,7 @@
 # 11 - Invariants and Anti-Patterns
 
 **Domain:** Guarantees, error messages, anti-patterns
-**Architecture:** v3 3-step (createCoreConfig -> createCore -> createApp)
+**Architecture:** 3-step (createCoreConfig -> createCore -> createApp)
 
 ---
 
@@ -239,7 +239,7 @@ app.registerService(AuthService);
 const authPlugin = createPlugin('auth', { ... });
 ```
 
-**The v3 primitives are:** `createCoreConfig`, `createCore`, `createApp`, `createPlugin`. If you need something the framework does not have, you build a plugin. Not a new abstraction.
+**The primitives are:** `createCoreConfig`, `createCore`, `createApp`, `createPlugin`. If you need something the framework does not have, you build a plugin. Not a new abstraction.
 
 ### 2.9 Forgetting await on createApp
 
