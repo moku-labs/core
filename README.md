@@ -1,4 +1,4 @@
-# @moku-labs/core
+# Moku Core
 
 **Micro-kernel plugin framework for TypeScript. Three layers of isolation. Built for LLM-scale development.**
 
