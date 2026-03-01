@@ -1,3 +1,5 @@
+import type { PluginCtx } from "../../../../src";
+
 /**
  * Analytics plugin configuration.
  *
@@ -70,11 +72,4 @@ export type AnalyticsEvents = {
   "analytics:identify": { userId: string };
 };
 
-export type AnalyticsCtx = {
-  config: AnalyticsConfig;
-  state: AnalyticsState;
-  emit: {
-    (name: "analytics:track", payload: AnalyticsEvents["analytics:track"]): void;
-    (name: "analytics:identify", payload: AnalyticsEvents["analytics:identify"]): void;
-  };
-};
+export type AnalyticsCtx = PluginCtx<AnalyticsConfig, AnalyticsState, AnalyticsEvents>;

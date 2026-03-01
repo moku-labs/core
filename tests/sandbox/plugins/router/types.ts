@@ -1,3 +1,5 @@
+import type { PluginCtx } from "../../../../src";
+
 /**
  * Router plugin configuration.
  *
@@ -80,11 +82,4 @@ export type RouterEvents = {
   "router:not-found": { path: string };
 };
 
-export type RouterCtx = {
-  config: RouterConfig;
-  state: RouterState;
-  emit: {
-    (name: "router:navigate", payload: RouterEvents["router:navigate"]): void;
-    (name: "router:not-found", payload: RouterEvents["router:not-found"]): void;
-  };
-};
+export type RouterCtx = PluginCtx<RouterConfig, RouterState, RouterEvents>;

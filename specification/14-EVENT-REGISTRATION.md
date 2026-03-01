@@ -178,28 +178,36 @@ ctx.emit('unknown:event', { anything: true });        // ERROR -- unknown event 
 
 ### Domain Context Emit
 
-When domain factories are extracted into separate files (Standard+ tier plugins), the domain context type should use **overloaded call signatures** scoped to the plugin's own events:
+When domain factories are extracted into separate files (Standard+ tier plugins), use `PluginCtx` to build the domain context type. It auto-generates overloaded emit call signatures from the event map:
 
 ```typescript
 // plugins/auth/types.ts
+import type { PluginCtx } from '@moku-labs/core';
+
 export type AuthEvents = {
   'auth:login':  { userId: string };
   'auth:logout': { userId: string };
 };
 
+export type AuthCtx = PluginCtx<AuthConfig, AuthState, AuthEvents>;
+```
+
+For custom composition (e.g., adding `require`), use `EmitFn` directly:
+
+```typescript
+import type { EmitFn } from '@moku-labs/core';
+
 export type AuthCtx = {
   config: AuthConfig;
   state: AuthState;
-  emit: {
-    (name: 'auth:login',  payload: AuthEvents['auth:login']): void;
-    (name: 'auth:logout', payload: AuthEvents['auth:logout']): void;
-  };
+  emit: EmitFn<AuthEvents>;
+  require: <P extends PluginLike>(plugin: P) => ExtractPluginApi<P>;
 };
 ```
 
-Overloaded call signatures are used instead of a generic `<K extends keyof AuthEvents>(name: K, payload: AuthEvents[K]) => void` because TypeScript cannot prove generic indexed access compatibility between `AuthEvents[K]` and `(GlobalEvents & AuthEvents)[K]` when the kernel's `EmitFunction<MergedEvents>` is assigned to a narrower domain emit. Concrete overloads avoid this — TypeScript instantiates the kernel's generic per-overload and checks compatibility directly.
+**How it works under the hood:** `EmitFn<E>` uses `UnionToIntersection` to convert per-event function types into an intersection — which TypeScript treats as overloaded call signatures. This avoids a generic `<K extends keyof AuthEvents>(name: K, payload: AuthEvents[K]) => void` which fails TypeScript's assignability check against the kernel's `EmitFunction<MergedEvents>`. Concrete overloads work because TypeScript instantiates the kernel's generic per-overload and checks compatibility directly.
 
-This preserves type safety in domain code while remaining compatible with both the kernel's `EmitFunction<MergedEvents>` (instantiated per-overload) and test mocks (`vi.fn()`, `() => {}`). See [15-PLUGIN-STRUCTURE §4 Unit Testing](./15-PLUGIN-STRUCTURE.md) for the full pattern.
+The resulting type is compatible with the kernel's `EmitFunction<MergedEvents>` (instantiated per-overload) and test mocks (`vi.fn()`, `() => {}`). See [15-PLUGIN-STRUCTURE §4 Unit Testing](./15-PLUGIN-STRUCTURE.md) for the full pattern.
 
 **Rationale:** The escape hatch (`(name: string, payload?: unknown) => void`) was removed because it defeats the purpose of typed events. If a plugin can bypass type checking at any call site, the event system provides no safety. With the register callback, declaring events is easy enough that there is no reason to skip it.
 

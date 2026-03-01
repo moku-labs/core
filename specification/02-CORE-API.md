@@ -5,14 +5,41 @@
 
 ---
 
-## 1. Layer 1: Single Export
+## 1. Layer 1: Public API Surface
 
 ```typescript
-// This is the ENTIRE public API of @moku-labs/core
+// @moku-labs/core — Package Entry Point
 export { createCoreConfig } from './config';
+
+// Public type utilities for plugin authors
+export type { PluginCtx } from './types';
+export type { EmitFn } from './utilities';
 ```
 
-One function at the main entry point. That's the package.
+One function and two type utilities. The function is the package. The types are optional helpers for plugin authors at Standard+ tier who extract domain logic into separate files.
+
+### Public Type Utilities
+
+| Export | Purpose | Used by |
+|---|---|---|
+| `PluginCtx<C, S, E>` | Domain context type for extracted plugin files. Auto-generates emit overloads from event map. | Standard+ tier plugin `types.ts` files |
+| `EmitFn<E>` | Emit overload builder. Converts an event map to overloaded call signatures. | Advanced composition when `PluginCtx` is too opinionated |
+
+```typescript
+// Standard usage — one line replaces manual emit overloads:
+import type { PluginCtx } from '@moku-labs/core';
+export type RouterCtx = PluginCtx<RouterConfig, RouterState, RouterEvents>;
+
+// Advanced usage — compose your own context with EmitFn:
+import type { EmitFn } from '@moku-labs/core';
+export type RouterCtx = {
+  config: RouterConfig;
+  state: RouterState;
+  emit: EmitFn<RouterEvents>;
+};
+```
+
+See [14-EVENT-REGISTRATION §6](./14-EVENT-REGISTRATION.md) and [15-PLUGIN-STRUCTURE §4](./15-PLUGIN-STRUCTURE.md) for full usage patterns.
 
 ---
 

@@ -778,32 +778,40 @@ Domain functions are pure — they accept a context-shaped object and return val
 
 #### Domain Context Types and Typed Emit
 
-When domain factories (e.g. `createRouterApi`) are extracted into separate files, they need a typed context parameter. The emit function on this context should use **overloaded call signatures** — one per event — scoped to the plugin's own events:
+When domain factories (e.g. `createRouterApi`) are extracted into separate files, they need a typed context parameter. Use `PluginCtx` from `@moku-labs/core` to build the domain context type:
 
 ```typescript
 // plugins/router/types.ts
+import type { PluginCtx } from '@moku-labs/core';
+
 export type RouterEvents = {
   'router:navigate': { from: string; to: string };
   'router:not-found': { path: string };
 };
 
+export type RouterCtx = PluginCtx<RouterConfig, RouterState, RouterEvents>;
+```
+
+For custom composition (e.g., adding `require` for cross-plugin domain code), use `EmitFn` directly:
+
+```typescript
+import type { EmitFn } from '@moku-labs/core';
+
 export type RouterCtx = {
   config: RouterConfig;
   state: RouterState;
-  emit: {
-    (name: 'router:navigate', payload: RouterEvents['router:navigate']): void;
-    (name: 'router:not-found', payload: RouterEvents['router:not-found']): void;
-  };
+  emit: EmitFn<RouterEvents>;
 };
 ```
 
 This pattern provides:
 - **Compile-time safety** — wrong event names and payloads are caught in domain code
-- **Single source of truth** — event payload types defined once in `RouterEvents`, referenced by overload signatures and `register.map<>()` calls
-- **Test compatibility** — `vi.fn()`, `() => {}`, and `(name: string, payload: unknown) => { ... }` are all assignable to overloaded call signatures
+- **Single source of truth** — event payload types defined once in `RouterEvents`, used by both `PluginCtx`/`EmitFn` and `register.map<>()` calls
+- **Test compatibility** — `vi.fn()`, `() => {}`, and `(name: string, payload: unknown) => { ... }` are all assignable to the generated emit overloads
 - **Kernel compatibility** — the kernel's generic `EmitFunction<MergedEvents>` is assignable to concrete overloads (TypeScript instantiates the generic per-overload)
+- **Zero boilerplate** — no manual emit overload declarations that must track events
 
-**Why overloads, not a generic?** A generic domain emit `<K extends keyof RouterEvents>(name: K, payload: RouterEvents[K]) => void` fails TypeScript's assignability check against the kernel's `EmitFunction<MergedEvents>`. The kernel's merged events include global events (e.g., `app:ready`), and TypeScript cannot prove that `RouterEvents[K]` is assignable to `(GlobalEvents & RouterEvents)[K]` for generic K. Concrete overloads avoid this — TypeScript instantiates the kernel's generic with each specific event name and checks compatibility directly.
+**How it works under the hood:** `EmitFn<E>` uses `UnionToIntersection` to convert per-event function types into an intersection — which TypeScript treats as overloaded call signatures. A generic domain emit `<K extends keyof RouterEvents>(name: K, payload: RouterEvents[K]) => void` fails TypeScript's assignability check against the kernel's `EmitFunction<MergedEvents>`. The kernel's merged events include global events (e.g., `app:ready`), and TypeScript cannot prove that `RouterEvents[K]` is assignable to `(GlobalEvents & RouterEvents)[K]` for generic K. Concrete overloads avoid this — TypeScript instantiates the kernel's generic with each specific event name and checks compatibility directly.
 
 The `index.ts` wiring harness uses `register.map<RouterEvents>()` to bulk-register from the type map, and an inline lambda to preserve event inference:
 

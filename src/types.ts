@@ -1,8 +1,9 @@
 // =============================================================================
 // @moku-labs/core — Kernel Type Definitions
 // =============================================================================
-// Types for the kernel runtime contract. NOT exported from the package entry
-// point. Consumer types flow through inference, not import.
+// Types for the kernel runtime contract. Most types are internal — consumer
+// types flow through inference, not import. Public type utilities (PluginCtx,
+// EmitFn) are re-exported from the package entry point for plugin authors.
 //
 // NOTE: This file has a type-only circular import with utilities.ts.
 //       utilities.ts imports AnyPluginInstance from here.
@@ -25,6 +26,8 @@
 //      Conditional types that pull phantom types from PluginInstance.
 //   §6 Aggregate Types            — BuildPluginApis, App, AppCallbackContext, CreateAppOptions
 //      Top-level types composing the app surface and consumer-facing options.
+//   §7 Public Type Utilities       — PluginCtx
+//      Domain context type for extracted plugin files. Re-exported from index.ts.
 //
 // -----------------------------------------------------------------------------
 // Types
@@ -61,10 +64,14 @@
 //   AppCallbackContext<...>          Context for consumer lifecycle callbacks.
 //   CreateAppOptions<...>            Options for createApp (Step 3 of factory chain).
 //
+//   PluginCtx<C, S, E>              Domain context for extracted plugin files. Builds emit
+//                                   overloads from event map via EmitFn. PUBLIC — re-exported
+//                                   from index.ts for plugin authors at Standard+ tier.
+//
 // =============================================================================
 
 // Type-only import -- must NOT become a value import (see file header).
-import type { IsLiteralString, UnionToIntersection } from "./utilities";
+import type { EmitFn as EmitFunction_, IsLiteralString, UnionToIntersection } from "./utilities";
 
 // =============================================================================
 // Section 1: Context Tiers
@@ -83,6 +90,7 @@ import type { IsLiteralString, UnionToIntersection } from "./utilities";
  *
  * During teardown, plugins may be partially or fully stopped. Only the frozen
  * global config is available.
+ *
  * @example
  * ```ts
  * type StopCtx = TeardownContext<{ siteName: string }>;
@@ -102,6 +110,7 @@ type TeardownContext<Config> = {
  *
  * At this stage, not all plugins have been created yet. Communication methods
  * (emit, require, has) are intentionally unavailable.
+ *
  * @example
  * ```ts
  * type StateCtx = MinimalContext<{ siteName: string }, { basePath: string }>;
@@ -122,6 +131,7 @@ type MinimalContext<Config, C> = {
  *
  * Provides global config, plugin config, mutable state, event emission,
  * and inter-plugin communication.
+ *
  * @example
  * ```ts
  * type Ctx = PluginContext<
@@ -158,6 +168,7 @@ type PluginContext<Config, Events extends Record<string, unknown>, C, S> = {
  * This is the compile-time generic signature used by PluginContext and App.
  * app.ts defines a separate runtime-layer `EmitFunction` alias without generics
  * for dynamically typed dispatch — they are intentionally different.
+ *
  * @example
  * ```ts
  * type Emit = EmitFunction<{ "page:view": { path: string }; "auth:login": { userId: string } }>;
@@ -181,6 +192,7 @@ type EmitFunction<Events extends Record<string, unknown>> = <K extends string & 
  * Get a dependency plugin's API by instance reference.
  * Accepts only PluginInstance values (not strings). Returns the fully typed API
  * extracted from the phantom type, or throws at runtime if not registered.
+ *
  * @example
  * ```ts
  * declare const require: RequireFunction;
@@ -196,6 +208,7 @@ type RequireFunction = <P extends PluginInstance<string, any, any, any, any>>(
 /**
  * Check if a plugin is registered by name. String-based boolean check.
  * Unlike require, this accepts a plain string and returns a boolean instead of throwing.
+ *
  * @example
  * ```ts
  * declare const has: HasFunction;
@@ -216,6 +229,7 @@ type HasFunction = (name: string) => boolean;
  * All generics (N, C, S, A) are inferred from the spec object values.
  * Config and Events flow from the createCoreConfig closure.
  * PluginEvents is the only explicit generic (defines new events).
+ *
  * @example
  * ```ts
  * // Rarely written explicitly — inferred from createPlugin spec object.
@@ -259,6 +273,7 @@ type PluginSpec<
  *
  * Carries phantom types for compile-time type inference. The _phantom field
  * is never read at runtime (it is `{} as { ... }`).
+ *
  * @example
  * ```ts
  * // Created via createPlugin — types are inferred, not written:
@@ -292,6 +307,7 @@ interface PluginInstance<
 /**
  * Widened PluginInstance type for generic constraints on arrays.
  * Used across multiple modules (utilities, core, app) for plugin list parameters.
+ *
  * @example
  * ```ts
  * function processPlugins(plugins: AnyPluginInstance[]): void { ... }
@@ -307,6 +323,7 @@ type AnyPluginInstance = PluginInstance<string, any, any, any, any>;
 /**
  * Extract the API phantom type from a PluginInstance.
  * Used by RequireFunction to return the correct API type from require(plugin).
+ *
  * @example
  * ```ts
  * type RouterApi = ExtractApi<typeof routerPlugin>; // { navigate(path: string): void }
@@ -329,6 +346,7 @@ type ExtractApi<P> =
 /**
  * Extract the events phantom type from a PluginInstance.
  * Used by DepsEvents to merge event maps from dependency plugins.
+ *
  * @example
  * ```ts
  * type RouterEvents = ExtractEvents<typeof routerPlugin>;
@@ -352,6 +370,7 @@ type ExtractEvents<P> =
 /**
  * Extract the name literal type from a PluginInstance.
  * Used by BuildPluginApis to key the app surface by plugin name.
+ *
  * @example
  * ```ts
  * type Name = ExtractName<typeof routerPlugin>; // "router"
@@ -375,6 +394,7 @@ type ExtractName<P> =
 /**
  * Extract the config phantom type from a PluginInstance.
  * Used by CreateAppOptions to type pluginConfigs keys.
+ *
  * @example
  * ```ts
  * type RouterConfig = ExtractConfig<typeof routerPlugin>; // { basePath: string }
@@ -398,6 +418,7 @@ type ExtractConfig<P> =
  * Intersection of all PluginEvents from a depends tuple.
  * Merges events from [authPlugin, routerPlugin] into AuthEvents & RouterEvents.
  * Falls back to `{}` (identity element) when the tuple is empty.
+ *
  * @example
  * ```ts
  * type Combined = DepsEvents<readonly [typeof authPlugin, typeof routerPlugin]>;
@@ -419,6 +440,7 @@ type DepsEvents<
  * Plugins with empty API (Record<string, never>) are excluded.
  * Plugins with non-literal name type (string) are excluded to prevent
  * index signature pollution on the App type.
+ *
  * @example
  * ```ts
  * type Apis = BuildPluginApis<typeof routerPlugin | typeof authPlugin>;
@@ -440,6 +462,7 @@ type BuildPluginApis<
  * Typed App object returned by createApp.
  * Combines base methods (start, stop, emit, require, has) with plugin APIs
  * mapped by name via BuildPluginApis.
+ *
  * @example
  * ```ts
  * type MyApp = App<SiteConfig, SiteEvents, typeof routerPlugin | typeof authPlugin>;
@@ -466,6 +489,7 @@ type App<
 /**
  * Context passed to consumer lifecycle callbacks (onReady, onStart, onStop).
  * Includes frozen config, event emission, plugin lookup, and mounted plugin APIs.
+ *
  * @example
  * ```ts
  * type Ctx = AppCallbackContext<SiteConfig, SiteEvents, typeof routerPlugin>;
@@ -493,6 +517,7 @@ type AppCallbackContext<
  * - `config`: global config overrides (shallow-merged with framework defaults)
  * - `pluginConfigs`: per-plugin config overrides keyed by plugin name
  * - `onReady/onError/onStart/onStop`: consumer lifecycle callbacks
+ *
  * @example
  * ```ts
  * const app = await createApp({
@@ -526,32 +551,77 @@ type CreateAppOptions<
 };
 
 // =============================================================================
-// Exports (internal to package, NOT re-exported from index.ts)
+// Section 7: Public Type Utilities
+// =============================================================================
+// These types are re-exported from src/index.ts for plugin authors.
+// They are the PUBLIC API surface for type-level plugin development.
+// =============================================================================
+
+/**
+ * Domain context type for extracted plugin files (api.ts, handlers.ts, etc.).
+ *
+ * Provides `config`, `state`, and strictly typed `emit` with overloaded call
+ * signatures auto-generated from the event map `E`. Replaces manual overload
+ * declarations that must be kept in sync with the event type.
+ *
+ * For plugins without events, omit `E` — emit becomes uncallable.
+ * For advanced composition (e.g., adding `require`), use `EmitFn<E>` directly.
+ *
+ * @example
+ * ```ts
+ * import type { PluginCtx } from "@moku-labs/core";
+ *
+ * type CmsEvents = {
+ *   "cms:publish": { contentId: string; path: string };
+ *   "cms:draft": { contentId: string };
+ * };
+ *
+ * // One line replaces manual emit overloads:
+ * type CmsCtx = PluginCtx<CmsConfig, CmsState, CmsEvents>;
+ *
+ * // Use in domain factories:
+ * export const createCmsApi = (ctx: CmsCtx) => ({
+ *   publish: (id: string, path: string) => {
+ *     ctx.emit("cms:publish", { contentId: id, path }); // strictly typed
+ *   },
+ * });
+ * ```
+ */
+type PluginContext_<C, S, E extends Record<string, unknown> = Record<never, never>> = {
+  readonly config: Readonly<C>;
+  state: S;
+  emit: EmitFunction_<E>;
+};
+
+// =============================================================================
+// Exports
 // =============================================================================
 
 export type {
-  // Context tiers
+  // Context tiers (internal)
   TeardownContext,
   MinimalContext,
   PluginContext,
-  // Emit
+  // Emit (internal)
   EmitFunction,
-  // Plugin lookup
+  // Plugin lookup (internal)
   RequireFunction,
   HasFunction,
-  // Plugin types
+  // Plugin types (internal)
   PluginSpec,
   PluginInstance,
   AnyPluginInstance,
-  // Extraction types
+  // Extraction types (internal)
   ExtractApi,
   ExtractEvents,
   ExtractName,
   ExtractConfig,
   DepsEvents,
-  // Aggregate types
+  // Aggregate types (internal)
   BuildPluginApis,
   AppCallbackContext,
   App,
-  CreateAppOptions
+  CreateAppOptions,
+  // Public type utilities (re-exported from index.ts)
+  PluginContext_ as PluginCtx
 };

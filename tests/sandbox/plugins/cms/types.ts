@@ -1,6 +1,8 @@
 // Shared types across all CMS modules.
 // Module directories import from here; they do NOT import from each other.
 
+import type { PluginCtx } from "../../../../src";
+
 /**
  * CMS plugin configuration.
  *
@@ -88,15 +90,7 @@ export type CmsEvents = {
   "cms:upload": { assetId: string; mimeType: string };
 };
 
-export type CmsCtx = {
-  config: CmsConfig;
-  state: CmsState;
-  emit: {
-    (name: "cms:publish", payload: CmsEvents["cms:publish"]): void;
-    (name: "cms:draft", payload: CmsEvents["cms:draft"]): void;
-    (name: "cms:upload", payload: CmsEvents["cms:upload"]): void;
-  };
-};
+export type CmsCtx = PluginCtx<CmsConfig, CmsState, CmsEvents>;
 
 /**
  * Internal mutable state for the CMS plugin. Shared across all CMS modules

@@ -15,7 +15,7 @@
 //
 //   §1 Framework Base Constraints — FrameworkConfig, FrameworkEventMap, EmptyPluginEventMap
 //      Base type constraints for generic parameters across the framework.
-//   §2 Pure Type Utilities        — UnionToIntersection, IsLiteralString
+//   §2 Pure Type Utilities        — UnionToIntersection, IsLiteralString, EmitFn
 //      Reusable type-level transformations. No domain knowledge.
 //   §3 Plugin Validation          — validatePlugins
 //      Runtime validation: reserved names, duplicates, dependency order.
@@ -30,6 +30,7 @@ import type { AnyPluginInstance } from "./types";
 
 /**
  * Base constraint for framework configuration objects.
+ *
  * @example
  * ```ts
  * function createConfig<C extends FrameworkConfig>(defaults: C): C { return defaults; }
@@ -39,6 +40,7 @@ type FrameworkConfig = Record<string, unknown>;
 
 /**
  * Base constraint for framework event maps.
+ *
  * @example
  * ```ts
  * function createEvents<E extends FrameworkEventMap>(events: E): E { return events; }
@@ -49,6 +51,7 @@ type FrameworkEventMap = Record<string, unknown>;
 /**
  * Empty event map used as the default when a plugin declares no custom events.
  * `Record<never, never>` is the identity element for intersection (`T & {} = T`).
+ *
  * @example
  * ```ts
  * type PluginEvents = EmptyPluginEventMap; // default when no events declared
@@ -62,6 +65,7 @@ type EmptyPluginEventMap = Record<never, never>;
 
 /**
  * Convert a union to an intersection via distributive conditional + contra-variance.
+ *
  * @example
  * ```ts
  * type Result = UnionToIntersection<{ a: 1 } | { b: 2 }>; // { a: 1 } & { b: 2 }
@@ -75,6 +79,7 @@ type UnionToIntersection<U> = (U extends any ? (k: U) => void : never) extends (
 /**
  * Detect if a string type is a literal (e.g. "router") vs the general `string` type.
  * Used by BuildPluginApis to exclude plugins with non-literal names from the mapped type.
+ *
  * @example
  * ```ts
  * type Yes = IsLiteralString<"router">; // true
@@ -83,12 +88,42 @@ type UnionToIntersection<U> = (U extends any ? (k: U) => void : never) extends (
  */
 type IsLiteralString<S extends string> = string extends S ? false : true;
 
+/**
+ * Auto-generate overloaded emit call signatures from an event map type.
+ *
+ * Converts `{ "a": X; "b": Y }` into `((name: "a", payload: X) => void) & ((name: "b", payload: Y) => void)`.
+ * Uses `UnionToIntersection` to transform a union of per-event functions into
+ * an intersection (overloaded call signatures).
+ *
+ * When `E` has no keys, produces an uncallable but constructible function type
+ * so `vi.fn()` and `() => {}` remain assignable while calling emit is a compile error.
+ *
+ * Exported from the package entry point for plugin authors at Standard+ tier.
+ *
+ * @example
+ * ```ts
+ * type CmsEmit = EmitFn<{
+ *   "cms:publish": { contentId: string; path: string };
+ *   "cms:draft": { contentId: string };
+ * }>;
+ * // Equivalent to:
+ * // ((name: "cms:publish", payload: { contentId: string; path: string }) => void)
+ * // & ((name: "cms:draft", payload: { contentId: string }) => void)
+ * ```
+ */
+type EmitFunction<E extends Record<string, unknown>> = [keyof E] extends [never]
+  ? (...arguments_: never[]) => void
+  : UnionToIntersection<
+      { [K in string & keyof E]: (name: K, payload: E[K]) => void }[string & keyof E]
+    >;
+
 // =============================================================================
 // Section 3: Runtime Guards
 // =============================================================================
 
 /**
  * Checks whether a value is a non-null, non-array object record.
+ *
  * @param value - Value to inspect.
  * @returns `true` when value is an object record.
  * @example
@@ -108,6 +143,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 /**
  * Reserved app method names that cannot be used as plugin names.
+ *
  * @example
  * ```ts
  * RESERVED_NAMES.has("start"); // true
@@ -128,6 +164,7 @@ const RESERVED_NAMES = new Set([
 
 /**
  * Check that no plugin name collides with reserved app method names.
+ *
  * @param id - Framework identifier for error messages.
  * @param names - Array of plugin names to check.
  * @example
@@ -149,6 +186,7 @@ function checkReservedNames(id: string, names: string[]): void {
 
 /**
  * Check that no duplicate plugin names exist.
+ *
  * @param id - Framework identifier for error messages.
  * @param names - Array of plugin names to check.
  * @example
@@ -172,6 +210,7 @@ function checkDuplicateNames(id: string, names: string[]): void {
 
 /**
  * Check that all dependencies exist and appear before the dependent plugin.
+ *
  * @param id - Framework identifier for error messages.
  * @param plugins - The plugin list.
  * @param names - Array of plugin names (same order as plugins).
@@ -208,6 +247,7 @@ function checkDependencyOrder(id: string, plugins: AnyPluginInstance[], names: s
 /**
  * Validate a plugin list for correctness.
  * Checks: no reserved names, no duplicates, dependencies exist and are ordered.
+ *
  * @param id - Framework identifier for error messages.
  * @param plugins - The plugin list to validate.
  * @throws {TypeError} If validation fails.
@@ -235,7 +275,8 @@ export type {
   EmptyPluginEventMap,
   // Pure type utilities
   UnionToIntersection,
-  IsLiteralString
+  IsLiteralString,
+  EmitFunction as EmitFn
 };
 
 export { isRecord, validatePlugins };
