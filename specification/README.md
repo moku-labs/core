@@ -44,19 +44,4 @@ One export at Layer 1 (`createCoreConfig`). One setup call at Layer 2 (`createCo
 
 ---
 
-## Future Discussion
-
-These features are not part of the v3 core. Each file documents a planned concept with proposed API and open questions.
-
-| File | Topic | Status |
-|---|---|---|
-| [FUTURE-COMPONENT.md](./FUTURE-COMPONENT.md) | Component sugar over plugins | Not implemented |
-| [FUTURE-MODULE.md](./FUTURE-MODULE.md) | Organizational grouping containers | Not implemented |
-| [FUTURE-TESTING.md](./FUTURE-TESTING.md) | Testing utilities | Not implemented |
-| [FUTURE-SIGNALS.md](./FUTURE-SIGNALS.md) | Reactive state (signal/computed/effect) | Not implemented |
-| [FUTURE-GLOBAL-STATE.md](./FUTURE-GLOBAL-STATE.md) | Shared mutable state across plugins | Not implemented |
-| [FUTURE-LIFECYCLE-HOOKS.md](./FUTURE-LIFECYCLE-HOOKS.md) | Pre/after hooks for lifecycle phases | Not implemented |
-
----
-
 *The kernel is boring. The framework is opinionated. The consumer is productive.*

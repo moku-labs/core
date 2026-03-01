@@ -81,5 +81,4 @@ All kernel errors must follow: `[framework-name] <description>.\n  <actionable s
 
 - Runtime target: < 200 lines. The type system does the heavy lifting.
 - Bundle target: < 5KB minified + gzipped, zero runtime dependencies.
-- Sub-path exports: `@moku-labs/core/testing` (createTestCtx), `@moku-labs/core/signals` (optional reactive state).
 - Plugin file structure convention: `index.ts` (30-line connection point), `api.ts`, `state.ts`, `handlers.ts` for logic.
