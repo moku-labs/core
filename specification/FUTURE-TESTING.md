@@ -12,7 +12,7 @@ This closes the testing gap: integration tests use `createApp` to verify wiring,
 ## Proposed API
 
 ```typescript
-import { createTestCtx } from 'moku_core/testing';
+import { createTestCtx } from '@moku-labs/core/testing';
 
 function createTestCtx<Config, C, S>(options?: {
   global?: Partial<Config>;     // Frozen global config mock
@@ -35,7 +35,7 @@ function createTestCtx<Config, C, S>(options?: {
 ### Usage Example
 
 ```typescript
-import { createTestCtx } from 'moku_core/testing';
+import { createTestCtx } from '@moku-labs/core/testing';
 import { createRouterApi } from '../plugins/router/api';
 
 test('navigate updates current path', () => {
@@ -68,7 +68,7 @@ test('emit is captured for assertions', () => {
 
 ## Open Questions
 
-- Should `createTestCtx` be part of `moku_core/testing` (sub-path export) or a completely separate package?
+- Should `createTestCtx` be part of `@moku-labs/core/testing` (sub-path export) or a completely separate package?
 - What is the minimal viable `ctx` shape? Does it need `require`/`has`, or just `global`, `config`, `state`, `emit`?
 - Should `createTestCtx` accept a generic for the full plugin union (to enable typed `require` in tests)?
 - How should async lifecycle testing work? Should `createTestCtx` provide helpers for simulating init/start/stop phases?

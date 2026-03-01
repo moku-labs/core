@@ -149,11 +149,11 @@ Lifecycle methods can throw (or reject). When they do:
 // GOOD: Plugin index.ts is 30 lines. Logic in ./api.ts, ./state.ts, ./handlers.ts
 ```
 
-### 2.2 Consumer Importing from moku_core
+### 2.2 Consumer Importing from @moku-labs/core
 
 ```typescript
 // BAD: Consumer reaches past the framework
-import { createCoreConfig } from 'moku_core';
+import { createCoreConfig } from '@moku-labs/core';
 
 // GOOD: Consumer uses the framework
 import { createApp, createPlugin } from 'my-framework';

@@ -1,5 +1,5 @@
 // =============================================================================
-// moku_core v3 — Kernel Type Definitions
+// @moku-labs/core v3 — Kernel Type Definitions
 // =============================================================================
 // Types for the kernel runtime contract. NOT exported from the package entry
 // point. Consumer types flow through inference, not import.

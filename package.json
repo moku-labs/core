@@ -1,13 +1,21 @@
 {
-  "name": "moku_core",
+  "name": "@moku-labs/core",
   "version": "0.0.0",
-  "description": "Micro-kernel plugin framework for TypeScript",
+  "description": "Micro-kernel plugin framework for LLMs (TypeScript)",
   "type": "module",
-  "license": "Apache-2.0",
-  "author": "Oleksand Kucherenko",
+  "license": "MIT",
+  "author": "Alex Kucherenko",
   "repository": {
     "type": "git",
-    "url": "https://github.com/nicecatch/moku_core"
+    "url": "git+https://github.com/moku-labs/core.git"
+  },
+  "bugs": {
+    "url": "https://github.com/moku-labs/core/issues"
+  },
+  "homepage": "https://github.com/moku-labs/core#readme",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
   },
   "engines": {
     "node": ">=22.0.0",

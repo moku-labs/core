@@ -12,7 +12,7 @@ Signals are a convenience layer -- plugins can achieve the same behavior with pl
 ## Proposed API
 
 ```typescript
-import { signal, computed, effect } from 'moku_core/signals';
+import { signal, computed, effect } from '@moku-labs/core/signals';
 
 const counterPlugin = createPlugin('counter', {
   createState: () => {
@@ -46,7 +46,7 @@ const counterPlugin = createPlugin('counter', {
 
 ## Open Questions
 
-- Should signals be part of `moku_core/signals` (sub-path export) or a completely separate package?
+- Should signals be part of `@moku-labs/core/signals` (sub-path export) or a completely separate package?
 - How do signals integrate with the event system? Should signal changes automatically emit events, or is that the plugin author's responsibility?
 - Lazy vs eager computation: should `computed` recalculate on read (lazy) or on dependency change (eager)?
 - How does signal subscription cleanup work during the `stop` lifecycle phase?

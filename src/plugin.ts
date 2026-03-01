@@ -1,5 +1,5 @@
 // =============================================================================
-// moku_core v3 — Plugin Author Type Definitions
+// @moku-labs/core v3 — Plugin Author Type Definitions
 // =============================================================================
 // Types for the createPlugin API surface. Plugin authors interact with these
 // types through inference — they never import them directly.

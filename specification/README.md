@@ -1,7 +1,7 @@
 # Moku Core -- v3 Specification
 
 **Status:** v3 architecture — implemented
-**Framework:** moku_core -- Type-safe micro-kernel plugin framework for TypeScript
+**Framework:** @moku-labs/core -- Type-safe micro-kernel plugin framework for TypeScript
 
 ---
 

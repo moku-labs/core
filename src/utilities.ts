@@ -1,5 +1,5 @@
 // =============================================================================
-// moku_core v3 - Shared Utilities
+// @moku-labs/core v3 - Shared Utilities
 // =============================================================================
 // Generic type utilities and runtime validation functions shared across multiple
 // source files. No domain knowledge — just reusable machinery.

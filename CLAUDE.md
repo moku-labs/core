@@ -4,15 +4,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**moku_core** is a micro-kernel plugin framework for TypeScript. One export (`createCore`), three layers (core -> framework -> consumer), each constraining the layer above. The entire API fits in an LLM context window by design.
+**@moku-labs/core** is a micro-kernel plugin framework for TypeScript. One export (`createCore`), three layers (core -> framework -> consumer), each constraining the layer above. The entire API fits in an LLM context window by design.
 
 **Status:** Implementation in progress (v3 architecture).
 
 ## Architecture: Three Layers
 
-- **Layer 1 (moku_core):** Single export `createCore`. Zero domain knowledge. Pure machinery: lifecycle, plugin registry, event bus, config resolution, type inference.
+- **Layer 1 (@moku-labs/core):** Single export `createCore`. Zero domain knowledge. Pure machinery: lifecycle, plugin registry, event bus, config resolution, type inference.
 - **Layer 2 (Framework):** Calls `createCoreConfig<Config, Events>(id, { config })`, gets back `{ createPlugin, createCore }`. Defines default plugins, base config shape, event contract.
-- **Layer 3 (Consumer):** Imports from the framework. Single call: `await createApp({ plugins?, ...configOverrides, ...pluginConfigs })`. Never sees `moku_core` directly.
+- **Layer 3 (Consumer):** Imports from the framework. Single call: `await createApp({ plugins?, ...configOverrides, ...pluginConfigs })`. Never sees `@moku-labs/core` directly.
 
 The key constraint: each layer limits the layer above. Consumer code cannot break framework invariants. Framework code cannot break kernel invariants.
 
@@ -81,5 +81,5 @@ All kernel errors must follow: `[framework-name] <description>.\n  <actionable s
 
 - Runtime target: < 200 lines. The type system does the heavy lifting.
 - Bundle target: < 5KB minified + gzipped, zero runtime dependencies.
-- Sub-path exports: `moku_core/testing` (createTestCtx), `moku_core/signals` (optional reactive state).
+- Sub-path exports: `@moku-labs/core/testing` (createTestCtx), `@moku-labs/core/signals` (optional reactive state).
 - Plugin file structure convention: `index.ts` (30-line connection point), `api.ts`, `state.ts`, `handlers.ts` for logic.

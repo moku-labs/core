@@ -36,7 +36,7 @@ The natural first instinct is two steps: one function to set up the framework, o
 ```
 // BROKEN: 2-step approach
 // framework/index.ts
-import { createCore } from 'moku_core';
+import { createCore } from '@moku-labs/core';
 import { routerPlugin } from './plugins/router';  // router needs createPlugin
 const { createApp, createPlugin } = createCore(..., { plugins: [routerPlugin] });
 export { createApp, createPlugin };
@@ -84,7 +84,7 @@ Config.ts is the root. It depends on nothing in the framework. Plugin files impo
 
 ```typescript
 // my-framework/src/config.ts
-import { createCoreConfig } from 'moku_core';
+import { createCoreConfig } from '@moku-labs/core';
 
 type Config = {
   siteName: string;
@@ -252,7 +252,7 @@ The key insight: `Config` and `Events` are defined ONCE in config.ts and flow ev
 ### my-framework/src/config.ts (Step 1)
 
 ```typescript
-import { createCoreConfig } from 'moku_core';
+import { createCoreConfig } from '@moku-labs/core';
 
 // The framework's type contract -- defined once, flows everywhere
 type Config = {

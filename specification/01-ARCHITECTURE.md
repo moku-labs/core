@@ -61,7 +61,7 @@ Moku is an application *skeleton*. It answers "how do I compose my app from inde
 |                    Layer 2: Framework / Tool                       |
 |                                                                   |
 |  Step 1 (config.ts):                                              |
-|    import { createCoreConfig } from 'moku_core';                  |
+|    import { createCoreConfig } from '@moku-labs/core';                  |
 |    const coreConfig = createCoreConfig<Config, Events>('id', {    |
 |      config: { ...defaults },                                     |
 |    });                                                             |
@@ -78,7 +78,7 @@ Moku is an application *skeleton*. It answers "how do I compose my app from inde
 |    - Events contract (what events exist and their payload types)  |
 |    - Default plugins (what ships built-in)                        |
 +------------------------------------------------------------------+
-|                    Layer 1: moku_core                              |
+|                    Layer 1: @moku-labs/core                              |
 |                                                                   |
 |  export { createCoreConfig }                                      |
 |                                                                   |
@@ -91,7 +91,7 @@ Moku is an application *skeleton*. It answers "how do I compose my app from inde
 
 **The key insight: each layer constrains the layer above it.**
 
-- `moku_core` constrains what a framework CAN define (lifecycle shape, plugin spec shape, config resolution rules).
+- `@moku-labs/core` constrains what a framework CAN define (lifecycle shape, plugin spec shape, config resolution rules).
 - The framework constrains what the consumer CAN do (which plugins exist, what config is available, what hooks fire).
 - The consumer works within those constraints. They can't escape them.
 
@@ -290,7 +290,7 @@ Moku provides exactly these four things and nothing else. Any additional feature
 
 A site builder without a router doesn't make sense. A game engine without a game loop doesn't make sense. A CLI toolkit without a command parser doesn't make sense.
 
-Default plugins are the plugins that **define the framework's identity.** Without them, the framework is just `moku_core` with a config type. Default plugins are what turn a generic kernel into a specific tool.
+Default plugins are the plugins that **define the framework's identity.** Without them, the framework is just `@moku-labs/core` with a config type. Default plugins are what turn a generic kernel into a specific tool.
 
 Consumers cannot remove default plugins. They can configure them.
 
@@ -304,7 +304,7 @@ Consumers cannot remove default plugins. They can configure them.
 4. TypeScript tells you what's required and what's optional.
 5. Use `app.pluginName.method()` -- everything is typed.
 
-The consumer never sees `createCoreConfig`. Never sees `moku_core`. Never thinks about lifecycle phases or plugin validation. They declare, configure, and compose.
+The consumer never sees `createCoreConfig`. Never sees `@moku-labs/core`. Never thinks about lifecycle phases or plugin validation. They declare, configure, and compose.
 
 ```typescript
 import { createApp, createPlugin } from 'my-framework';

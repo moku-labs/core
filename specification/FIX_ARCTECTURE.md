@@ -6,7 +6,7 @@
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // Framework config file
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-import { createCoreConfig } from 'moku_core';
+import { createCoreConfig } from '@moku-labs/core';
 
 type GlobalConfig = {
     property: string[]; // Globa confguration of framework, we set here all properties that we will need to make global accesible for all plagiins that wil be created with this core config

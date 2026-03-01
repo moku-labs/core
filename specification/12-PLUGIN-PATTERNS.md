@@ -98,10 +98,10 @@ This structure also enables independent testing. Domain functions (`createRouter
 
 ## 4. Complete Three-Layer Example
 
-### Layer 1: moku_core
+### Layer 1: @moku-labs/core
 
 ```typescript
-// moku_core/src/index.ts
+// @moku-labs/core/src/index.ts
 export { createCoreConfig } from './core-config';
 ```
 
@@ -109,7 +109,7 @@ export { createCoreConfig } from './core-config';
 
 ```typescript
 // my-framework/src/config.ts
-import { createCoreConfig } from 'moku_core';
+import { createCoreConfig } from '@moku-labs/core';
 
 type Config = {
   siteName: string;
@@ -249,7 +249,7 @@ For teams using Moku with LLM code generation, include this in your system promp
 You are generating code for a Moku-based application.
 
 ARCHITECTURE (3 layers, 3 steps):
-- Layer 1 (moku_core): Exports createCoreConfig only. Never import this in consumer code.
+- Layer 1 (@moku-labs/core): Exports createCoreConfig only. Never import this in consumer code.
 - Layer 2 (framework): Uses createCoreConfig + createCore to define the framework.
   Provides createApp and createPlugin to consumers.
 - Layer 3 (consumer): Uses createApp + createPlugin from the framework package.
@@ -257,7 +257,7 @@ ARCHITECTURE (3 layers, 3 steps):
 THREE-STEP PATTERN:
 
   Step 1 -- Framework config.ts (createCoreConfig):
-    import { createCoreConfig } from 'moku_core';
+    import { createCoreConfig } from '@moku-labs/core';
     type Config = { siteName: string; mode: 'dev' | 'prod' };
     type Events = { 'app:start': { config: Config } };
     export const coreConfig = createCoreConfig<Config, Events>('my-framework', {
@@ -282,7 +282,7 @@ THREE-STEP PATTERN:
     await app.start();
 
 CREATING PLUGINS:
-  import { createPlugin } from 'my-framework';  // NOT from moku_core
+  import { createPlugin } from 'my-framework';  // NOT from @moku-labs/core
   export const myPlugin = createPlugin('myPlugin', {
     config: { /* optional defaults */ },
     createState: (ctx) => ({ /* internal mutable state */ }),
@@ -343,7 +343,7 @@ FILE STRUCTURE:
       __tests__/     <- Tests for each domain file independently
 
 RULES:
-  - Never import from moku_core. Only import from the framework package.
+  - Never import from @moku-labs/core. Only import from the framework package.
   - Never create new abstractions (services, providers, managers). Use createPlugin.
   - Never put more than ~50 lines of logic in a plugin index.ts.
   - Plugin index.ts is a CONNECTION POINT. Domain code lives in separate files.

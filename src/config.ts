@@ -1,5 +1,5 @@
 // =============================================================================
-// moku_core v3 — Config Factory (Step 1 of Factory Chain)
+// @moku-labs/core v3 — Config Factory (Step 1 of Factory Chain)
 // =============================================================================
 // This is the ONLY export from the package. It captures Config and Events
 // generics in a closure and returns { createPlugin, createCore }.
@@ -51,7 +51,7 @@ interface CoreConfigResult<
  * Step 1 of the 3-step factory chain. Captures Config and Events generics
  * in a closure and returns { createPlugin, createCore }.
  *
- * This is the ONLY export from moku_core. All downstream types flow from
+ * This is the ONLY export from `@moku-labs/core`. All downstream types flow from
  * the generics captured here.
  * @param id - Framework identifier used in error messages.
  * @param options - Configuration options containing the default config values.

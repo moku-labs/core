@@ -8,7 +8,7 @@
 ## 1. Layer 1: Single Export
 
 ```typescript
-// This is the ENTIRE public API of moku_core
+// This is the ENTIRE public API of @moku-labs/core
 export { createCoreConfig } from './config';
 ```
 
@@ -51,7 +51,7 @@ When `Events` is `Record<string, never>` (the default), `emit()` accepts no even
 
 ```typescript
 // my-framework/src/config.ts
-import { createCoreConfig } from 'moku_core';
+import { createCoreConfig } from '@moku-labs/core';
 
 type Config = {
   siteName: string;
@@ -268,7 +268,7 @@ Plugin APIs are mounted via `BuildPluginApis<P>`, a mapped type that selectively
 
 ```typescript
 // my-framework/src/config.ts
-import { createCoreConfig } from 'moku_core';
+import { createCoreConfig } from '@moku-labs/core';
 
 type Config = {
   siteName: string;
