@@ -2,12 +2,14 @@
  * Counter plugin — Micro tier.
  *
  * Simple counter with configurable initial value and step size.
+ *
  * @see README.md
  */
 import { createPlugin } from "../config";
 
 /**
  * Counter plugin configuration.
+ *
  * @example
  * ```typescript
  * { initial: 10, step: 5 }
@@ -22,6 +24,7 @@ export type CounterConfig = {
 
 /**
  * Counter plugin public API.
+ *
  * @example
  * ```typescript
  * app.counter.increment();

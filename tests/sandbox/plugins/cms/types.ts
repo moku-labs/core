@@ -3,6 +3,7 @@
 
 /**
  * CMS plugin configuration.
+ *
  * @example
  * ```typescript
  * { defaultLocale: "en", maxUploadSize: 10 * 1024 * 1024 }
@@ -17,6 +18,7 @@ export type CmsConfig = {
 
 /**
  * A content item managed by the CMS.
+ *
  * @example
  * ```typescript
  * const item = app.cms.content.create({ title: "Hello", body: "World" });
@@ -35,6 +37,7 @@ export type ContentItem = {
 
 /**
  * A media asset uploaded to the CMS.
+ *
  * @example
  * ```typescript
  * const asset = app.cms.media.upload({ filename: "photo.jpg", mimeType: "image/jpeg", size: 1024 });
@@ -52,6 +55,7 @@ export type MediaAsset = {
 
 /**
  * A versioned snapshot of a content item.
+ *
  * @example
  * ```typescript
  * const version = app.cms.versioning.commit(item.id, "Initial draft");
@@ -68,6 +72,7 @@ export type Version = {
 
 /**
  * Events emitted by the CMS plugin.
+ *
  * @example
  * ```typescript
  * hooks: ctx => ({
@@ -96,6 +101,7 @@ export type CmsCtx = {
 /**
  * Internal mutable state for the CMS plugin. Shared across all CMS modules
  * (content, media, versioning) via the `CmsCtx` context.
+ *
  * @example
  * ```typescript
  * // After creating one content item and uploading one media asset

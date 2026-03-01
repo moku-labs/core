@@ -3,6 +3,13 @@ import { isValidMimeType } from "./processing";
 import type { MediaApi, UploadInput } from "./types";
 
 export const createMediaApi = (ctx: CmsCtx): MediaApi => {
+  /**
+   * Generate a sequential media ID using the shared `nextId` counter from
+   * CMS state. Same pattern as content's `generateId` to maintain a single
+   * ID namespace across all CMS modules.
+   *
+   * @returns {string} A unique media ID (e.g. "media-2").
+   */
   const generateId = (): string => {
     const id = `media-${ctx.state.nextId}`;
     ctx.state.nextId++;
@@ -14,8 +21,9 @@ export const createMediaApi = (ctx: CmsCtx): MediaApi => {
      * Upload a media file. Validates the mime type against the allowlist
      * and checks the file size against `maxUploadSize`. Stores the asset
      * in state and emits `cms:upload` on success.
-     * @param input - The upload descriptor (filename, mimeType, size).
-     * @returns The created media asset with generated ID and URL.
+     *
+     * @param {UploadInput} input - The upload descriptor (filename, mimeType, size).
+     * @returns {MediaAsset} The created media asset with generated ID and URL.
      * @throws {Error} When the mime type is not in the allowlist.
      * @throws {Error} When the file size exceeds `maxUploadSize`.
      * @example
@@ -59,8 +67,9 @@ export const createMediaApi = (ctx: CmsCtx): MediaApi => {
     /**
      * Retrieve a media asset by its ID. Used to look up a single asset
      * for display or download.
-     * @param id - The media asset ID.
-     * @returns The media asset, or undefined if not found.
+     *
+     * @param {string} id - The media asset ID.
+     * @returns {MediaAsset | undefined} The media asset, or undefined if not found.
      */
     getAsset: (id: string): MediaAsset | undefined => {
       return ctx.state.media.get(id);
@@ -69,7 +78,8 @@ export const createMediaApi = (ctx: CmsCtx): MediaApi => {
     /**
      * List all uploaded media assets. Returns a snapshot array —
      * useful for media library views and admin panels.
-     * @returns An array of all stored media assets.
+     *
+     * @returns {MediaAsset[]} An array of all stored media assets.
      */
     list: (): MediaAsset[] => {
       return [...ctx.state.media.values()];
@@ -77,8 +87,9 @@ export const createMediaApi = (ctx: CmsCtx): MediaApi => {
 
     /**
      * Delete a media asset by ID. Removes it from the state store.
-     * @param id - The media asset ID to delete.
-     * @returns True if the asset was found and deleted, false otherwise.
+     *
+     * @param {string} id - The media asset ID to delete.
+     * @returns {boolean} True if the asset was found and deleted, false otherwise.
      */
     delete: (id: string): boolean => {
       return ctx.state.media.delete(id);

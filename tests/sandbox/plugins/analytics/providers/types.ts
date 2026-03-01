@@ -1,6 +1,7 @@
 /**
  * Interface for analytics provider adapters.
  * Implement this to add a new analytics backend.
+ *
  * @example
  * ```typescript
  * const myProvider: AnalyticsProvider = {

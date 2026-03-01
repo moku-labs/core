@@ -1,5 +1,6 @@
 /**
  * Analytics plugin configuration.
+ *
  * @example
  * ```typescript
  * { provider: "memory", sampleRate: 1, trackingId: "G-XXXXX" }
@@ -16,6 +17,7 @@ export type AnalyticsConfig = {
 
 /**
  * A tracked analytics event with timestamp.
+ *
  * @example
  * ```typescript
  * { event: "click", properties: { button: "submit" }, timestamp: 1709312400000 }
@@ -29,6 +31,7 @@ export type TrackedEvent = {
 
 /**
  * Internal mutable state for the analytics plugin.
+ *
  * @example
  * ```typescript
  * // After tracking two events and identifying a user
@@ -53,6 +56,7 @@ export type AnalyticsState = {
 
 /**
  * Events emitted by the analytics plugin.
+ *
  * @example
  * ```typescript
  * hooks: ctx => ({

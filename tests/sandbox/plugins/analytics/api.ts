@@ -6,6 +6,13 @@ import type { AnalyticsCtx, TrackedEvent } from "./types";
 export const createAnalyticsApi = (ctx: AnalyticsCtx) => {
   let provider: AnalyticsProvider | undefined;
 
+  /**
+   * Lazily initialize and cache the analytics provider instance. Ensures only
+   * one provider is created per plugin lifecycle, regardless of how many API
+   * calls are made.
+   *
+   * @returns {AnalyticsProvider} The cached provider instance.
+   */
   const getProvider = (): AnalyticsProvider => {
     if (!provider) {
       provider = createProvider(ctx.config.provider);
@@ -19,9 +26,10 @@ export const createAnalyticsApi = (ctx: AnalyticsCtx) => {
      * to the configured provider and stored in state. Subject to the
      * configured sample rate — returns undefined when the event is filtered.
      * Emits `analytics:track` on success.
-     * @param event - The event name to track (e.g. "page_view", "click").
-     * @param properties - Arbitrary key-value metadata attached to the event.
-     * @returns The tracked event record, or undefined if filtered by sample rate.
+     *
+     * @param {string} event - The event name to track (e.g. "page_view", "click").
+     * @param {Record<string, unknown>} properties - Arbitrary key-value metadata attached to the event.
+     * @returns {TrackedEvent | undefined} The tracked event record, or undefined if filtered by sample rate.
      * @example
      * ```typescript
      * app.analytics.track("button_click", { buttonId: "signup" });
@@ -45,7 +53,8 @@ export const createAnalyticsApi = (ctx: AnalyticsCtx) => {
      * Associate all subsequent tracked events with a user identity.
      * Forwards the identity to the provider and emits `analytics:identify`.
      * Call this after user login to attribute events to a known user.
-     * @param userId - The unique user identifier.
+     *
+     * @param {string} userId - The unique user identifier.
      * @example
      * ```typescript
      * app.analytics.identify("user-42");
@@ -69,21 +78,24 @@ export const createAnalyticsApi = (ctx: AnalyticsCtx) => {
     /**
      * Get all tracked events recorded in this session. Returns a readonly
      * array — useful for assertions in tests or building an event log UI.
-     * @returns A readonly array of all tracked events.
+     *
+     * @returns {readonly TrackedEvent[]} A readonly array of all tracked events.
      */
     getEvents: (): readonly TrackedEvent[] => ctx.state.events,
 
     /**
      * Get the currently identified user ID. Returns undefined if
      * `identify()` has not been called yet.
-     * @returns The current user ID, or undefined.
+     *
+     * @returns {string | undefined} The current user ID, or undefined.
      */
     getUserId: (): string | undefined => ctx.state.userId,
 
     /**
      * Get the total number of events tracked in this session.
      * Useful for dashboards or rate-limiting checks.
-     * @returns The count of tracked events.
+     *
+     * @returns {number} The count of tracked events.
      */
     getEventCount: (): number => ctx.state.events.length
   };

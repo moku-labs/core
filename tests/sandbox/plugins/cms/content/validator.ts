@@ -1,10 +1,24 @@
 import type { CreateContentInput } from "./types";
 
+/**
+ * A single validation failure for a specific field. Contains the field name
+ * and a human-readable message. Used by `validateContent` and surfaced in
+ * error messages by `content.create()`.
+ */
 export type ValidationError = {
   field: string;
   message: string;
 };
 
+/**
+ * Validate `CreateContentInput` fields before content creation. Checks that
+ * title and body are non-empty and that the title does not exceed 200
+ * characters. Called by `content.create()` to enforce input constraints
+ * before storing a new content item.
+ *
+ * @param {CreateContentInput} input - The content fields to validate.
+ * @returns {ValidationError[]} An array of field-level errors (empty on success).
+ */
 export const validateContent = (input: CreateContentInput): ValidationError[] => {
   const errors: ValidationError[] = [];
 

@@ -1,5 +1,6 @@
 /**
  * Router plugin configuration.
+ *
  * @example
  * ```typescript
  * { basePath: "/app", notFoundPath: "/404" }
@@ -14,6 +15,7 @@ export type RouterConfig = {
 
 /**
  * Internal mutable state for the router plugin.
+ *
  * @example
  * ```typescript
  * // After navigating: "/" → "/dashboard" → "/settings"
@@ -39,6 +41,7 @@ export type RouterState = {
 /**
  * Function that determines whether navigation is allowed.
  * Return `true` to allow, `false` to block.
+ *
  * @example
  * ```typescript
  * const authGuard: NavigationGuard = (to) => to !== "/admin" || isLoggedIn();
@@ -48,6 +51,7 @@ export type NavigationGuard = (to: string, from: string) => boolean;
 
 /**
  * Result of a navigation attempt.
+ *
  * @example
  * ```typescript
  * const result = app.router.navigate("/about");
@@ -62,6 +66,7 @@ export type NavigationResult = {
 
 /**
  * Events emitted by the router plugin.
+ *
  * @example
  * ```typescript
  * hooks: ctx => ({

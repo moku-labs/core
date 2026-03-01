@@ -22,6 +22,14 @@ export default [
   // 5. JSDoc TypeScript preset (disables require-param-type, require-returns-type)
   jsdocPlugin.configs["flat/recommended-typescript-error"],
 
+  // 5b. JSDoc style overrides: allow {Type} annotations and blank line before first tag
+  {
+    rules: {
+      "jsdoc/no-types": "off",
+      "jsdoc/tag-lines": ["error", "never", { startLines: 1 }]
+    }
+  },
+
   // 6. Source files: strict JSDoc requirements
   {
     files: ["src/**/*.ts"],

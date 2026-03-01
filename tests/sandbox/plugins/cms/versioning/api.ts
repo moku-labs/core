@@ -2,6 +2,13 @@ import type { CmsCtx, ContentItem, Version } from "../types";
 import type { Diff, VersioningApi } from "./types";
 
 export const createVersioningApi = (ctx: CmsCtx): VersioningApi => {
+  /**
+   * Generate a sequential version ID using the shared `nextId` counter from
+   * CMS state. Same pattern as content and media `generateId` to maintain
+   * a single ID namespace across all CMS modules.
+   *
+   * @returns {string} A unique version ID (e.g. "version-3").
+   */
   const generateId = (): string => {
     const id = `version-${ctx.state.nextId}`;
     ctx.state.nextId++;
@@ -13,9 +20,10 @@ export const createVersioningApi = (ctx: CmsCtx): VersioningApi => {
      * Create a versioned snapshot of a content item. The snapshot is a
      * shallow copy — subsequent edits to the content do not affect the
      * stored version. Used to create save points before making changes.
-     * @param contentId - The ID of the content item to snapshot.
-     * @param message - A human-readable description of the version (e.g. "Initial draft").
-     * @returns The created version record with snapshot data.
+     *
+     * @param {string} contentId - The ID of the content item to snapshot.
+     * @param {string} message - A human-readable description of the version (e.g. "Initial draft").
+     * @returns {Version} The created version record with snapshot data.
      * @throws {Error} When the content ID does not exist.
      * @example
      * ```typescript
@@ -45,9 +53,10 @@ export const createVersioningApi = (ctx: CmsCtx): VersioningApi => {
     /**
      * Revert a content item to a previously committed version. Replaces the
      * current content state with a copy of the version's snapshot.
-     * @param contentId - The ID of the content item to revert.
-     * @param versionId - The ID of the version to restore.
-     * @returns True if the version was found and content was reverted, false otherwise.
+     *
+     * @param {string} contentId - The ID of the content item to revert.
+     * @param {string} versionId - The ID of the version to restore.
+     * @returns {boolean} True if the version was found and content was reverted, false otherwise.
      * @example
      * ```typescript
      * const success = app.cms.versioning.revert(item.id, version.id);
@@ -65,9 +74,10 @@ export const createVersioningApi = (ctx: CmsCtx): VersioningApi => {
      * Compare a content item's current state with a committed version.
      * Checks title, body, locale, and status fields for differences.
      * Useful for showing change summaries before reverting.
-     * @param contentId - The ID of the content item to compare.
-     * @param versionId - The ID of the version to compare against.
-     * @returns An array of field-level diffs. Empty if no differences or if content/version not found.
+     *
+     * @param {string} contentId - The ID of the content item to compare.
+     * @param {string} versionId - The ID of the version to compare against.
+     * @returns {Diff[]} An array of field-level diffs. Empty if no differences or if content/version not found.
      * @example
      * ```typescript
      * const diffs = app.cms.versioning.diff(item.id, version.id);
@@ -100,8 +110,9 @@ export const createVersioningApi = (ctx: CmsCtx): VersioningApi => {
      * Get the version history for a content item. Returns all committed
      * versions in chronological order. Useful for version list UIs and
      * audit trails.
-     * @param contentId - The ID of the content item.
-     * @returns An array of version records for the given content.
+     *
+     * @param {string} contentId - The ID of the content item.
+     * @returns {Version[]} An array of version records for the given content.
      */
     history: (contentId: string): Version[] => {
       return ctx.state.versions.filter(v => v.contentId === contentId);

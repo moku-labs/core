@@ -2,12 +2,14 @@
  * Env plugin — Nano tier.
  *
  * Environment detection: development, production, CI.
+ *
  * @see README.md
  */
 import { createPlugin } from "../config";
 
 /**
  * Env plugin configuration.
+ *
  * @example
  * ```typescript
  * { nodeEnv: "production", isCI: true }
@@ -22,6 +24,7 @@ export type EnvConfig = {
 
 /**
  * Env plugin public API.
+ *
  * @example
  * ```typescript
  * app.env.isDev();  // true in development

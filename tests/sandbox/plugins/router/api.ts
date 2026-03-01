@@ -5,8 +5,9 @@ export const createRouterApi = (ctx: RouterCtx) => ({
    * Navigate to a path. Checks all registered guards before allowing the
    * transition. If any guard rejects, the navigation is blocked and state
    * remains unchanged. Emits `router:navigate` on success.
-   * @param path - The target path to navigate to.
-   * @returns The navigation result indicating whether the route change was blocked.
+   *
+   * @param {string} path - The target path to navigate to.
+   * @returns {NavigationResult} The navigation result indicating whether the route change was blocked.
    * @example
    * ```typescript
    * const result = app.router.navigate("/dashboard");
@@ -31,14 +32,16 @@ export const createRouterApi = (ctx: RouterCtx) => ({
   /**
    * Get the current path. Used to read where the router is currently
    * pointing without triggering any navigation or side effects.
-   * @returns The current active path.
+   *
+   * @returns {string} The current active path.
    */
   current: (): string => ctx.state.currentPath,
 
   /**
    * Navigate back to the previous path by popping the history stack.
    * Emits `router:navigate` when a previous path exists.
-   * @returns The previous path, or undefined if the history stack is empty.
+   *
+   * @returns {string | undefined} The previous path, or undefined if the history stack is empty.
    * @example
    * ```typescript
    * app.router.navigate("/a");
@@ -60,7 +63,8 @@ export const createRouterApi = (ctx: RouterCtx) => ({
    * Register a navigation guard that can block route changes. Guards are
    * checked in order during `navigate()` — if any returns false, the
    * navigation is blocked.
-   * @param guard - A function `(to, from) => boolean` that returns false to block.
+   *
+   * @param {NavigationGuard} guard - A function `(to, from) => boolean` that returns false to block.
    * @example
    * ```typescript
    * app.router.addGuard((to) => to !== "/admin");
@@ -73,7 +77,8 @@ export const createRouterApi = (ctx: RouterCtx) => ({
   /**
    * Get the navigation history as a readonly array of previously visited
    * paths. Useful for breadcrumbs or debugging navigation flow.
-   * @returns A readonly array of visited paths in chronological order.
+   *
+   * @returns {readonly string[]} A readonly array of visited paths in chronological order.
    */
   getHistory: (): readonly string[] => ctx.state.history
 });

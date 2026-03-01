@@ -49,6 +49,7 @@ plugins/
  * Env plugin — Nano tier.
  *
  * Environment detection: dev/prod mode and CI flag.
+ *
  * @see README.md
  */
 import { createPlugin } from '../config';
@@ -87,6 +88,7 @@ plugins/
  * Counter plugin — Micro tier.
  *
  * Increment/decrement counter with configurable step.
+ *
  * @see README.md
  */
 import { createPlugin } from '../config';
@@ -134,6 +136,7 @@ plugins/
  *
  * Client-side routing with navigation guards and history tracking.
  * Emits `router:navigate` and `router:not-found`.
+ *
  * @see README.md
  */
 import { createPlugin } from '../../config';
@@ -195,6 +198,7 @@ plugins/
  *
  * Event tracking with pluggable providers.
  * Emits `analytics:track`, `analytics:identify`, `analytics:error`.
+ *
  * @see README.md
  */
 import { createPlugin } from '../../config';
@@ -272,6 +276,7 @@ plugins/
  *
  * Content management with CRUD, media uploads, and versioning.
  * Depends on db and http. Emits `cms:publish`, `cms:draft`, `cms:upload`.
+ *
  * @see README.md
  */
 import { createPlugin } from '../../config';
@@ -918,12 +923,19 @@ Only create `types.ts` when types are shared across 2+ files. If only `index.ts`
 
 ### JSDoc
 
-All **public-facing types** (Config, API, Events, State, exported domain types) MUST have JSDoc with `@example` tags showing usage. Internal context types (`XxxCtx`) should NOT have JSDoc — they are wiring-only types consumed by domain factories.
+All **public-facing types** (Config, API, Events, State, exported domain types) MUST have JSDoc with `@example` tags showing usage. Internal context types (`XxxCtx`) should NOT have JSDoc — they are wiring-only types consumed by domain factories. All **private/helper functions** (validators, processors, handler factories, internal closures like `generateId`) MUST also have JSDoc explaining why they exist and where they are called from.
+
+**JSDoc formatting rules:**
+- A blank ` *` line MUST separate the description paragraph from the first `@` tag.
+- `@param` MUST include `{Type}` — e.g. `@param {string} name - Description.`
+- `@returns` MUST include `{Type}` — e.g. `@returns {NavigationResult} Description.`
+- Inline field JSDoc on type members (`/** Field desc */`) does NOT require `{Type}`.
+- Descriptions MUST explain **why** the method/function exists, **where** it is used, and **what** it does — not just mechanical behavior.
 
 **API method JSDoc:** Every method returned from API factories (`create<Name>Api`) AND every method in exported `XxxApi` type interfaces MUST have a JSDoc comment with:
 - A description explaining **what** it does and **why** it exists
-- `@param` for each parameter
-- `@returns` describing the return value
+- `@param {Type}` for each parameter
+- `@returns {Type}` describing the return value
 - `@throws {Error}` for methods that throw (the `{Error}` type is required by linter)
 - `@example` for complex methods (multi-step usage, non-obvious behavior)
 
@@ -936,6 +948,7 @@ All **public-facing types** (Config, API, Events, State, exported domain types) 
 
 /**
  * Router plugin configuration.
+ *
  * @example
  * ```typescript
  * { basePath: "/app", notFoundPath: "/404" }
@@ -950,6 +963,7 @@ export type RouterConfig = {
 
 /**
  * Internal mutable state for the router plugin.
+ *
  * @example
  * ```typescript
  * // After navigating: "/" → "/dashboard" → "/settings"
@@ -984,15 +998,17 @@ export type RouterApi = {
    * Navigate to a path. Checks all registered guards before allowing
    * the transition. If any guard rejects, the navigation is blocked
    * and state remains unchanged. Emits `router:navigate` on success.
-   * @param path - The target path to navigate to.
-   * @returns The navigation result indicating whether the route change was blocked.
+   *
+   * @param {string} path - The target path to navigate to.
+   * @returns {NavigationResult} The navigation result indicating whether the route change was blocked.
    */
   navigate: (path: string) => NavigationResult;
 
   /**
    * Get the current path. Used to read where the router is currently
    * pointing without triggering any navigation or side effects.
-   * @returns The current active path.
+   *
+   * @returns {string} The current active path.
    */
   current: () => string;
 };
@@ -1006,8 +1022,9 @@ export const createRouterApi = (ctx: RouterCtx) => ({
    * Navigate to a path. Checks all registered guards before allowing
    * the transition. If any guard rejects, the navigation is blocked
    * and state remains unchanged. Emits `router:navigate` on success.
-   * @param path - The target path to navigate to.
-   * @returns The navigation result indicating whether the route change was blocked.
+   *
+   * @param {string} path - The target path to navigate to.
+   * @returns {NavigationResult} The navigation result indicating whether the route change was blocked.
    * @example
    * ```typescript
    * const result = app.router.navigate("/dashboard");
@@ -1019,7 +1036,8 @@ export const createRouterApi = (ctx: RouterCtx) => ({
   /**
    * Get the current path. Used to read where the router is currently
    * pointing without triggering any navigation or side effects.
-   * @returns The current active path.
+   *
+   * @returns {string} The current active path.
    */
   current: (): string => ctx.state.currentPath,
 });
@@ -1032,8 +1050,9 @@ export const createRouterApi = (ctx: RouterCtx) => ({
  * Create the initial router state. Sets `currentPath` to the configured
  * `basePath` so the router starts at the application root. History and
  * guards start empty; `initialized` is set to true during `onStart`.
- * @param ctx - Minimal context with config for reading `basePath`.
- * @returns A fresh router state object.
+ *
+ * @param {StateCtx} ctx - Minimal context with config for reading `basePath`.
+ * @returns {RouterState} A fresh router state object.
  */
 export const createRouterState = (ctx: StateCtx): RouterState => ({
   currentPath: ctx.config.basePath,
@@ -1051,6 +1070,7 @@ export const createRouterState = (ctx: StateCtx): RouterState => ({
  *
  * Client-side routing with navigation guards and history tracking.
  * Emits `router:navigate` and `router:not-found`.
+ *
  * @see README.md
  */
 import { createPlugin } from '../config';
