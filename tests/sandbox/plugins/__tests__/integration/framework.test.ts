@@ -116,7 +116,7 @@ describe("plugin-test framework: full 5-plugin integration", () => {
         }
       });
 
-      await createApp({ plugins: [tracker] });
+      createApp({ plugins: [tracker] });
 
       expect(initOrder).toEqual(["env", "counter", "router", "analytics", "cms"]);
     });
@@ -259,9 +259,7 @@ describe("plugin-test framework: full 5-plugin integration", () => {
         plugins: [routerPlugin, analyticsPlugin]
       });
 
-      await expect(rawCreateApp()).rejects.toThrow(
-        "[plugin-test] analytics.trackingId is required"
-      );
+      expect(() => rawCreateApp()).toThrow("[plugin-test] analytics.trackingId is required");
     });
   });
 
@@ -335,7 +333,7 @@ describe("plugin-test framework: full 5-plugin integration", () => {
         })
       });
 
-      const app = await createApp({ plugins: [greetPlugin] });
+      const app = createApp({ plugins: [greetPlugin] });
 
       expect(app.env).toBeDefined();
       expect(app.router).toBeDefined();
@@ -353,7 +351,7 @@ describe("plugin-test framework: full 5-plugin integration", () => {
         })
       });
 
-      const app = await createApp({ plugins: [pageTitlePlugin] });
+      const app = createApp({ plugins: [pageTitlePlugin] });
 
       expect(() => app["page-title"].setAndTrack("/blog", "Blog")).not.toThrow();
       expect(app.router.current()).toBe("/blog");
@@ -378,7 +376,7 @@ describe("plugin-test framework: full 5-plugin integration", () => {
         })
       });
 
-      const app = await createApp({ plugins: [listener] });
+      const app = createApp({ plugins: [listener] });
       app.analytics.track("purchase", { amount: 99 });
 
       expect(tracked).toHaveLength(1);
@@ -397,7 +395,7 @@ describe("plugin-test framework: full 5-plugin integration", () => {
         })
       });
 
-      const app = await createApp({ plugins: [listener] });
+      const app = createApp({ plugins: [listener] });
       app.cms.content.create({ title: "New Post", body: "Content" });
 
       expect(drafts).toHaveLength(1);
@@ -416,7 +414,7 @@ describe("plugin-test framework: full 5-plugin integration", () => {
         })
       });
 
-      const app = await createApp({ plugins: [listener] });
+      const app = createApp({ plugins: [listener] });
       app.router.navigate("/contact");
 
       // emit is fire-and-forget — flush microtask queue so handlers complete
@@ -573,7 +571,7 @@ describe("plugin-test framework: full 5-plugin integration", () => {
         })
       });
 
-      const app = await createApp({ plugins: [extraPlugin] });
+      const app = createApp({ plugins: [extraPlugin] });
 
       expectTypeOf(app.extra.ping).toEqualTypeOf<() => "pong">();
       expect(app.extra.ping()).toBe("pong");
@@ -584,7 +582,7 @@ describe("plugin-test framework: full 5-plugin integration", () => {
         api: _ctx => ({ value: () => 42 })
       });
 
-      const app = await createApp({ plugins: [extra] });
+      const app = createApp({ plugins: [extra] });
 
       // Framework plugins still fully typed
       expectTypeOf(app.env.isDev).toEqualTypeOf<() => boolean>();
@@ -602,7 +600,7 @@ describe("plugin-test framework: full 5-plugin integration", () => {
 
   describe("types: pluginConfigs only accepts registered plugin config keys", () => {
     it("accepts valid partial config for registered plugins", async () => {
-      const app = await createApp({
+      const app = createApp({
         pluginConfigs: {
           env: { nodeEnv: "production" },
           counter: { initial: 100, step: 10 }
@@ -613,7 +611,7 @@ describe("plugin-test framework: full 5-plugin integration", () => {
     });
 
     it("rejects wrong type for counter.initial", async () => {
-      const app = await createApp({
+      const app = createApp({
         pluginConfigs: {
           // @ts-expect-error -- initial must be number, not string
           counter: { initial: "wrong" }
@@ -624,7 +622,7 @@ describe("plugin-test framework: full 5-plugin integration", () => {
     });
 
     it("rejects wrong type for router.basePath", async () => {
-      const app = await createApp({
+      const app = createApp({
         pluginConfigs: {
           // @ts-expect-error -- basePath must be string, not number
           router: { basePath: 404 }
@@ -635,7 +633,7 @@ describe("plugin-test framework: full 5-plugin integration", () => {
     });
 
     it("rejects wrong type for analytics.sampleRate", async () => {
-      const app = await createApp({
+      const app = createApp({
         pluginConfigs: {
           // @ts-expect-error -- sampleRate must be number, not boolean
           analytics: { sampleRate: true }

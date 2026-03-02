@@ -110,7 +110,7 @@ export const { createApp, createPlugin } = framework;
 // my-app/main.ts
 import { createApp } from 'my-framework';
 
-const app = await createApp({
+const app = createApp({
   plugins: [blogPlugin],
   config: { siteName: 'My Blog', mode: 'production' },
   pluginConfigs: { router: { basePath: '/blog' } },
@@ -218,7 +218,7 @@ createPlugin('name', {
   createState: ctx => ({ /* mutable state */ }),
   api:         ctx => ({ /* public methods, mounted on app.name */ }),
   hooks:       ctx => ({ 'event:name': handler }),
-  onInit:      async ctx => { /* all plugins exist */ },
+  onInit:      ctx => { /* all plugins exist, sync only */ },
   onStart:     async ctx => { /* app is running */ },
   onStop:      async ctx => { /* teardown, reverse order */ },
 });
@@ -268,7 +268,7 @@ Creates a plugin instance. Zero explicit generics — everything inferred from t
 
 ### createApp(options?)
 
-Merges framework defaults with consumer options. Validates, resolves config, runs `onInit`. Returns `Promise<App>` — a frozen object with plugin APIs mounted as properties.
+Merges framework defaults with consumer options. Validates, resolves config, runs `onInit`. Returns `App` — a frozen object with plugin APIs mounted as properties.
 
 ### App
 

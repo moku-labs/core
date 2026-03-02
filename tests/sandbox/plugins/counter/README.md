@@ -36,7 +36,7 @@ None.
 ## Usage
 
 ```typescript
-const app = await createApp({
+const app = createApp({
   pluginConfigs: { counter: { initial: 10, step: 5 } },
 });
 

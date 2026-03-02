@@ -110,7 +110,7 @@ function createCore(
   options: {
     plugins: PluginInstance[];
     pluginConfigs?: Record<string, unknown>;
-    onReady?: (ctx: { config: Readonly<Config> }) => void | Promise<void>;
+    onReady?: (ctx: { config: Readonly<Config> }) => void;
     onError?: (error: Error) => void;
   },
 ): {
@@ -158,12 +158,12 @@ function createApp(
     plugins?: PluginInstance[];
     config?: Partial<Config>;
     pluginConfigs?: { [pluginName: string]?: Partial<PluginConfig> };
-    onReady?: (context: AppCallbackContext) => void | Promise<void>;
+    onReady?: (context: AppCallbackContext) => void;
     onError?: (error: Error, context: AppCallbackContext) => void;
     onStart?: (context: AppCallbackContext) => void | Promise<void>;
     onStop?: (context: AppCallbackContext) => void | Promise<void>;
   },
-): Promise<App<Config, Events, AllPlugins>>;
+): App<Config, Events, AllPlugins>;
 ```
 
 `AppCallbackContext` includes `config` (frozen global config), `emit`, `require`, `has`, and all mounted plugin APIs. This gives consumer callbacks full access to the app's capabilities.
@@ -182,7 +182,7 @@ function createApp(
 
 Consumer callbacks are additive to framework-level callbacks set in `createCore`.
 
-**Returns:** `Promise<App>`. The app is fully initialized -- all plugins have completed their `onInit` phase. Consumers call `app.start()` and `app.stop()` to control the running lifecycle.
+**Returns:** `App`. The app is fully initialized -- all plugins have completed their `onInit` phase. Consumers call `app.start()` and `app.stop()` to control the running lifecycle.
 
 **The final plugin list is:** `[...frameworkDefaults, ...consumerExtras]`
 
@@ -193,7 +193,7 @@ Order: framework defaults first (in the order the framework defined them), then 
 import { createApp } from 'my-framework';
 import { blogPlugin } from './plugins/blog';
 
-const app = await createApp({
+const app = createApp({
   plugins: [blogPlugin],
   config: {
     siteName: 'My Blog',
@@ -213,7 +213,7 @@ const app = await createApp({
 
 ```typescript
 // Minimal: framework defaults only, just config overrides
-const app = await createApp({
+const app = createApp({
   config: {
     siteName: 'Simple Site',
     mode: 'production',
@@ -225,7 +225,7 @@ const app = await createApp({
 
 ```typescript
 // Framework defaults for everything
-const app = await createApp();
+const app = createApp();
 ```
 
 ---
@@ -384,7 +384,7 @@ const blogPlugin = createPlugin('blog', {
 });
 
 // Single call -- structured namespaces
-const app = await createApp({
+const app = createApp({
   plugins: [analyticsPlugin, blogPlugin],
   config: {
     siteName: 'My Personal Blog',

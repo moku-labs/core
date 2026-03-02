@@ -38,7 +38,7 @@ describe("lifecycle ordering", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [a, b, c] });
-    await createApp();
+    createApp();
 
     expect(order).toEqual(["a:init", "b:init", "c:init"]);
   });
@@ -59,7 +59,7 @@ describe("lifecycle ordering", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [a, b] });
-    const app = await createApp();
+    const app = createApp();
     await app.start();
 
     expect(order).toEqual(["a:start", "b:start"]);
@@ -86,7 +86,7 @@ describe("lifecycle ordering", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [a, b, c] });
-    const app = await createApp();
+    const app = createApp();
     await app.start();
     await app.stop();
 
@@ -114,7 +114,7 @@ describe("lifecycle ordering", () => {
     const b = makePlugin("b");
 
     const { createApp } = cc.createCore(cc, { plugins: [a, b] });
-    const app = await createApp();
+    const app = createApp();
     await app.start();
     await app.stop();
 
@@ -140,7 +140,7 @@ describe("dispatch and hooks", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [plugin] });
-    const app = await createApp();
+    const app = createApp();
 
     app.emit("test:event", { data: 42 });
 
@@ -173,7 +173,7 @@ describe("dispatch and hooks", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [a, b] });
-    const app = await createApp();
+    const app = createApp();
 
     app.emit("shared:event", {});
 
@@ -190,7 +190,7 @@ describe("dispatch and hooks", () => {
     const plugin = cc.createPlugin("silent", {});
 
     const { createApp } = cc.createCore(cc, { plugins: [plugin] });
-    const app = await createApp();
+    const app = createApp();
 
     expect(() => app.emit("nonexistent:event", {})).not.toThrow();
   });
@@ -214,7 +214,7 @@ describe("dispatch and hooks", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [listener, emitter] });
-    await createApp();
+    createApp();
 
     expect(received).toHaveLength(1);
   });
@@ -239,7 +239,7 @@ describe("dispatch and hooks", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [listener, emitter] });
-    await createApp();
+    createApp();
 
     expect(received).toHaveLength(1);
   });
@@ -263,7 +263,7 @@ describe("context tiers", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [plugin] });
-    await createApp();
+    createApp();
 
     expect(contextKeys).toContain("global");
     expect(contextKeys).toContain("config");
@@ -285,7 +285,7 @@ describe("context tiers", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [plugin] });
-    await createApp();
+    createApp();
 
     expect(contextKeys).toContain("global");
     expect(contextKeys).toContain("config");
@@ -306,7 +306,7 @@ describe("context tiers", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [plugin] });
-    const app = await createApp();
+    const app = createApp();
     await app.start();
     await app.stop();
 
@@ -326,7 +326,7 @@ describe("app object shape", () => {
     const cc = createTestCore();
 
     const { createApp } = cc.createCore(cc, { plugins: [] });
-    const app = await createApp();
+    const app = createApp();
 
     expect(typeof app.start).toBe("function");
     expect(typeof app.stop).toBe("function");
@@ -346,7 +346,7 @@ describe("app object shape", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [router] });
-    const app = await createApp();
+    const app = createApp();
 
     expect(app.router).toBeDefined();
     expect(typeof app.router.navigate).toBe("function");
@@ -357,7 +357,7 @@ describe("app object shape", () => {
     const cc = createTestCore();
 
     const { createApp } = cc.createCore(cc, { plugins: [] });
-    const app = await createApp();
+    const app = createApp();
 
     expect(Object.isFrozen(app)).toBe(true);
   });
@@ -370,7 +370,7 @@ describe("app object shape", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [noApi] });
-    const app = await createApp();
+    const app = createApp();
 
     // Plugin is registered (has returns true) but has no mounted API
     expect(app.has("no-api")).toBe(true);
@@ -389,7 +389,7 @@ describe("idempotency", () => {
     const cc = createTestCore();
 
     const { createApp } = cc.createCore(cc, { plugins: [] });
-    const app = await createApp();
+    const app = createApp();
 
     await app.start();
     await expect(app.start()).rejects.toThrow("already started");
@@ -399,7 +399,7 @@ describe("idempotency", () => {
     const cc = createTestCore();
 
     const { createApp } = cc.createCore(cc, { plugins: [] });
-    const app = await createApp();
+    const app = createApp();
 
     await expect(app.stop()).rejects.toThrow("not started");
   });
@@ -421,7 +421,7 @@ describe("plugin state privacy", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [stateful] });
-    const app = await createApp();
+    const app = createApp();
 
     // API method can access state
     expect(app.stateful.getSecret()).toBe("hidden");
@@ -445,7 +445,7 @@ describe("plugin state privacy", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [counter] });
-    const app = await createApp();
+    const app = createApp();
 
     expect(app.counter.getCount()).toBe(0);
     app.counter.increment();
@@ -465,7 +465,7 @@ describe("kernel error messages", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [] });
-    const app = await createApp();
+    const app = createApp();
 
     await app.start();
 
@@ -485,7 +485,7 @@ describe("kernel error messages", () => {
     const unregistered = cc.createPlugin("missing", {});
 
     const { createApp } = cc.createCore(cc, { plugins: [] });
-    const app = await createApp();
+    const app = createApp();
 
     try {
       app.require(unregistered);
@@ -510,7 +510,7 @@ describe("require, has", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [router] });
-    const app = await createApp();
+    const app = createApp();
 
     const api = app.require(router);
     expect(api.current()).toBe("/");
@@ -522,7 +522,7 @@ describe("require, has", () => {
     const unregistered = cc.createPlugin("missing", {});
 
     const { createApp } = cc.createCore(cc, { plugins: [] });
-    const app = await createApp();
+    const app = createApp();
 
     expect(() => app.require(unregistered)).toThrow();
   });
@@ -535,7 +535,7 @@ describe("require, has", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [router] });
-    const app = await createApp();
+    const app = createApp();
 
     expect(app.has("router")).toBe(true);
   });
@@ -544,7 +544,7 @@ describe("require, has", () => {
     const cc = createTestCore();
 
     const { createApp } = cc.createCore(cc, { plugins: [] });
-    const app = await createApp();
+    const app = createApp();
 
     expect(app.has("nonexistent")).toBe(false);
   });
@@ -556,7 +556,7 @@ describe("require, has", () => {
     const noApi = cc.createPlugin("no-api", {});
 
     const { createApp } = cc.createCore(cc, { plugins: [noApi] });
-    const app = await createApp();
+    const app = createApp();
 
     // Registered by name -> true
     expect(app.has("no-api")).toBe(true);
@@ -586,7 +586,7 @@ describe("require, has", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [dep, consumer] });
-    await createApp();
+    createApp();
 
     expect(results.api).toEqual({ value: 42 });
     expect(results.has).toBe(true);
@@ -605,7 +605,7 @@ describe("require, has", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [consumer] });
-    await expect(createApp()).rejects.toThrow("missing");
+    expect(() => createApp()).toThrow("missing");
   });
 });
 
@@ -630,7 +630,7 @@ describe("onReady callback", () => {
         order.push("onReady");
       }
     });
-    await createApp();
+    createApp();
 
     expect(order).toEqual(["onInit", "onReady"]);
   });
@@ -645,7 +645,7 @@ describe("onReady callback", () => {
         receivedConfig = { ...context.config };
       }
     });
-    await createApp();
+    createApp();
 
     expect(receivedConfig.siteName).toBe("Test");
   });
@@ -690,7 +690,7 @@ describe("onError callback", () => {
         errors.push(error);
       }
     });
-    const app = await createApp();
+    const app = createApp();
 
     app.emit("test:event", {});
 
@@ -712,15 +712,12 @@ describe("onError callback", () => {
 // ---------------------------------------------------------------------------
 
 describe("async lifecycle", () => {
-  it("onInit supports async functions", async () => {
+  it("onInit runs synchronously in forward order", () => {
     const order: string[] = [];
     const cc = createTestCore();
 
     const a = cc.createPlugin("a", {
-      onInit: async () => {
-        await new Promise(resolve => {
-          setTimeout(resolve, 10);
-        });
+      onInit: () => {
         order.push("a:init");
       }
     });
@@ -731,9 +728,9 @@ describe("async lifecycle", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [a, b] });
-    await createApp();
+    createApp();
 
-    // Sequential: a finishes before b starts
+    // Forward order: a runs before b
     expect(order).toEqual(["a:init", "b:init"]);
   });
 
@@ -756,7 +753,7 @@ describe("async lifecycle", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [a, b] });
-    const app = await createApp();
+    const app = createApp();
     await app.start();
 
     expect(order).toEqual(["a:start", "b:start"]);
@@ -781,7 +778,7 @@ describe("async lifecycle", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [a, b] });
-    const app = await createApp();
+    const app = createApp();
     await app.start();
     await app.stop();
 
@@ -806,7 +803,7 @@ describe("consumer lifecycle callbacks", () => {
       }
     });
 
-    await createApp({
+    createApp({
       onReady: () => {
         order.push("consumer:onReady");
       }
@@ -826,7 +823,7 @@ describe("consumer lifecycle callbacks", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [plugin] });
-    const app = await createApp({
+    const app = createApp({
       onStart: () => {
         order.push("consumer:onStart");
       }
@@ -847,7 +844,7 @@ describe("consumer lifecycle callbacks", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [plugin] });
-    const app = await createApp({
+    const app = createApp({
       onStop: () => {
         order.push("consumer:onStop");
       }
@@ -881,7 +878,7 @@ describe("consumer lifecycle callbacks", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [plugin] });
-    const app = await createApp({
+    const app = createApp({
       onError: error => {
         errors.push(error.message);
       }

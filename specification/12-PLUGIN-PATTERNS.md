@@ -192,7 +192,7 @@ const blogPlugin = createPlugin('blog', {
   }),
 });
 
-const app = await createApp({
+const app = createApp({
   plugins: [blogPlugin],
   config: {
     siteName: 'Code & Coffee',
@@ -274,7 +274,7 @@ THREE-STEP PATTERN:
   Step 3 -- Consumer main.ts (createApp):
     import { createApp, createPlugin } from 'my-framework';
     const myPlugin = createPlugin('myPlugin', { ... });
-    const app = await createApp({
+    const app = createApp({
       plugins: [myPlugin],
       config: { siteName: 'My App' },
       pluginConfigs: { myPlugin: { someConfig: true } },
@@ -348,7 +348,7 @@ RULES:
   - Never put more than ~50 lines of logic in a plugin index.ts.
   - Plugin index.ts is a CONNECTION POINT. Domain code lives in separate files.
   - Use ctx.require(pluginInstance) for dependencies. Use ctx.has('name') for optional deps.
-  - ALWAYS await createApp -- it returns a Promise.
+  - ALWAYS createApp -- it returns a Promise.
 
 APP-LEVEL TYPING:
   app.pluginName.method() is fully typed via the plugin's api return type.

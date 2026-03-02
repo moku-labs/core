@@ -36,7 +36,7 @@ describe("ctx.require returns typed API (SAND-05)", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [router, logger] });
-    const app = await createApp();
+    const app = createApp();
 
     expect(capturedRouterApi).toBeDefined();
     expect(app.logger.logRoute()).toBe("/test");
@@ -67,7 +67,7 @@ describe("ctx.require returns typed API (SAND-05)", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [router, consumer] });
-    const app = await createApp();
+    const app = createApp();
 
     expect(capturedResult).toBe("/home");
     expect(app.consumer.check()).toBe("/home");
@@ -92,7 +92,7 @@ describe("ctx.require returns typed API (SAND-05)", () => {
     const { createApp } = cc.createCore(cc, { plugins: [probe] });
 
     // Runtime: require should throw because unregistered is not in the plugin list
-    await expect(createApp()).rejects.toThrow();
+    expect(() => createApp()).toThrow();
   });
 });
 
@@ -123,7 +123,7 @@ describe("ctx.has", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [router, logger] });
-    await createApp();
+    createApp();
 
     expect(hasRouter).toBe(true);
     expect(hasLogger).toBe(true);
@@ -144,7 +144,7 @@ describe("ctx.has", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [probe] });
-    await createApp();
+    createApp();
 
     expect(hasNonexistent).toBe(false);
   });
@@ -174,7 +174,7 @@ describe("ctx.has", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [router, renderer, logger] });
-    await createApp();
+    createApp();
 
     expect(hasRenderer).toBe(true);
   });
@@ -202,7 +202,7 @@ describe("depends validation at startup", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [router, logger] });
-    const app = await createApp();
+    const app = createApp();
 
     expect(app.logger).toBeDefined();
     expect(app.logger.log()).toBe("/");
@@ -236,7 +236,7 @@ describe("plugin dependencies with explicit listing", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [templateEngine, renderer] });
-    const app = await createApp();
+    const app = createApp();
 
     expect(app.has("template-engine")).toBe(true);
     expect(app.renderer.render("/")).toBe("<div>/</div>");
@@ -261,7 +261,7 @@ describe("plugin dependencies with explicit listing", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [templateEngine, renderer] });
-    const app = await createApp();
+    const app = createApp();
 
     expect(app.renderer.render("/about")).toBe("<div>/about</div>");
   });
@@ -293,7 +293,7 @@ describe("plugin dependencies with explicit listing", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [templateEngine, renderer] });
-    await createApp();
+    createApp();
 
     // Explicit order: template-engine listed before renderer
     expect(order).toEqual(["template-engine:init", "renderer:init"]);
@@ -308,7 +308,7 @@ describe("cross-plugin API access via app object", () => {
   it("app.pluginName returns the API object (not the full plugin)", async () => {
     const { createApp } = await import("./demo/moku-web/index");
 
-    const app = await createApp();
+    const app = createApp();
 
     // Type-level: app.router has navigate and current methods
     expectTypeOf(app.router).toHaveProperty("navigate");
@@ -326,7 +326,7 @@ describe("cross-plugin API access via app object", () => {
     const { createApp } = await import("./demo/moku-web/index");
     const { routerPlugin } = await import("./demo/moku-web/plugins/router");
 
-    const app = await createApp();
+    const app = createApp();
 
     // Instance-based require returns fully typed API
     const routerApi = app.require(routerPlugin);
@@ -399,7 +399,7 @@ describe("multiple plugin dependencies", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [router, auth, dashboard] });
-    const app = await createApp();
+    const app = createApp();
 
     // No user: dashboard redirects
     expect(app.dashboard.show()).toBe("redirected");
@@ -452,7 +452,7 @@ describe("multiple plugin dependencies", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [router, auth, dashboard] });
-    const app = await createApp();
+    const app = createApp();
 
     expect(app.dashboard.info()).toBe("alice at /");
   });

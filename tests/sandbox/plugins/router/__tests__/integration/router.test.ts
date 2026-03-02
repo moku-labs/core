@@ -96,7 +96,7 @@ describe("standard tier: router plugin (integration)", () => {
         })
       });
 
-      const app = await createApp({ plugins: [listenerPlugin] });
+      const app = createApp({ plugins: [listenerPlugin] });
       await app.start();
 
       // onStart emits router:navigate with from: "" to: basePath
@@ -127,7 +127,7 @@ describe("standard tier: router plugin (integration)", () => {
         })
       });
 
-      const app = await createApp({ plugins: [listenerPlugin] });
+      const app = createApp({ plugins: [listenerPlugin] });
       app.router.navigate("/test");
 
       expect(navigations).toHaveLength(1);
@@ -162,7 +162,7 @@ describe("standard tier: router plugin (integration)", () => {
         })
       });
 
-      const app = await createApp({ plugins: [emitterPlugin] });
+      const app = createApp({ plugins: [emitterPlugin] });
 
       // Should not throw — dependency events are emittable
       expect(() => app["route-emitter"].emitNav()).not.toThrow();

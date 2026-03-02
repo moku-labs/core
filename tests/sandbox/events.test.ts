@@ -20,7 +20,7 @@ describe("global events (from createCoreConfig Events)", () => {
       })
     });
 
-    const app = await createApp({ plugins: [listenerPlugin] });
+    const app = createApp({ plugins: [listenerPlugin] });
 
     // Emit a global event and verify the hook was called with typed payload
     app.emit("page:render", { path: "/", html: "<h1>Home</h1>" });
@@ -86,7 +86,7 @@ describe("per-plugin events (PluginEvents)", () => {
       })
     });
 
-    const app = await createApp({ plugins: [listenerPlugin] });
+    const app = createApp({ plugins: [listenerPlugin] });
 
     // Trigger a render which should emit "renderer:complete"
     app.renderer.render("/about");
@@ -121,7 +121,7 @@ describe("event merging via depends", () => {
       })
     });
 
-    const app = await createApp({ plugins: [navListenerPlugin] });
+    const app = createApp({ plugins: [navListenerPlugin] });
 
     // Trigger a navigation which emits "router:navigate"
     app.router.navigate("/about");
@@ -220,7 +220,7 @@ describe("strict hooks typing (no escape hatch)", () => {
       })
     });
 
-    const app = await createApp({ plugins: [plugin] });
+    const app = createApp({ plugins: [plugin] });
     app.emit("page:render", { path: "/typed", html: "<h1>Typed</h1>" });
 
     expect(received).toHaveLength(1);

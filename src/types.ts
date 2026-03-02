@@ -254,9 +254,7 @@ type PluginSpec<
   depends?: Deps;
   createState?: (context: MinimalContext<Config, C>) => S;
   api?: (context: PluginContext<Config, Events & PluginEvents & DepsEvents<Deps>, C, S>) => A;
-  onInit?: (
-    context: PluginContext<Config, Events & PluginEvents & DepsEvents<Deps>, C, S>
-  ) => void | Promise<void>;
+  onInit?: (context: PluginContext<Config, Events & PluginEvents & DepsEvents<Deps>, C, S>) => void;
   onStart?: (
     context: PluginContext<Config, Events & PluginEvents & DepsEvents<Deps>, C, S>
   ) => void | Promise<void>;
@@ -520,7 +518,7 @@ type AppCallbackContext<
  *
  * @example
  * ```ts
- * const app = await createApp({
+ * const app = createApp({
  *   config: { siteName: "My Blog" },
  *   pluginConfigs: { router: { basePath: "/blog" } },
  *   onReady: ctx => { console.log("App ready:", ctx.config.siteName); },
@@ -544,7 +542,7 @@ type CreateAppOptions<
         ? ExtractName<K>
         : never]?: Partial<ExtractConfig<K>>;
   };
-  onReady?: (context: AppCallbackContext<Config, Events, P>) => void | Promise<void>;
+  onReady?: (context: AppCallbackContext<Config, Events, P>) => void;
   onError?: (error: Error, context: AppCallbackContext<Config, Events, P>) => void;
   onStart?: (context: AppCallbackContext<Config, Events, P>) => void | Promise<void>;
   onStop?: (context: AppCallbackContext<Config, Events, P>) => void | Promise<void>;

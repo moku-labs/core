@@ -47,7 +47,7 @@ interface CreateCoreOptions<Config> {
   /** Framework-level plugin config overrides keyed by plugin name. */
   readonly pluginConfigs?: Record<string, unknown>;
   /** Called after all plugins are initialized. */
-  readonly onReady?: (context: { config: Readonly<Config> }) => void | Promise<void>;
+  readonly onReady?: (context: { config: Readonly<Config> }) => void;
   /** Error handler for hook dispatch and teardown failures. */
   readonly onError?: (error: Error) => void;
 }
@@ -63,7 +63,7 @@ interface ConsumerAppOptions {
   readonly plugins?: readonly AnyPluginInstance[];
   readonly config?: Record<string, unknown>;
   readonly pluginConfigs?: Record<string, unknown>;
-  readonly onReady?: (context: unknown) => void | Promise<void>;
+  readonly onReady?: (context: unknown) => void;
   readonly onError?: (error: Error, context?: unknown) => void;
   readonly onStart?: (context: unknown) => void | Promise<void>;
   readonly onStop?: (context: unknown) => void | Promise<void>;
@@ -92,7 +92,7 @@ interface CreateCoreResult<
    * Generic over ExtraPlugins to merge consumer plugins into the return type.
    *
    * @param options - Consumer-level config overrides, plugin configs, extra plugins.
-   * @returns A promise that resolves to the frozen, fully typed App object.
+   * @returns The frozen, fully typed App object.
    */
   readonly createApp: <const ExtraPlugins extends readonly AnyPluginInstance[] = readonly []>(
     options?: CreateAppOptions<
@@ -101,7 +101,7 @@ interface CreateCoreResult<
       Plugins[number] | ExtraPlugins[number],
       [...ExtraPlugins]
     >
-  ) => Promise<App<Config, Events, Plugins[number] | ExtraPlugins[number]>>;
+  ) => App<Config, Events, Plugins[number] | ExtraPlugins[number]>;
   /** Re-exported createPlugin for consumer convenience. */
   readonly createPlugin: BoundCreatePluginFunction<Config, Events>;
 }
@@ -186,13 +186,13 @@ function createCoreFactory<
      * plugins, then delegates to the kernel for lifecycle execution.
      *
      * @param consumerOptions - Consumer-level config, plugins, and callbacks.
-     * @returns A promise that resolves to the frozen App object.
+     * @returns The frozen App object.
      * @example
      * ```ts
-     * const app = await createApp({ config: { siteName: "Blog" } });
+     * const app = createApp({ config: { siteName: "Blog" } });
      * ```
      */
-    const createApp = async (consumerOptions?: unknown): Promise<unknown> => {
+    const createApp = (consumerOptions?: unknown): unknown => {
       // Cast to expected shape — type safety enforced by CreateCoreResult.createApp signature
       const appOptions = (consumerOptions ?? {}) as ConsumerAppOptions;
 

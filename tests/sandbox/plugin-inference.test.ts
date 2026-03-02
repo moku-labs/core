@@ -70,7 +70,7 @@ describe("createPlugin infers all types from spec (SAND-02)", () => {
   });
 
   it("plugin state is NOT accessible from app", async () => {
-    const app = await createApp();
+    const app = createApp();
 
     // Plugin API is accessible
     expect(app.router).toBeDefined();
@@ -146,7 +146,7 @@ describe("sub-plugin type inference", () => {
 
 describe("plugin config is typed and flows through ctx (SAND-04)", () => {
   it("ctx.config.sessionTimeout is typed as number and receives default value", async () => {
-    const app = await createApp({
+    const app = createApp({
       plugins: [authPlugin],
       pluginConfigs: { auth: { loginPath: "/login", sessionTimeout: 3600 } }
     });

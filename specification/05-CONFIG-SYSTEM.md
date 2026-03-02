@@ -55,7 +55,7 @@ If `config` has a nested object `{ database: { host: 'localhost', port: 5432 } }
 Consumers pass plugin configs in the `pluginConfigs` namespace, keyed by plugin name:
 
 ```typescript
-const app = await createApp({
+const app = createApp({
   plugins: [blogPlugin],
   config: {
     siteName: 'My Blog',
@@ -92,7 +92,7 @@ const coreConfig = createCoreConfig<Config, Events>('my-framework', {
 });
 
 // Consumer main.ts
-const app = await createApp({
+const app = createApp({
   config: {
     siteName: 'My Blog',    // overrides 'Untitled'
     // mode not provided -- stays 'development' from defaults

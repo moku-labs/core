@@ -33,7 +33,7 @@ None.
 ## Usage
 
 ```typescript
-const app = await createApp({
+const app = createApp({
   pluginConfigs: { env: { nodeEnv: "production", isCI: true } },
 });
 

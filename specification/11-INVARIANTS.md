@@ -134,7 +134,7 @@ All async lifecycle methods within a phase execute sequentially, one plugin at a
 
 Lifecycle methods can throw (or reject). When they do:
 
-- The error propagates to the caller (`await createApp(...)` or `await app.start()`).
+- The error propagates to the caller (`createApp(...)` or `await app.start()`).
 - No catch-and-silence. No error swallowing. No retry logic.
 - The consumer decides how to handle errors.
 
@@ -165,10 +165,10 @@ The consumer should never see Layer 1. If they need to, the framework is missing
 
 ```typescript
 // BAD: Using `as any` to bypass the structured options type system
-const app = await createApp({ config: { siteName: 'Blog' } } as any);
+const app = createApp({ config: { siteName: 'Blog' } } as any);
 
 // GOOD: Let TypeScript enforce the shape -- every namespace is typed
-const app = await createApp({
+const app = createApp({
   plugins: [blogPlugin],
   config: { siteName: 'Blog' },
   pluginConfigs: { blog: { postsPerPage: 5 } },
@@ -249,7 +249,7 @@ const app = createApp({ config: { siteName: 'Blog' } });
 app.router.navigate('home');  // runtime error: app.router is undefined
 
 // GOOD: await the Promise
-const app = await createApp({ config: { siteName: 'Blog' } });
+const app = createApp({ config: { siteName: 'Blog' } });
 app.router.navigate('home');  // works
 ```
 

@@ -46,7 +46,7 @@ Listens to `app:error` — redirects to `notFoundPath` on error code 404.
 ## Usage
 
 ```typescript
-const app = await createApp({
+const app = createApp({
   pluginConfigs: { router: { basePath: "/app", notFoundPath: "/404" } },
 });
 

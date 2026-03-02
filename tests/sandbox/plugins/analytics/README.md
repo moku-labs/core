@@ -51,7 +51,7 @@ Flush the provider's event buffer.
 ## Usage
 
 ```typescript
-const app = await createApp({
+const app = createApp({
   pluginConfigs: {
     analytics: { trackingId: "G-XXXXX", provider: "memory", sampleRate: 1 },
   },

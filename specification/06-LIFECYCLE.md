@@ -11,7 +11,7 @@ The kernel has exactly three lifecycle phases:
 
 | Phase | Method | Direction | When | Context |
 |-------|--------|-----------|------|---------|
-| init | onInit | Forward (array order) | During `await createApp(...)` | PluginContext |
+| init | onInit | Forward (array order) | During `createApp(...)` | PluginContext |
 | start | onStart | Forward (array order) | `await app.start()` | PluginContext |
 | stop | onStop | **REVERSE** (array order) | `await app.stop()` | TeardownContext |
 
@@ -21,7 +21,7 @@ Forward = plugin array order (first registered runs first). Reverse = last regis
 
 ## 2. The init Phase
 
-Runs during `await createApp(...)`. This single phase encompasses all initialization work. Internal sub-steps (not visible to plugin authors as separate phases):
+Runs during `createApp(...)`. This single phase encompasses all initialization work. Internal sub-steps (not visible to plugin authors as separate phases):
 
 1. **Merge plugin lists:** `[...frameworkDefaultPlugins, ...consumerExtraPlugins]`
 2. **Validate reserved names:** No plugin name can conflict with app methods or dangerous object keys (`start`, `stop`, `emit`, `require`, `has`, `config`, `__proto__`, `constructor`, `prototype`).
@@ -32,13 +32,13 @@ Runs during `await createApp(...)`. This single phase encompasses all initializa
 7. **Create state:** For each plugin (forward order), call `createState({ global, config })`. Store mutable state. Default `{}` if no `createState`.
 8. **Register hooks:** For each plugin (forward order), call `hooks(PluginContext)`, register handlers in the event bus.
 9. **Build API:** For each plugin (forward order), call `api(PluginContext)`. Register the API in the plugin registry.
-10. **Run onInit:** For each plugin (forward order), call `onInit(PluginContext)`. Sequential, awaited. This is where plugins validate dependencies with `require()`/`has()`.
-11. **Call framework onReady:** If `onReady` was passed to `createCore`, call it with `{ config: globalConfig }`. Awaited.
-12. **Call consumer onReady:** If `onReady` was passed to `createApp`, call it with full `AppCallbackContext` (config, emit, require, has, plugin APIs). Awaited.
+10. **Run onInit:** For each plugin (forward order), call `onInit(PluginContext)`. Synchronous. This is where plugins validate dependencies with `require()`/`has()`.
+11. **Call framework onReady:** If `onReady` was passed to `createCore`, call it with `{ config: globalConfig }`. Synchronous.
+12. **Call consumer onReady:** If `onReady` was passed to `createApp`, call it with full `AppCallbackContext` (config, emit, require, has, plugin APIs). Synchronous.
 
 These sub-steps are presented as ONE phase with internal mechanics. Plugin authors write `onInit` -- the rest is kernel machinery.
 
-After init completes, `createApp` resolves with the app object.
+After init completes, `createApp` returns the app object.
 
 ---
 
@@ -47,11 +47,11 @@ After init completes, `createApp` resolves with the app object.
 Runs when the consumer calls `await app.start()`. Forward order through the plugin array. Each plugin's `onStart` is called and awaited sequentially.
 
 ```typescript
-const app = await createApp({ ... });
+const app = createApp({ ... });
 await app.start();  // triggers onStart for each plugin, forward order
 ```
 
-This is where plugins perform runtime setup: opening connections, starting servers, loading data.
+This is where plugins perform runtime setup: opening connections, starting servers, loading data. Plugins that need async initialization should use `onStart`, not `onInit`.
 
 After all plugin `onStart` methods complete, the consumer `onStart` callback (if provided) is called with `AppCallbackContext`.
 
@@ -73,20 +73,22 @@ The stop phase receives `TeardownContext` -- minimal context with only `{ global
 
 ---
 
-## 5. Async Execution Model
+## 5. Execution Model
 
-All lifecycle methods support async (return `void | Promise<void>`):
+`createApp` is **synchronous** -- it returns the app object directly. The init phase (including `onInit` and `onReady`) runs synchronously during the call.
 
-- `createApp(options)` returns `Promise<App>`
+`onStart` and `onStop` support async (return `void | Promise<void>`):
+
+- `createApp(options)` returns `App`
 - `app.start()` returns `Promise<void>`
 - `app.stop()` returns `Promise<void>`
 
-**Sequential execution within each phase.** Plugins run one at a time, awaited. Plugin A's `onInit` resolves before Plugin B's `onInit` begins. No parallelism within or across phases.
+**Sequential execution within start/stop.** Plugins run one at a time, awaited. Plugin A's `onStart` resolves before Plugin B's `onStart` begins. No parallelism within or across phases.
 
 ```typescript
 // Each plugin is awaited before the next
 for (const plugin of plugins) {
-  await plugin.onInit(ctx);  // sequential, not parallel
+  await plugin.onStart(ctx);  // sequential, not parallel
 }
 ```
 
@@ -97,7 +99,7 @@ for (const plugin of plugins) {
 Lifecycle methods can throw (or reject). When they do:
 
 - The error propagates immediately to the caller.
-- If `onInit` throws, `createApp` rejects.
+- If `onInit` throws, `createApp` throws.
 - If `onStart` throws, `app.start()` rejects. No rollback -- remaining plugins are not started.
 - If `onStop` throws, `app.stop()` rejects. The error propagates immediately.
 
@@ -111,7 +113,7 @@ Lifecycle methods can throw (or reject). When they do:
 - `stop()` requires `start()` first. Calling it before start throws: `"App not started."`
 
 ```typescript
-const app = await createApp({ ... });
+const app = createApp({ ... });
 await app.start();
 await app.start();          // throws: "App already started."
 ```
@@ -129,13 +131,13 @@ const dbPlugin = createPlugin('db', {
     query: (sql: string) => ctx.state.connection.query(sql),
   }),
   onInit: (ctx) => {
-    // Validate config during init
+    // Validate config during init (synchronous)
     if (!ctx.config.connectionString) {
       throw new Error('[my-framework] db.connectionString is required.');
     }
   },
   onStart: async (ctx) => {
-    // Open connection during start
+    // Open connection during start (async)
     ctx.state.connection = await connect(ctx.config.connectionString);
   },
   onStop: async (ctx) => {
@@ -145,7 +147,7 @@ const dbPlugin = createPlugin('db', {
 });
 
 // Consumer
-const app = await createApp({
+const app = createApp({
   plugins: [dbPlugin],
   pluginConfigs: { db: { connectionString: 'postgres://...' } },
 });

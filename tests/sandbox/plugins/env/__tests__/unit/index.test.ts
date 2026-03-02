@@ -121,7 +121,7 @@ describe("nano tier: env plugin", () => {
         plugins: [envPlugin]
       });
 
-      const app = await createApp({
+      const app = createApp({
         pluginConfigs: { env: { nodeEnv: "production" } }
       });
 
@@ -133,7 +133,7 @@ describe("nano tier: env plugin", () => {
         plugins: [envPlugin]
       });
 
-      const app = await createApp({
+      const app = createApp({
         pluginConfigs: {
           // @ts-expect-error -- nodeEnv must be string, not number
           env: { nodeEnv: 123 }

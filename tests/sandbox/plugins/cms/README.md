@@ -87,7 +87,7 @@ Get the version history for a content item.
 ## Usage
 
 ```typescript
-const app = await createApp({
+const app = createApp({
   plugins: [routerPlugin, analyticsPlugin, cmsPlugin],
   cms: { defaultLocale: "en", maxUploadSize: 10 * 1024 * 1024 }
 });

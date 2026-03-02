@@ -158,7 +158,7 @@ type App<
 Plugin APIs are intersected onto the app object via `BuildPluginApis`. This means `app.router.navigate()` is fully typed:
 
 ```typescript
-const app = await createApp({ ... });
+const app = createApp({ ... });
 
 // Plugin APIs available directly on app
 app.router.navigate('/about');           // typed: (path: string) => void
@@ -234,7 +234,7 @@ const { createApp, createPlugin: frameworkCreatePlugin } = createCore(coreConfig
 });
 
 // Step 4: Consumer
-const app = await createApp({
+const app = createApp({
   config: { siteName: 'My Blog', mode: 'prod' },
   pluginConfigs: { router: { basePath: '/blog' } },
 });

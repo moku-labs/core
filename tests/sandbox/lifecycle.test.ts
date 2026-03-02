@@ -35,7 +35,7 @@ describe("3-layer flow (SAND-04)", () => {
   it("framework config.ts -> framework index.ts -> consumer main.ts", async () => {
     const { createApp } = await import("./demo/moku-web/index");
 
-    const app = await createApp();
+    const app = createApp();
 
     expect(app).toBeDefined();
     expect(app.router).toBeDefined();
@@ -51,7 +51,7 @@ describe("3-layer flow (SAND-04)", () => {
       api: () => ({ list: () => [] })
     });
 
-    const app = await createApp({ plugins: [blogPlugin] });
+    const app = createApp({ plugins: [blogPlugin] });
 
     expect(app.blog).toBeDefined();
     expect(app.router).toBeDefined();
@@ -60,7 +60,7 @@ describe("3-layer flow (SAND-04)", () => {
   it("cross-file import chain preserves types", async () => {
     const { createApp } = await import("./demo/moku-web/index");
 
-    const app = await createApp({ config: { siteName: "Test Blog" } });
+    const app = createApp({ config: { siteName: "Test Blog" } });
 
     // Verify specific API methods are typed (would FAIL on `any`)
     expectTypeOf(app.router.navigate).toBeFunction();
@@ -95,7 +95,7 @@ describe("lifecycle execution order", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [a, b] });
-    await createApp();
+    createApp();
 
     expect(order).toEqual(["A:init", "B:init"]);
   });
@@ -120,7 +120,7 @@ describe("lifecycle execution order", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [a, b] });
-    const app = await createApp();
+    const app = createApp();
     await app.start();
 
     expect(order).toEqual(["A:start", "B:start"]);
@@ -146,7 +146,7 @@ describe("lifecycle execution order", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [a, b] });
-    const app = await createApp();
+    const app = createApp();
     await app.start();
     await app.stop();
 
@@ -165,7 +165,7 @@ describe("lifecycle execution order", () => {
     const c = createTrackingPlugin(cc.createPlugin, "c", order);
 
     const { createApp } = cc.createCore(cc, { plugins: [a, b, c] });
-    const app = await createApp();
+    const app = createApp();
 
     expect(order).toEqual(["a:init", "b:init", "c:init"]);
 
@@ -218,7 +218,7 @@ describe("lifecycle execution order", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [plugin] });
-    await createApp();
+    createApp();
 
     // Runtime: MinimalContext has global and config
     expect(capturedCtx).toHaveProperty("global");
@@ -256,7 +256,7 @@ describe("lifecycle execution order", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [plugin] });
-    const app = await createApp();
+    const app = createApp();
     await app.start();
     await app.stop();
 
@@ -292,7 +292,7 @@ describe("config resolution", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [probe] });
-    await createApp();
+    createApp();
 
     expect(capturedGlobal.siteName).toBe("Untitled");
     expect(capturedGlobal.mode).toBe("development");
@@ -315,7 +315,7 @@ describe("config resolution", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [probe] });
-    await createApp({ config: { siteName: "Blog", mode: "production" } });
+    createApp({ config: { siteName: "Blog", mode: "production" } });
 
     expect(capturedGlobal.siteName).toBe("Blog");
     expect(capturedGlobal.mode).toBe("production");
@@ -336,7 +336,7 @@ describe("config resolution", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [router] });
-    await createApp({ pluginConfigs: { router: { basePath: "/blog" } } });
+    createApp({ pluginConfigs: { router: { basePath: "/blog" } } });
 
     expect(capturedConfig.basePath).toBe("/blog");
     expect(capturedConfig.trailingSlash).toBe(false);
@@ -368,7 +368,7 @@ describe("config resolution", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [probe] });
-    await createApp();
+    createApp();
 
     expect(globalFrozen).toBe(true);
     expect(configFrozen).toBe(true);

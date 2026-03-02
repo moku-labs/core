@@ -16,7 +16,7 @@ Every significant "why" in the architecture:
 | 3 | 0 generics on createPlugin | 4-7 explicit generics (N, C, S, A, Events, Deps) | All types inferred from the spec object. PluginEvents inferred from the `events` register callback. Config and Events flow in from the closure. Zero manual generics anywhere. |
 | 4 | 3 lifecycle phases (init, start, stop) | Many phases with pre/after hooks | Covers all real use cases. Pre/after hooks add complexity for marginal benefit. Plugins that need cross-cutting notification use the event system. |
 | 5 | Structured createApp namespaces (`config`, `pluginConfigs`, callbacks) | Flat object with runtime key discrimination | Explicit namespaces eliminate ambiguity. No runtime key discrimination needed. Consumer lifecycle callbacks (`onReady`, `onError`, `onStart`, `onStop`) are additive to framework-level callbacks. |
-| 6 | Sequential async execution | Parallel execution within phases | Deterministic, easy to reason about. No parallel footgun. Plugin A's onInit resolves before Plugin B's begins. |
+| 6 | Sequential execution (sync init, async start/stop) | Parallel execution within phases | Deterministic, easy to reason about. No parallel footgun. Init is synchronous. Start/stop are async — Plugin A's onStart resolves before Plugin B's begins. |
 | 7 | Shallow merge only | Deep merge with library | One rule: `{ ...defaults, ...overrides }`. Predictable. No surprises with nested objects. |
 | 8 | Instance-based depends | String-based depends | Importing a plugin instance gives TypeScript the phantom types. Enables fully typed ctx.require(pluginInstance). |
 | 9 | ctx.global = Readonly\<Config\> | ctx.global = { config, state } | Global state is deferred. ctx.global is just the frozen config for now. Will expand to include state when that feature is implemented. |
@@ -75,7 +75,7 @@ function createPlugin(
     depends?: readonly [...PluginInstance[]],                 // tuple of instances
     createState?: (ctx: MinimalContext<Config, C>) => S,      // S inferred from return
     api?: (ctx: PluginContext<Config, Events & PluginEvents & DepsEvents, C, S>) => A,  // A inferred
-    onInit?: (ctx: PluginContext<...>) => void | Promise<void>,
+    onInit?: (ctx: PluginContext<...>) => void,
     onStart?: (ctx: PluginContext<...>) => void | Promise<void>,
     onStop?: (ctx: TeardownContext<Config>) => void | Promise<void>,
     hooks?: (ctx: PluginContext<...>) => Partial<EventHandlers<Events & PluginEvents & DepsEvents>>,
@@ -130,7 +130,7 @@ function createCore(
   options: {
     plugins: PluginInstance[],          // framework default plugins
     pluginConfigs?: Record<string, unknown>, // framework-level plugin config overrides
-    onReady?: (ctx: { config: Readonly<Config> }) => void | Promise<void>,
+    onReady?: (ctx: { config: Readonly<Config> }) => void,
     onError?: (error: Error) => void,
   },
 ): {
@@ -163,15 +163,15 @@ function createCore(
 This is the longest section. It covers the entire init phase.
 
 ```pseudo-typescript
-async function createApp(consumerOptions?: {
+function createApp(consumerOptions?: {
   plugins?: PluginInstance[];
   config?: Partial<Config>;
   pluginConfigs?: Record<string, unknown>;
-  onReady?: (context: AppCallbackContext) => void | Promise<void>;
+  onReady?: (context: AppCallbackContext) => void;
   onError?: (error: Error, context: AppCallbackContext) => void;
   onStart?: (context: AppCallbackContext) => void | Promise<void>;
   onStop?: (context: AppCallbackContext) => void | Promise<void>;
-}): Promise<App<Config, Events, AllPlugins>> {
+}): App<Config, Events, AllPlugins> {
 
   // =========================================================================
   // Step 1: Destructure structured options
@@ -356,26 +356,26 @@ async function createApp(consumerOptions?: {
   }
 
   // =========================================================================
-  // Step 10: Run onInit (forward order)
+  // Step 10: Run onInit (forward order, synchronous)
   // =========================================================================
-  // RATIONALE: Sequential, each plugin awaited. All APIs are built,
-  // so onInit can safely call require().
+  // RATIONALE: Synchronous, each plugin called in order. All APIs are built,
+  // so onInit can safely call require(). Async init belongs in onStart.
   for (const plugin of allPlugins) {
     if (plugin.spec.onInit) {
       const ctx = buildPluginContext(plugin);
-      await plugin.spec.onInit(ctx);
+      plugin.spec.onInit(ctx);
     }
   }
 
   // Call framework onReady if provided
   if (options.onReady) {
-    await options.onReady({ config: globalConfig });
+    options.onReady({ config: globalConfig });
   }
 
   // Call consumer onReady if provided (after framework onReady)
   // Consumer callbacks receive full AppCallbackContext: config, emit, require, has, + plugin APIs
   if (consumerOnReady) {
-    await consumerOnReady(buildCallbackContext());
+    consumerOnReady(buildCallbackContext());
   }
 
   // =========================================================================
@@ -510,7 +510,7 @@ Framework index.ts:
     -> returns { createApp, createPlugin }
 
 Consumer main.ts:
-  await createApp({ plugins?, config?, pluginConfigs?, onReady?, onError?, onStart?, onStop? })
+  createApp({ plugins?, config?, pluginConfigs?, onReady?, onError?, onStart?, onStop? })
     Step 1: destructure structured options (no key discrimination)
     Step 2: merge plugins: [...defaults, ...extras]
     Step 3: validate plugins (reserved names, duplicates, dependency order)
@@ -521,8 +521,8 @@ Consumer main.ts:
     Step 8a: build event bus (empty hookMap, emit, registerHook)
     Step 8b: build context factory, register hooks (hooks(ctx), context-aware)
     Step 9: build APIs (PluginContext)
-    Step 10: run onInit (PluginContext, forward, sequential)
-    call framework onReady, then consumer onReady
+    Step 10: run onInit (PluginContext, forward, synchronous)
+    call framework onReady, then consumer onReady (synchronous)
     Step 11: build app, mount plugin APIs, freeze and return
 
   await app.start()

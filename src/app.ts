@@ -52,9 +52,13 @@ type HookHandler = (payload: any) => void | Promise<void>;
 // biome-ignore lint/suspicious/noExplicitAny: context factory returns dynamically typed PluginContext
 type ContextFactory = (plugin: AnyPluginInstance) => any;
 
-/** Consumer lifecycle callback receiving a dynamically typed context. */
+/** Async consumer lifecycle callback (onStart, onStop). */
 // biome-ignore lint/suspicious/noExplicitAny: consumer callbacks receive dynamically typed context
-type ConsumerCallback = (context: any) => void | Promise<void>;
+type AsyncConsumerCallback = (context: any) => void | Promise<void>;
+
+/** Sync consumer lifecycle callback (onReady). */
+// biome-ignore lint/suspicious/noExplicitAny: consumer callbacks receive dynamically typed context
+type SyncConsumerCallback = (context: any) => void;
 
 /** Consumer error callback receiving an error and optional context. */
 // biome-ignore lint/suspicious/noExplicitAny: consumer error callback receives dynamically typed context
@@ -62,7 +66,7 @@ type ConsumerErrorCallback = (error: Error, context?: any) => void;
 
 /** Framework onReady callback receiving a frozen config object. */
 // biome-ignore lint/suspicious/noExplicitAny: framework onReady receives Config which varies per framework
-type OnReadyCallback = (context: { config: Readonly<any> }) => void | Promise<void>;
+type OnReadyCallback = (context: { config: Readonly<any> }) => void;
 
 /** Dynamically constructed object used for app and callback contexts. */
 // biome-ignore lint/suspicious/noExplicitAny: dynamically constructed objects (app, callback context)
@@ -79,10 +83,10 @@ interface KernelParameters {
   readonly onReady?: OnReadyCallback | undefined;
   readonly onError?: ((error: Error) => void) | undefined;
   readonly consumer?: {
-    readonly onReady?: ConsumerCallback | undefined;
+    readonly onReady?: SyncConsumerCallback | undefined;
     readonly onError?: ConsumerErrorCallback | undefined;
-    readonly onStart?: ConsumerCallback | undefined;
-    readonly onStop?: ConsumerCallback | undefined;
+    readonly onStart?: AsyncConsumerCallback | undefined;
+    readonly onStop?: AsyncConsumerCallback | undefined;
   };
 }
 
@@ -550,13 +554,13 @@ function buildApp(
  * API building, lifecycle execution, returns frozen app object.
  *
  * @param parameters - All kernel inputs captured from the factory chain.
- * @returns A promise that resolves to the frozen app object.
+ * @returns The frozen app object.
  * @example
  * ```ts
  * const app = await kernel({ id: "my-app", configDefaults: {}, ... });
  * ```
  */
-async function kernel(parameters: KernelParameters): Promise<DynamicObject> {
+function kernel(parameters: KernelParameters): DynamicObject {
   const {
     id,
     configDefaults,
@@ -619,21 +623,21 @@ async function kernel(parameters: KernelParameters): Promise<DynamicObject> {
     }
   }
 
-  // Step 10: Run onInit (forward order, sequential async)
+  // Step 10: Run onInit (forward order, synchronous)
   for (const plugin of flatPlugins) {
     if (plugin.spec.onInit) {
-      await plugin.spec.onInit(buildPluginContext(plugin));
+      plugin.spec.onInit(buildPluginContext(plugin));
     }
   }
 
   // Call framework onReady callback after all onInit complete
   if (onReady) {
-    await onReady({ config: globalConfig });
+    onReady({ config: globalConfig });
   }
 
   // Call consumer onReady callback after framework onReady
   if (consumer?.onReady) {
-    await consumer.onReady(buildCallbackContext(runtime));
+    consumer.onReady(buildCallbackContext(runtime));
   }
 
   // Step 11: Build and freeze app

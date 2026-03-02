@@ -60,13 +60,11 @@ describe("createCore (Step 2)", () => {
 // ---------------------------------------------------------------------------
 
 describe("createApp (Step 3)", () => {
-  it("returns a Promise that resolves to an app object", async () => {
-    const result = createApp();
+  it("returns an app object directly (synchronous)", () => {
+    const app = createApp();
 
-    // Type-level: createApp returns a Promise
-    expectTypeOf(result).toBeObject();
-
-    const app = await result;
+    // Type-level: createApp returns an App object
+    expectTypeOf(app).toBeObject();
 
     // Runtime: app has start, stop, emit methods
     expect(typeof app.start).toBe("function");
@@ -75,7 +73,7 @@ describe("createApp (Step 3)", () => {
   });
 
   it("app has plugin APIs mounted directly", async () => {
-    const app = await createApp();
+    const app = createApp();
 
     // Type-level: plugin APIs are accessible with specific method types (not any)
     expectTypeOf(app.router.navigate).toBeFunction();
@@ -104,7 +102,7 @@ describe("createApp (Step 3)", () => {
   });
 
   it("app object is frozen", async () => {
-    const app = await createApp();
+    const app = createApp();
 
     expect(Object.isFrozen(app)).toBe(true);
   });
@@ -117,7 +115,7 @@ describe("createApp (Step 3)", () => {
 describe("config overrides in createApp", () => {
   it("accepts typed config overrides", async () => {
     // Global config keys from SiteConfig: siteName, mode
-    const app = await createApp({
+    const app = createApp({
       config: { siteName: "Test Blog", mode: "production" }
     });
 
@@ -126,7 +124,7 @@ describe("config overrides in createApp", () => {
 
   it("accepts typed plugin config overrides", async () => {
     // Plugin config keyed by plugin name
-    const app = await createApp({
+    const app = createApp({
       pluginConfigs: { router: { basePath: "/blog" } }
     });
 
@@ -135,14 +133,14 @@ describe("config overrides in createApp", () => {
 
   it("rejects invalid config keys at type level", async () => {
     // @ts-expect-error -- "invalidKey" is not in Config or a registered plugin name
-    const app = await createApp({ invalidKey: "boom" });
+    const app = createApp({ invalidKey: "boom" });
 
     // Runtime assertion to satisfy sonarjs/assertions-in-tests
     expect(app).toBeDefined();
   });
 
   it("pluginConfigs values are typed by plugin config shape", async () => {
-    const app = await createApp({
+    const app = createApp({
       pluginConfigs: {
         // router config has { basePath: string; trailingSlash: boolean }
         router: { basePath: "/typed" },
@@ -163,7 +161,7 @@ describe("consumer lifecycle callback context", () => {
   it("onReady context has plugin APIs, require, has, emit", async () => {
     let contextReceived = false;
 
-    const app = await createApp({
+    const app = createApp({
       onReady: ctx => {
         contextReceived = true;
 
@@ -191,7 +189,7 @@ describe("consumer lifecycle callback context", () => {
   it("onStart context has plugin APIs", async () => {
     let startContextReceived = false;
 
-    const app = await createApp({
+    const app = createApp({
       onStart: ctx => {
         startContextReceived = true;
 
@@ -211,7 +209,7 @@ describe("consumer lifecycle callback context", () => {
   it("onStop context has plugin APIs", async () => {
     let stopContextReceived = false;
 
-    const app = await createApp({
+    const app = createApp({
       onStop: ctx => {
         stopContextReceived = true;
 
@@ -227,7 +225,7 @@ describe("consumer lifecycle callback context", () => {
   });
 
   it("onError context has plugin APIs and is typed (not unknown)", async () => {
-    const app = await createApp({
+    const app = createApp({
       onError: (_error, ctx) => {
         // Type-level: ctx has plugin APIs (not unknown)
         expectTypeOf(ctx.config).toMatchTypeOf<{ siteName: string }>();

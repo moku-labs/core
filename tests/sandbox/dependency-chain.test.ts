@@ -38,7 +38,7 @@ describe("4-level dependency chain: type inference at every level (SAND-05)", ()
 
 describe("ctx.require() returns correctly typed API at each level", () => {
   it("all 4 levels expose typed APIs on the app object", async () => {
-    const app = await createApp();
+    const app = createApp();
 
     // Level 1: renderer (depends on template-engine)
     expectTypeOf(app.renderer.render).toBeFunction();
@@ -61,7 +61,7 @@ describe("ctx.require() returns correctly typed API at each level", () => {
   });
 
   it("cross-level require: level 3 calls through level 2 and level 0", async () => {
-    const app = await createApp();
+    const app = createApp();
 
     // sitemap.addEntry calls seo.getDefaultTitle() and router.current()
     const entry = app.sitemap.addEntry("/about");
@@ -75,7 +75,7 @@ describe("ctx.require() returns correctly typed API at each level", () => {
   });
 
   it("app.require returns typed APIs for all chain levels", async () => {
-    const app = await createApp();
+    const app = createApp();
 
     const templateApi = app.require(templateEnginePlugin);
     expectTypeOf(templateApi.compile).toBeFunction();
@@ -103,7 +103,7 @@ describe("ctx.require() returns correctly typed API at each level", () => {
 
 describe("events flow through the 4-level dependency chain", () => {
   it("level 3 (sitemap) emits its own events at runtime", async () => {
-    const app = await createApp();
+    const app = createApp();
 
     app.sitemap.addEntry("/page1");
     app.sitemap.addEntry("/page2");
@@ -163,7 +163,7 @@ describe("type-level error detection across the chain", () => {
   });
 
   it("rejects nonexistent properties on plugin APIs at every level", async () => {
-    const app = await createApp();
+    const app = createApp();
 
     // @ts-expect-error -- sitemap does not have "nonexistent"
     expect(app.sitemap.nonexistent).toBeUndefined();

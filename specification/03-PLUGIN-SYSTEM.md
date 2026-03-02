@@ -24,8 +24,8 @@ The plugin spec is a plain object that describes a plugin's behavior. All fields
   /** Build the public API mounted on app.<pluginName>. Full context. */
   api?: (ctx: PluginContext) => A,
 
-  /** All plugins created and APIs mounted. Forward order during createApp. */
-  onInit?: (ctx: PluginContext) => void | Promise<void>,
+  /** All plugins created and APIs mounted. Synchronous, forward order during createApp. */
+  onInit?: (ctx: PluginContext) => void,
 
   /** App is starting. Forward order during app.start(). */
   onStart?: (ctx: PluginContext) => void | Promise<void>,

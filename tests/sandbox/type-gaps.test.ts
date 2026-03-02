@@ -74,7 +74,7 @@ describe("diamond dependency event merging", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [pluginB, pluginC, pluginD] });
-    const app = await createApp();
+    const app = createApp();
 
     app.require(pluginB).fireB();
     app.require(pluginC).fireC();
@@ -138,7 +138,7 @@ describe("events-only plugin (no API)", () => {
     const { createApp } = cc.createCore(cc, {
       plugins: [eventsOnlyPlugin, withApi]
     });
-    const app = await createApp();
+    const app = createApp();
 
     // Plugin with API appears on surface
     expectTypeOf(app).toHaveProperty("eo-with-api");
@@ -241,7 +241,7 @@ describe("precise require() return types", () => {
 
   it("app.require() returns exact parameter and return types", async () => {
     const { createApp } = cc.createCore(cc, { plugins: [preciseApi] });
-    const app = await createApp();
+    const app = createApp();
 
     const api = app.require(preciseApi);
     expectTypeOf(api.add).toEqualTypeOf<(item: string) => void>();
@@ -252,7 +252,7 @@ describe("precise require() return types", () => {
 
   it("app.pluginName methods have exact types", async () => {
     const { createApp } = cc.createCore(cc, { plugins: [preciseApi] });
-    const app = await createApp();
+    const app = createApp();
 
     expectTypeOf(app["precise-api"].add).toEqualTypeOf<(item: string) => void>();
     expectTypeOf(app["precise-api"].getAll).returns.toEqualTypeOf<string[]>();
@@ -275,7 +275,7 @@ describe("consumer extra plugin typing", () => {
       })
     });
 
-    const app = await createApp({ plugins: [blogPlugin] });
+    const app = createApp({ plugins: [blogPlugin] });
 
     // Extra plugin API is fully typed
     expectTypeOf(app.blog.list).toBeFunction();
@@ -312,7 +312,7 @@ describe("no-API plugin excluded from app surface", () => {
     const { createApp } = cc.createCore(cc, {
       plugins: [lifecycleOnly, withApi]
     });
-    const app = await createApp();
+    const app = createApp();
 
     // Plugin with API appears on surface
     expectTypeOf(app["with-api"].hello).toBeFunction();
@@ -383,7 +383,7 @@ describe("empty spec plugin inferred types", () => {
     const { createApp } = cc.createCore(cc, {
       plugins: [emptyPlugin, withApi]
     });
-    const app = await createApp();
+    const app = createApp();
 
     // @ts-expect-error -- empty API means excluded from app surface
     app["empty-surface"];
@@ -456,7 +456,7 @@ describe("pluginConfigs excludes void-config plugins", () => {
       plugins: [withConfig, withoutConfig]
     });
 
-    const app = await createApp({
+    const app = createApp({
       pluginConfigs: {
         "has-config": { timeout: 3000 }
       }
@@ -473,7 +473,7 @@ describe("pluginConfigs excludes void-config plugins", () => {
     // FIXED: Filter now uses `ExtractConfig<K> extends Record<string, never>`
     // which matches the config-less default. The key "no-config" is fully
     // excluded from pluginConfigs — error is on the key, not just the value.
-    const app = await createApp({
+    const app = createApp({
       pluginConfigs: {
         // @ts-expect-error -- "no-config" is not a valid key (config-less plugin excluded)
         "no-config": { anything: true }
@@ -489,7 +489,7 @@ describe("pluginConfigs excludes void-config plugins", () => {
 
     // FIXED: Previously {} was accepted because {} satisfies Partial<Record<string, never>>.
     // Now "no-config" is excluded from the key set entirely.
-    const app = await createApp({
+    const app = createApp({
       pluginConfigs: {
         // @ts-expect-error -- "no-config" is not a valid key (config-less plugin excluded)
         "no-config": {}
@@ -612,7 +612,7 @@ describe("transitive dependency event isolation", () => {
     const { createApp } = cc.createCore(cc, {
       plugins: [pluginA, pluginB, cPlugin]
     });
-    const app = await createApp();
+    const app = createApp();
 
     expect(app.has("chain-a-rt")).toBe(true);
     expect(app.has("chain-b-rt")).toBe(true);
@@ -704,7 +704,7 @@ describe("callback context has typed plugin APIs", () => {
       plugins: [routerPlugin, authPlugin]
     });
 
-    const app = await createApp({
+    const app = createApp({
       onReady: ctx => {
         // Plugin APIs should be on the context
         expectTypeOf(ctx.router.navigate).toBeFunction();
@@ -727,7 +727,7 @@ describe("callback context has typed plugin APIs", () => {
       plugins: [routerPlugin, authPlugin]
     });
 
-    const app = await createApp({
+    const app = createApp({
       onStart: ctx => {
         expectTypeOf(ctx.router.current).returns.toBeString();
         expectTypeOf(ctx.auth.login).toEqualTypeOf<(user: string) => string>();
@@ -743,7 +743,7 @@ describe("callback context has typed plugin APIs", () => {
       plugins: [routerPlugin, authPlugin]
     });
 
-    const app = await createApp({
+    const app = createApp({
       onStop: ctx => {
         expectTypeOf(ctx.router.navigate).toBeFunction();
         expectTypeOf(ctx.auth.isLoggedIn).toBeFunction();
@@ -760,7 +760,7 @@ describe("callback context has typed plugin APIs", () => {
       plugins: [routerPlugin]
     });
 
-    const app = await createApp({
+    const app = createApp({
       onError: (error, ctx) => {
         expectTypeOf(error).toEqualTypeOf<Error>();
         expectTypeOf(ctx.router.navigate).toBeFunction();
@@ -854,7 +854,7 @@ describe("all plugins listed explicitly have full type visibility", () => {
     const { createApp } = cc.createCore(cc, {
       plugins: [childPlugin, parentPlugin]
     });
-    const app = await createApp();
+    const app = createApp();
 
     expectTypeOf(app.parent.parentMethod).toBeFunction();
     expectTypeOf(app.parent.parentMethod).returns.toBeString();
@@ -870,7 +870,7 @@ describe("all plugins listed explicitly have full type visibility", () => {
     const { createApp } = cc.createCore(cc, {
       plugins: [childPlugin, parentPlugin]
     });
-    const app = await createApp();
+    const app = createApp();
 
     const childApi = app.require(childPlugin);
     const parentApi = app.require(parentPlugin);

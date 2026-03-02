@@ -31,7 +31,7 @@ describe("global config defaults", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [probe] });
-    await createApp();
+    createApp();
 
     expect(capturedGlobal.siteName).toBe("Untitled");
     expect(capturedGlobal.mode).toBe("development");
@@ -51,7 +51,7 @@ describe("global config defaults", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [probe] });
-    await createApp();
+    createApp();
 
     expect(capturedGlobal.custom).toBe(42);
   });
@@ -73,7 +73,7 @@ describe("global config overrides via createApp", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [probe] });
-    await createApp({ config: { siteName: "Blog" } });
+    createApp({ config: { siteName: "Blog" } });
 
     expect(capturedGlobal.siteName).toBe("Blog");
     // mode should retain default
@@ -91,7 +91,7 @@ describe("global config overrides via createApp", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [probe] });
-    await createApp({ config: { siteName: "New Site", mode: "production" } });
+    createApp({ config: { siteName: "New Site", mode: "production" } });
 
     expect(capturedGlobal.siteName).toBe("New Site");
     expect(capturedGlobal.mode).toBe("production");
@@ -115,7 +115,7 @@ describe("plugin config defaults", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [router] });
-    await createApp();
+    createApp();
 
     expect(capturedConfig.basePath).toBe("/");
     expect(capturedConfig.trailingSlash).toBe(false);
@@ -132,7 +132,7 @@ describe("plugin config defaults", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [plugin] });
-    await createApp();
+    createApp();
 
     expect(Object.keys(capturedConfig)).toHaveLength(0);
   });
@@ -155,7 +155,7 @@ describe("plugin config overrides via createApp", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [router] });
-    await createApp({ pluginConfigs: { router: { basePath: "/blog" } } });
+    createApp({ pluginConfigs: { router: { basePath: "/blog" } } });
 
     expect(capturedConfig.basePath).toBe("/blog");
     expect(capturedConfig.trailingSlash).toBe(false);
@@ -176,7 +176,7 @@ describe("plugin config overrides via createApp", () => {
       plugins: [router],
       pluginConfigs: { router: { basePath: "/framework" } }
     });
-    await createApp();
+    createApp();
 
     expect(capturedConfig.basePath).toBe("/framework");
   });
@@ -202,7 +202,7 @@ describe("3-level config merge", () => {
       plugins: [router],
       pluginConfigs: { router: { basePath: "/framework", retries: 5 } }
     });
-    await createApp({ pluginConfigs: { router: { basePath: "/consumer" } } });
+    createApp({ pluginConfigs: { router: { basePath: "/consumer" } } });
 
     // consumer overrides basePath (from /framework -> /consumer)
     expect(capturedConfig.basePath).toBe("/consumer");
@@ -229,7 +229,7 @@ describe("config freezing", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [probe] });
-    await createApp();
+    createApp();
 
     expect(frozen).toBe(true);
   });
@@ -246,7 +246,7 @@ describe("config freezing", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [router] });
-    await createApp();
+    createApp();
 
     expect(frozen).toBe(true);
   });
@@ -267,7 +267,7 @@ describe("config freezing", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [probe] });
-    await createApp();
+    createApp();
 
     expect(assignmentThrew).toBe(true);
   });
@@ -296,7 +296,7 @@ describe("shallow merge only", () => {
 
     const { createApp } = cc.createCore(cc, { plugins: [probe] });
     // Shallow merge: entire nested object replaced
-    await createApp({ config: { nested: { a: 99, b: 2 } } });
+    createApp({ config: { nested: { a: 99, b: 2 } } });
 
     const nested = capturedGlobal.nested as { a: number; b: number };
     expect(nested.a).toBe(99);
@@ -323,7 +323,7 @@ describe("structured config namespaces", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [router] });
-    await createApp({
+    createApp({
       config: { siteName: "Blog" },
       pluginConfigs: { router: { basePath: "/blog" } }
     });

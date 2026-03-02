@@ -203,7 +203,7 @@ describe("micro tier: counter plugin", () => {
         plugins: [counterPlugin]
       });
 
-      const app = await createApp({
+      const app = createApp({
         pluginConfigs: {
           // @ts-expect-error -- initial must be number, not string
           counter: { initial: "wrong" }

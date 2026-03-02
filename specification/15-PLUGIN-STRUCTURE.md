@@ -1117,7 +1117,7 @@ Description.
 ## Usage
 
 \`\`\`typescript
-const app = await createApp({ ... });
+const app = createApp({ ... });
 app.pluginName.method();
 \`\`\`
 ```

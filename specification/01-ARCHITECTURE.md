@@ -48,7 +48,7 @@ Moku is an application *skeleton*. It answers "how do I compose my app from inde
 |                    Layer 3: Consumer Product                       |
 |                                                                   |
 |  import { createApp, createPlugin } from 'my-framework';          |
-|  const app = await createApp({                                    |
+|  const app = createApp({                                    |
 |    plugins: [myPlugin],                                           |
 |    config: { siteName: 'My Blog' },                               |
 |    pluginConfigs: { myPlugin: { postsPerPage: 5 } },              |
@@ -239,7 +239,7 @@ This is not a metaphor. It is a literal structural claim:
 In every case, the structural skeleton is identical:
 
 ```
-const app = await createApp({
+const app = createApp({
   plugins: [Plugin1, Plugin2, ...],
   config: { ...configOverrides },
   pluginConfigs: {
@@ -316,7 +316,7 @@ const myPlugin = createPlugin('analytics', {
   }),
 });
 
-const app = await createApp({
+const app = createApp({
   plugins: [myPlugin],
   config: {
     siteName: 'My Blog',

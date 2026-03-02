@@ -43,7 +43,7 @@ describe("complex tier: analytics plugin (integration)", () => {
         plugins: [routerPlugin, analyticsPlugin]
       });
 
-      await expect(createApp()).rejects.toThrow("[plugin-test] analytics.trackingId is required");
+      expect(() => createApp()).toThrow("[plugin-test] analytics.trackingId is required");
     });
 
     it("onInit succeeds with trackingId", async () => {
@@ -124,7 +124,7 @@ describe("complex tier: analytics plugin (integration)", () => {
         })
       });
 
-      const app = await createApp({
+      const app = createApp({
         plugins: [listenerPlugin],
         pluginConfigs: { analytics: { trackingId: "test-123" } }
       });
@@ -154,7 +154,7 @@ describe("complex tier: analytics plugin (integration)", () => {
         })
       });
 
-      const app = await createApp({
+      const app = createApp({
         plugins: [listenerPlugin],
         pluginConfigs: { analytics: { trackingId: "test-123" } }
       });

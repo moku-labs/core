@@ -455,7 +455,8 @@ type CreatePluginSpec<
   ) => PluginApi;
   /**
    * Called after all plugins are registered and APIs are built. Runs in forward
-   * plugin order, sequentially awaited. Use for setup that depends on other plugins.
+   * plugin order, synchronously. Use for setup that depends on other plugins.
+   * For async initialization, use `onStart` instead.
    *
    * @example
    * ```ts
@@ -472,7 +473,7 @@ type CreatePluginSpec<
       PluginConfig,
       PluginState
     >
-  ) => void | Promise<void>;
+  ) => void;
   /**
    * Called when the app starts. Runs in forward plugin order, sequentially awaited.
    * Use for runtime startup (open connections, start listeners).

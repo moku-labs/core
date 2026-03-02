@@ -12,7 +12,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - **Layer 1 (@moku-labs/core):** Single export `createCore`. Zero domain knowledge. Pure machinery: lifecycle, plugin registry, event bus, config resolution, type inference.
 - **Layer 2 (Framework):** Calls `createCoreConfig<Config, Events>(id, { config })`, gets back `{ createPlugin, createCore }`. Defines default plugins, base config shape, event contract.
-- **Layer 3 (Consumer):** Imports from the framework. Single call: `await createApp({ plugins?, ...configOverrides, ...pluginConfigs })`. Never sees `@moku-labs/core` directly.
+- **Layer 3 (Consumer):** Imports from the framework. Single call: `createApp({ plugins?, ...configOverrides, ...pluginConfigs })`. Never sees `@moku-labs/core` directly.
 
 The key constraint: each layer limits the layer above. Consumer code cannot break framework invariants. Framework code cannot break kernel invariants.
 

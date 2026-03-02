@@ -194,7 +194,7 @@ describe("very complex tier: cms plugin (integration)", () => {
         })
       });
 
-      const app = await createApp({
+      const app = createApp({
         plugins: [listenerPlugin],
         pluginConfigs: { analytics: { trackingId: "test-123" } }
       });
@@ -221,7 +221,7 @@ describe("very complex tier: cms plugin (integration)", () => {
         })
       });
 
-      const app = await createApp({
+      const app = createApp({
         plugins: [listenerPlugin],
         pluginConfigs: { analytics: { trackingId: "test-123" } }
       });
@@ -252,7 +252,7 @@ describe("very complex tier: cms plugin (integration)", () => {
         })
       });
 
-      const app = await createApp({
+      const app = createApp({
         plugins: [listenerPlugin],
         pluginConfigs: { analytics: { trackingId: "test-123" } }
       });

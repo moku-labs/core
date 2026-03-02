@@ -2,7 +2,7 @@ import { analyticsPlugin, createApp } from "../moku-web";
 import { blogPlugin } from "./plugins/blog";
 
 export async function main() {
-  const app = await createApp({
+  const app = createApp({
     plugins: [analyticsPlugin, blogPlugin],
     config: {
       siteName: "My Blog",

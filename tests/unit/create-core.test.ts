@@ -99,16 +99,17 @@ describe("createCore", () => {
     expect(result.createPlugin).toBe(cc.createPlugin);
   });
 
-  it("createApp returns a promise", async () => {
+  it("createApp returns an app object synchronously", () => {
     const cc = createCoreConfig<Record<string, never>, Record<string, never>>("test", {
       config: {}
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [] });
 
-    const result = createApp();
-    expect(result).toBeInstanceOf(Promise);
-    await result;
+    const app = createApp();
+    expect(typeof app.start).toBe("function");
+    expect(typeof app.stop).toBe("function");
+    expect(typeof app.emit).toBe("function");
   });
 });
 
@@ -152,7 +153,7 @@ describe("type safety: plugin APIs on app", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [router] });
-    const app = await createApp();
+    const app = createApp();
 
     // Type-level: plugin API methods are typed, not any
     expectTypeOf(app.router.navigate).toBeFunction();
@@ -178,7 +179,7 @@ describe("type safety: plugin APIs on app", () => {
       api: () => ({ compute: () => 42 })
     });
 
-    const app = await createApp({ plugins: [extraPlugin] });
+    const app = createApp({ plugins: [extraPlugin] });
 
     // Type-level: both framework and consumer plugin APIs are typed
     expectTypeOf(app["default-p"].greet).toBeFunction();
@@ -194,7 +195,7 @@ describe("type safety: plugin APIs on app", () => {
   it("nonexistent plugin property causes type error", async () => {
     const cc = createTypedCore();
     const { createApp } = cc.createCore(cc, { plugins: [] });
-    const app = await createApp();
+    const app = createApp();
 
     // @ts-expect-error -- nonExistent is not a registered plugin
     app.nonExistent;
@@ -213,7 +214,7 @@ describe("type safety: config overrides", () => {
     const { createApp } = cc.createCore(cc, { plugins: [] });
 
     // Type-level: config keys match Config shape
-    const app = await createApp({
+    const app = createApp({
       config: { siteName: "Blog", mode: "production" }
     });
 
@@ -225,7 +226,7 @@ describe("type safety: config overrides", () => {
     const { createApp } = cc.createCore(cc, { plugins: [] });
 
     // @ts-expect-error -- "badKey" is not a valid createApp option
-    const app = await createApp({ badKey: "oops" });
+    const app = createApp({ badKey: "oops" });
     expect(app).toBeDefined();
   });
 });
@@ -245,7 +246,7 @@ describe("type safety: consumer callback context", () => {
     const { createApp } = cc.createCore(cc, { plugins: [probe] });
 
     let readyFired = false;
-    const app = await createApp({
+    const app = createApp({
       onReady: ctx => {
         readyFired = true;
         // Type-level: config is typed as TestConfig
@@ -270,7 +271,7 @@ describe("type safety: consumer callback context", () => {
 
     const { createApp } = cc.createCore(cc, { plugins: [probe] });
 
-    const app = await createApp({
+    const app = createApp({
       onError: (_error, ctx) => {
         // Type-level: ctx has config, emit, plugin lookup, plugin APIs
         expectTypeOf(ctx.config).toMatchTypeOf<{ siteName: string }>();
@@ -296,7 +297,7 @@ describe("type safety: consumer callback context", () => {
     let startFired = false;
     let stopFired = false;
 
-    const app = await createApp({
+    const app = createApp({
       onStart: ctx => {
         startFired = true;
         expectTypeOf(ctx.config).toMatchTypeOf<{ siteName: string }>();
@@ -324,7 +325,7 @@ describe("type safety: emit", () => {
   it("app.emit only accepts known event names with typed payloads", async () => {
     const cc = createTypedCore();
     const { createApp } = cc.createCore(cc, { plugins: [] });
-    const app = await createApp();
+    const app = createApp();
 
     // @ts-expect-error -- "unknown:event" is not in TestEvents
     app.emit("unknown:event", {});

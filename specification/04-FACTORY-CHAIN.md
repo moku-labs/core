@@ -19,7 +19,7 @@ Step 2: createCore(coreConfig, { plugins, pluginConfigs })
   -> Captures: default plugins, default plugin configs, framework callbacks
 
 Step 3: createApp({ plugins?, config?, pluginConfigs?, onReady?, onError?, onStart?, onStop? })
-  -> Returns: Promise<App>
+  -> Returns: App
   -> Captures: everything from steps 1 and 2, plus consumer additions
 ```
 
@@ -166,7 +166,7 @@ export const { createApp, createPlugin } = framework;
 - Consumer's lifecycle callbacks (`onReady`, `onError`, `onStart`, `onStop`)
 
 **What it returns:**
-- `Promise<App>` with full type inference on all plugin APIs
+- `App` with full type inference on all plugin APIs
 
 ```typescript
 // my-app/src/main.ts
@@ -181,7 +181,7 @@ const blogPlugin = createPlugin('blog', {
 });
 
 // Step 3: Create the app
-const app = await createApp({
+const app = createApp({
   plugins: [blogPlugin],
   config: {
     siteName: 'My Blog',
@@ -347,7 +347,7 @@ const dashboardPlugin = createPlugin('dashboard', {
   }),
 });
 
-const app = await createApp({
+const app = createApp({
   plugins: [dashboardPlugin],
   config: {
     appName: 'My Dashboard',    // typed as string (from Config)

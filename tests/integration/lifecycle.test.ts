@@ -87,7 +87,7 @@ describe("full lifecycle integration", () => {
     });
 
     // Step 3: createApp (init phase)
-    const app = await createApp({
+    const app = createApp({
       config: { siteName: "My App" },
       pluginConfigs: { database: { port: 3306 } }
     });
@@ -134,7 +134,7 @@ describe("full lifecycle integration", () => {
     expect(stopEvents).toEqual(["logger:stop", "cache:stop", "database:stop"]);
   });
 
-  it("async lifecycle methods run sequentially", async () => {
+  it("async start/stop methods run sequentially", async () => {
     const order: string[] = [];
 
     const cc = createCoreConfig<{ siteName: string }, Record<string, never>>("async-test", {
@@ -142,10 +142,7 @@ describe("full lifecycle integration", () => {
     });
 
     const slow = cc.createPlugin("slow", {
-      onInit: async () => {
-        await new Promise(resolve => {
-          setTimeout(resolve, 20);
-        });
+      onInit: () => {
         order.push("slow:init");
       },
       onStart: async () => {
@@ -175,9 +172,9 @@ describe("full lifecycle integration", () => {
     });
 
     const { createApp } = cc.createCore(cc, { plugins: [slow, fast] });
-    const app = await createApp();
+    const app = createApp();
 
-    // Sequential: slow finishes before fast
+    // Sync onInit: runs immediately in forward order
     expect(order).toEqual(["slow:init", "fast:init"]);
 
     await app.start();

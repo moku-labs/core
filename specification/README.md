@@ -16,7 +16,7 @@ createCore(coreConfig, { plugins })               -- Framework index.ts
      |
 createApp({ plugins?, config?, pluginConfigs?, ... })  -- Consumer main.ts
      |
-Promise<App>  -- Typed plugin APIs: app.router.navigate()
+App  -- Typed plugin APIs: app.router.navigate()
 ```
 
 One export at Layer 1 (`createCoreConfig`). One setup call at Layer 2 (`createCore`). One consumer call at Layer 3 (`createApp`). Everything is typed end-to-end through closures.

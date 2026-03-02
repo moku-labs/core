@@ -136,7 +136,7 @@ describe("4-level dependency chain: lifecycle ordering", () => {
       plugins: [router, templateEngine, renderer, seo, sitemap]
     });
 
-    const app = await createApp();
+    const app = createApp();
 
     // Init: forward order (after flattening)
     expect(order).toEqual([
@@ -251,7 +251,7 @@ describe("4-level dependency chain: cross-level API calls", () => {
       plugins: [router, templateEngine, renderer, seo, sitemap]
     });
 
-    const app = await createApp();
+    const app = createApp();
 
     // Full chain call: sitemap -> seo -> renderer -> template-engine
     const result = app.sitemap.indexPage("/about");
@@ -353,7 +353,7 @@ describe("4-level dependency chain: event propagation through hooks", () => {
       plugins: [level0, level1, level2, level3]
     });
 
-    const app = await createApp();
+    const app = createApp();
 
     // Trigger from level 3 — cascades through entire chain
     app.level3.act("test");
