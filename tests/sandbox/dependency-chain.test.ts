@@ -1,10 +1,10 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 
-import { createApp, createPlugin } from "./demo/moku-web/index";
-import { rendererPlugin } from "./demo/moku-web/plugins/renderer";
-import { seoPlugin } from "./demo/moku-web/plugins/seo";
-import { sitemapPlugin } from "./demo/moku-web/plugins/sitemap";
-import { templateEnginePlugin } from "./demo/moku-web/plugins/template-engine";
+import { createApp, createPlugin } from "./demo/framework/index";
+import { rendererPlugin } from "./demo/framework/plugins/renderer";
+import { seoPlugin } from "./demo/framework/plugins/seo";
+import { sitemapPlugin } from "./demo/framework/plugins/sitemap";
+import { templateEnginePlugin } from "./demo/framework/plugins/template-engine";
 
 // ---------------------------------------------------------------------------
 // 4-level dependency chain: type inference at every level (SAND-05)

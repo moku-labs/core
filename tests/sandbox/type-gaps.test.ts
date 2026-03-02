@@ -266,7 +266,7 @@ describe("precise require() return types", () => {
 
 describe("consumer extra plugin typing", () => {
   it("extra plugins added via createApp are typed on the app object", async () => {
-    const { createApp, createPlugin } = await import("./demo/moku-web/index");
+    const { createApp, createPlugin } = await import("./demo/framework/index");
 
     const blogPlugin = createPlugin("blog", {
       api: () => ({

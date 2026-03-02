@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Blog</title>
+  <link rel="stylesheet" href="/assets/index.css">
+</head>
+<body>
+  <div id="app">
+    <header data-island="share-buttons"></header>
+    <main>
+      <div data-island="lightbox"></div>
+    </main>
+  </div>
+
+  <script type="module">
+    import { app } from "./spa.ts";
+
+    await app.start();
+
+    // ── Navigation ──────────────────────────────────────────
+    app.router.navigate("/blog/about");
+    app.router.navigate("/gallery");
+
+    // ── Islands ─────────────────────────────────────────────
+    app["share-buttons"].share("twitter");
+    app.lightbox.open("/images/photo.jpg");
+  </script>
+</body>
+</html>

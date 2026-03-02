@@ -1,4 +1,4 @@
-import { createPlugin } from "../../moku-web";
+import { createPlugin } from "../../framework";
 
 export const blogPlugin = createPlugin("blog", {
   config: {

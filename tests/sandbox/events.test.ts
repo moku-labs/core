@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { createCoreConfig } from "../../src";
-import { createPlugin } from "./demo/moku-web/config";
-import { createApp, rendererPlugin, routerPlugin } from "./demo/moku-web/index";
+import { createPlugin } from "./demo/framework/config";
+import { createApp, rendererPlugin, routerPlugin } from "./demo/framework/index";
 
 // ---------------------------------------------------------------------------
 // Global events (from createCoreConfig Events)

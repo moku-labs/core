@@ -1,11 +1,11 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 
-import { createPlugin } from "./demo/moku-web/config";
-import { createApp } from "./demo/moku-web/index";
-import { authPlugin } from "./demo/moku-web/plugins/auth";
-import { rendererPlugin } from "./demo/moku-web/plugins/renderer";
-import { routerPlugin } from "./demo/moku-web/plugins/router";
-import { templateEnginePlugin } from "./demo/moku-web/plugins/template-engine";
+import { createPlugin } from "./demo/framework/config";
+import { createApp } from "./demo/framework/index";
+import { authPlugin } from "./demo/framework/plugins/auth";
+import { rendererPlugin } from "./demo/framework/plugins/renderer";
+import { routerPlugin } from "./demo/framework/plugins/router";
+import { templateEnginePlugin } from "./demo/framework/plugins/template-engine";
 
 // ---------------------------------------------------------------------------
 // createPlugin infers all types from spec (SAND-02)

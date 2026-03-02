@@ -1,7 +1,7 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 
-import { coreConfig, createPlugin } from "./demo/moku-web/config";
-import { createApp, createPlugin as frameworkCreatePlugin } from "./demo/moku-web/index";
+import { coreConfig, createPlugin } from "./demo/framework/config";
+import { createApp, createPlugin as frameworkCreatePlugin } from "./demo/framework/index";
 
 // ---------------------------------------------------------------------------
 // createCoreConfig (Step 1)
