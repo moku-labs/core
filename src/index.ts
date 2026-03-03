@@ -22,3 +22,17 @@ export type { PluginCtx } from "./types";
 
 /** Emit overload builder. Converts an event map to overloaded call signatures. */
 export type { EmitFn } from "./utilities";
+
+// -----------------------------------------------------------------------------
+// Framework-Facing Types (required for declaration emit)
+// -----------------------------------------------------------------------------
+// These types appear in return-type positions of createCoreConfig, createCore,
+// and createApp. Downstream framework packages need them exported so TypeScript
+// can reference them in generated .d.ts files (prevents TS4023).
+// Type-only — zero runtime/bundle cost.
+// -----------------------------------------------------------------------------
+
+export type { CoreConfigResult } from "./config";
+export type { BoundCreateCoreFunction, CreateCoreOptions, CreateCoreResult } from "./core";
+export type { BoundCreatePluginFunction } from "./plugin";
+export type { AnyPluginInstance, App, CreateAppOptions, PluginInstance } from "./types";
