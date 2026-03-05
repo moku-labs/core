@@ -324,6 +324,126 @@ export const cmsPlugin = createPlugin('cms', {
 
 **When to split instead:** If modules have no shared state, no shared events, and no cross-module coordination — they should be separate plugins, not one very complex plugin. The very complex tier exists for cases where the modules are genuinely coupled and must share internal state.
 
+### Very Complex Plugin Patterns
+
+#### Nested Config Convention
+
+When a very complex plugin has multiple modules, each with its own configuration, use **nested config objects** keyed by module name. The consumer overrides config through `pluginConfigs` using the plugin name — shallow merge handles the rest:
+
+```typescript
+// plugins/cms/index.ts
+export const cmsPlugin = createPlugin('cms', {
+  config: {
+    content: {
+      defaultLocale: 'en',
+      maxTitleLength: 200,
+    },
+    media: {
+      maxUploadSize: 10 * 1024 * 1024,
+      allowedTypes: ['image/png', 'image/jpeg'],
+    },
+    publishing: {
+      targets: ['static'] as string[],
+      draftByDefault: true,
+    },
+  },
+  // ...
+});
+
+// Consumer:
+// pluginConfigs: { cms: { media: { maxUploadSize: 50 * 1024 * 1024 } } }
+// NOTE: shallow merge replaces the entire `media` object.
+// To preserve defaults, spread them: { ...defaults.media, maxUploadSize: 50 * 1024 * 1024 }
+```
+
+#### Sub-Module Context Pattern
+
+Sub-module API factories receive the plugin's context object. Define a shared context type in `types.ts` using `PluginCtx` from `@moku-labs/core`:
+
+```typescript
+// plugins/cms/types.ts
+import type { PluginCtx } from '@moku-labs/core';
+
+export type CmsEvents = {
+  'cms:publish': { contentId: string; path: string };
+  'cms:draft': { contentId: string };
+  'cms:upload': { assetId: string; url: string };
+};
+
+export type CmsConfig = {
+  content: { defaultLocale: string; maxTitleLength: number };
+  media: { maxUploadSize: number; allowedTypes: string[] };
+  publishing: { targets: string[]; draftByDefault: boolean };
+};
+
+export type CmsState = {
+  content: ContentState;
+  media: MediaState;
+  publishing: PublishingState;
+};
+
+export type CmsCtx = PluginCtx<CmsConfig, CmsState, CmsEvents>;
+```
+
+Sub-module factories accept the shared context and access their slice:
+
+```typescript
+// plugins/cms/content/api.ts
+import type { CmsCtx } from '../types';
+
+export const createContentApi = (ctx: CmsCtx) => ({
+  create: (title: string) => {
+    const id = generateId();
+    ctx.state.content.items.set(id, { title, locale: ctx.config.content.defaultLocale });
+    ctx.emit('cms:draft', { contentId: id });
+    return id;
+  },
+  // ...
+});
+```
+
+#### Event Ownership
+
+The plugin — not its sub-modules — owns all events. Events are declared once in `index.ts` via the `events` register callback. Sub-module factories emit events through the shared `ctx.emit`, which is fully typed from the plugin's event declaration. Sub-modules never declare their own events.
+
+```typescript
+// index.ts — THE event contract
+export const cmsPlugin = createPlugin('cms', {
+  events: register => register.map<CmsEvents>({
+    'cms:publish': 'Content published',
+    'cms:draft':   'Draft saved',
+    'cms:upload':  'Media uploaded',
+  }),
+  api: ctx => ({
+    content: createContentApi(ctx),    // ctx.emit typed with CmsEvents
+    media: createMediaApi(ctx),        // same ctx, same emit
+    publishing: createPublishingApi(ctx),
+  }),
+});
+```
+
+#### Composed State
+
+The plugin's `createState` factory composes sub-module state factories into a single nested state object:
+
+```typescript
+// plugins/cms/index.ts
+import { createContentState } from './content/state';
+import { createMediaState } from './media/state';
+import { createPublishingState } from './publishing/state';
+
+export const cmsPlugin = createPlugin('cms', {
+  createState: () => ({
+    content: createContentState(),
+    media: createMediaState(),
+    publishing: createPublishingState(),
+  }),
+  // ...
+});
+```
+
+Each sub-module state factory returns its own slice. The root `createState` composes them. Sub-modules access their slice via `ctx.state.<moduleName>`.
+
 ---
 
 ## 3. Domain Scenarios
@@ -530,11 +650,11 @@ plugins/
 
 ### 3.5 SPA Plugins
 
-Client routing, component lifecycle, store, hydration.
+Client routing, component lifecycle, head management, progress indicators, hydration.
 
-**Tier: Standard (router) or Complex (store).**
+**Tier: Standard (single concern) or Very Complex (full SPA engine with multiple modules).**
 
-Client router:
+Single-concern SPA plugin (standard):
 
 ```
 plugins/
@@ -553,7 +673,95 @@ plugins/
         spa-router.test.ts   # Integration test.
 ```
 
-Store with slices and middleware:
+Full SPA engine (very complex — multiple coordinating modules):
+
+```
+plugins/
+  spa/
+    index.ts                 # ~40 lines. Wiring harness.
+    types.ts                 # SpaConfig, SpaState, SpaEvents, SpaCtx.
+    head/
+      api.ts                 # updateHead() — sync document head during navigation.
+    progress/
+      state.ts               # Progress bar state (active flag, element ref).
+      api.ts                 # start(), done() — navigation progress bar.
+    components/
+      types.ts               # ComponentDef, ComponentHooks, ComponentInstance.
+      state.ts               # Component registry, mounted instances map.
+      api.ts                 # createComponent(), scanAndMount(), unmountPageSpecific().
+    router/
+      types.ts               # PageData, RouterHandlers.
+      state.ts               # Navigation state (active, cleanup).
+      api.ts                 # createRouter(), extractPageData(), shouldInterceptNavigation().
+    README.md                # Plugin documentation.
+    __tests__/
+      unit/
+        head-api.test.ts           # Unit test.
+        progress-api.test.ts       # Unit test.
+        components-api.test.ts     # Unit test.
+        router-api.test.ts         # Unit test.
+      integration/
+        spa.test.ts                # Integration test.
+```
+
+```typescript
+// plugins/spa/index.ts
+import { createPlugin } from '../../config';
+import { routerPlugin } from '../router';
+import { createHeadApi } from './head/api';
+import { createProgressState, createProgressApi } from './progress/api';
+import { createComponentsState, createComponentsApi } from './components/api';
+import { createSpaRouterState, createSpaRouterApi } from './router/api';
+import type { SpaEvents } from './types';
+
+export const spaPlugin = createPlugin('spa', {
+  depends: [routerPlugin] as const,
+  config: {
+    router: { viewTransitions: false, progressBar: true },
+    progress: { enabled: true, color: '#0076ff', height: 2 },
+    components: { swapSelector: 'main > section', componentAttribute: 'data-component' },
+  },
+  createState: () => ({
+    router: createSpaRouterState(),
+    progress: createProgressState(),
+    components: createComponentsState(),
+  }),
+  events: register => register.map<SpaEvents>({
+    'nav:start':          'Navigation started (before fetch)',
+    'nav:end':            'Navigation completed (after DOM swap)',
+    'component:create':   'Component instance created',
+    'component:mount':    'Component mounted into DOM',
+    'component:unmount':  'Component unmounted from DOM',
+    'component:destroy':  'Component permanently destroyed',
+  }),
+  api: ctx => ({
+    head:       createHeadApi(),
+    progress:   createProgressApi(ctx),
+    components: createComponentsApi(ctx),
+    router:     createSpaRouterApi(ctx),
+  }),
+  onStart: ctx => {
+    // Set up Navigation API intercept or History API fallback
+  },
+  onStop: () => {
+    // Remove navigation listeners
+  },
+  hooks: ctx => ({
+    'nav:start': () => {
+      if (ctx.config.router.progressBar) {
+        // Start progress bar
+      }
+    },
+    'nav:end': () => {
+      // Complete progress bar, scan for new components
+    },
+  }),
+});
+```
+
+**Why one plugin, not four:** The head, progress, components, and router modules share navigation events, coordinate during the nav:start → fetch → swap → nav:end flow, and are always used together. Separate plugins would add registration noise (4 array entries) and API surface clutter (4 top-level names on `app`) for modules that have no independent use case. One very complex plugin with namespaced API (`app.spa.head`, `app.spa.router`) is cleaner.
+
+Store with slices and middleware (complex):
 
 ```
 plugins/
