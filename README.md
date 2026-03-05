@@ -230,7 +230,7 @@ Every field is optional. A plugin with only `api` works. A plugin with only `hoo
 
 ## Design Principles
 
-**Brutal simplicity.** No classes. No decorators. No dependency injection. No inheritance. Every function is a pure factory: input → output.
+**Brutal simplicity.** No classes. No decorators. No dependency injection. No inheritance. `createCoreConfig`, `createCore`, and `createPlugin` are pure factories. `createApp()` performs synchronous init. `app.start()` / `app.stop()` run the runtime lifecycle.
 
 **Types over runtime.** Most of the codebase is type definitions and JSDoc. The type system provides autocomplete, compile-time validation, and documentation simultaneously.
 
@@ -268,13 +268,13 @@ Creates a plugin instance. Zero explicit generics — everything inferred from t
 
 ### createApp(options?)
 
-Merges framework defaults with consumer options. Validates, resolves config, runs `onInit`. Returns `App` — a frozen object with plugin APIs mounted as properties.
+Merges framework defaults with consumer options. Validates, resolves config, runs `onInit`, and returns `App` — a frozen object with plugin APIs mounted as properties. `createApp()` is synchronous and side-effectful within the init phase; it is not a lazy builder. `start()` / `stop()` are optional and mainly useful for apps with a distinct runtime phase. Lifecycle execution is non-transactional: start/stop errors propagate, they are not rolled back by the kernel.
 
 ### App
 
 ```typescript
-await app.start();            // onStart (forward order)
-await app.stop();             // onStop (reverse order)
+await app.start();            // optional: onStart (forward order)
+await app.stop();             // optional: onStop (reverse order)
 app.emit('event', payload);   // strictly typed, fire-and-forget
 app.require(plugin);          // returns typed API or throws
 app.has('name');              // boolean, never throws

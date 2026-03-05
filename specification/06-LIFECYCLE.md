@@ -17,6 +17,8 @@ The kernel has exactly three lifecycle phases:
 
 Forward = plugin array order (first registered runs first). Reverse = last registered runs first.
 
+The `start` / `stop` phases are optional. They exist for applications that have a distinct runtime phase (for example servers, workers, long-lived connections, file watchers, background processes). If an app does all its useful work during init and plain API calls, it may never need to call `start()` or `stop()`.
+
 ---
 
 ## 2. The init Phase
@@ -55,7 +57,7 @@ This is where plugins perform runtime setup: opening connections, starting serve
 
 After all plugin `onStart` methods complete, the consumer `onStart` callback (if provided) is called with `AppCallbackContext`.
 
-**Error behavior:** If any plugin's `onStart` throws, the error propagates immediately. Remaining plugins do not get their `onStart` called. There is no automatic rollback -- the consumer is responsible for error recovery.
+**Error behavior:** If any plugin's `onStart` throws, the error propagates immediately. Remaining plugins do not get their `onStart` called. There is no automatic rollback or teardown-after-failed-start -- any recovery is domain-specific.
 
 ---
 
@@ -92,6 +94,8 @@ for (const plugin of plugins) {
 }
 ```
 
+**Important:** lifecycle completion is not the same thing as hook completion. `emit()` is fire-and-forget, so async hook work triggered during `onInit` or `onStart` may still be running after `createApp()` or `app.start()` returns.
+
 ---
 
 ## 6. Error Handling
@@ -105,12 +109,30 @@ Lifecycle methods can throw (or reject). When they do:
 
 **No catch-and-silence. No error swallowing. No retry logic.** The consumer decides how to handle errors. The kernel does not know what "error recovery" means in your domain.
 
+### 6.1 Non-Transactional Lifecycle
+
+The lifecycle is not transactional.
+
+- The kernel only sequences and awaits the promises returned by lifecycle methods.
+- Detached async work (for example, `void` promises or background tasks created by plugins) is outside the kernel contract.
+- The kernel does not attempt rollback, compensation, or teardown-after-failed-start.
+- `stop()` is not a guaranteed recovery mechanism after a failed `start()`.
+- After a lifecycle failure, the safest contract is to discard the app instance and recreate it if needed.
+
 ---
 
-## 7. State Guards
+## 7. Supported Lifecycle Usage
 
-- `start()` can only be called once. Calling it again throws: `"App already started."`
-- `stop()` requires `start()` first. Calling it before start throws: `"App not started."`
+The supported lifecycle is:
+
+`createApp()` -> optional `await app.start()` -> optional `await app.stop()`
+
+Repeated calls, concurrent calls, or recovery attempts after lifecycle failure are outside the primary contract unless explicitly documented otherwise.
+
+The current runtime additionally throws when:
+
+- `stop()` is called before a successful `start()`
+- `start()` is called again after a successful `start()`
 
 ```typescript
 const app = createApp({ ... });

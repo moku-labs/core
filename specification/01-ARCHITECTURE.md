@@ -172,7 +172,11 @@ An LLM can learn this in under 1000 tokens.
 
 There are no classes to extend. No decorators to learn. No abstract base types to implement. No dependency injection containers to configure. No service locators. No middleware chains with magic signatures.
 
-Every function is a pure factory. Input -> output. No side effects until `app.start()`.
+The factory chain stays simple:
+
+- `createCoreConfig`, `createCore`, and `createPlugin` are pure factories.
+- `createApp()` performs synchronous initialization.
+- `app.start()` and `app.stop()` run the runtime lifecycle phases.
 
 **Why this matters for AI agents:** A small, regular API surface means fewer tokens to learn, fewer patterns to match, and drastically lower probability of hallucinating incorrect usage. An AI can hold the entire framework in working memory.
 

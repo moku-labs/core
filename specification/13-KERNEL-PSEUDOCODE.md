@@ -23,7 +23,7 @@ Every significant "why" in the architecture:
 | 10 | No topological sort | Auto-sort by depends | Explicit ordering is simpler, more predictable, more debuggable. depends is validation-only. |
 | 11 | Configs frozen, state mutable | Everything mutable or everything frozen | Configs are the contract -- they must not change. State is the deliberate escape hatch for runtime mutation. |
 | 12 | No sub-plugins — all plugins listed explicitly | Sub-plugins flattened depth-first | Explicit listing is simpler, gives full type visibility. Frameworks can re-export plugin arrays for convenience. |
-| 13 | start callable once, stop requires start | Idempotent no-ops on repeat calls | Throws on second call catches misuse. |
+| 13 | Supported lifecycle is `createApp -> start? -> stop?` | Transactional lifecycle or broad misuse guarantees | Minimal contract. Repeated/concurrent calls and failure recovery are outside the primary guarantee. |
 | 14 | Stop propagates errors | Stop is best-effort (continue on error) | Simple. If a plugin's onStop throws, the error propagates immediately. Consumer handles error recovery. |
 
 ---

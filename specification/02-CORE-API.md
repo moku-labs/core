@@ -182,7 +182,11 @@ function createApp(
 
 Consumer callbacks are additive to framework-level callbacks set in `createCore`.
 
-**Returns:** `App`. The app is fully initialized -- all plugins have completed their `onInit` phase. Consumers call `app.start()` and `app.stop()` to control the running lifecycle.
+**Returns:** `App`. The app is fully initialized -- all plugins have completed their `onInit` phase. `createApp()` is synchronous and runs the init phase immediately.
+
+`app.start()` and `app.stop()` are optional runtime lifecycle methods. They are mainly for applications with a distinct running phase (servers, workers, long-lived resources). Many apps may use `createApp()` and mounted plugin APIs without ever calling them.
+
+**Lifecycle scope:** The lifecycle is non-transactional. If `start()` or `stop()` throws, the kernel propagates the error and does not attempt rollback or compensation.
 
 **The final plugin list is:** `[...frameworkDefaults, ...consumerExtras]`
 

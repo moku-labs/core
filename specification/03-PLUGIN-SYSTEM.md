@@ -209,6 +209,9 @@ The `depends` field accepts an array of plugin instances. Since you import a plu
 - Does not auto-reorder plugins (no topological sort)
 - Does not create new concepts (no "dependency graph", no "resolution algorithm")
 - Does not change plugin execution order (plugins run in array order, always)
+- Does not restrict `ctx.require()` to only declared dependencies at runtime
+
+`depends` is explicit validated metadata: it documents hard dependencies, validates presence/order at startup, and expands the typed event surface. It is not a runtime capability wall.
 
 **Visibility for LLMs and tooling:** With `depends`, an LLM can read a plugin's spec without executing any code and know what plugins must precede it. This is pure metadata extractable statically.
 

@@ -167,7 +167,7 @@ const router = ctx.require(routerPlugin);
 router.navigate('/about');  // full autocomplete
 ```
 
-Use `require` for **hard dependencies** declared in `depends`. These MUST exist -- `require` throws with a clear error if the plugin is not registered.
+Best practice: use `require` for **hard dependencies** declared in `depends`. The runtime accepts any registered plugin instance; `depends` is the explicit validated declaration of hard dependencies. If a required plugin is missing, `require` throws with a clear error.
 
 **Error messages:**
 

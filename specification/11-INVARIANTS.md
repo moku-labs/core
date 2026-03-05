@@ -74,10 +74,18 @@ After `createApp` resolves:
 
 Plugin internal state (`ctx.state`) is mutable -- that's the point of state. But configs and the app structure are frozen.
 
-### 1.8 Lifecycle Guards
+### 1.8 Supported Lifecycle Usage
 
-- `app.start()` callable once. Second call throws.
-- `app.stop()` requires `start()` first.
+The supported lifecycle is:
+
+`createApp()` -> optional `await app.start()` -> optional `await app.stop()`
+
+This is the primary contract. Repeated calls, concurrent calls, or recovery attempts after lifecycle failure are outside the primary lifecycle guarantee unless explicitly documented otherwise.
+
+The current runtime additionally guards some misuse cases:
+
+- `app.start()` throws when called again after a successful start
+- `app.stop()` throws if called before a successful start
 
 ### 1.9 require() Contract
 
@@ -137,6 +145,12 @@ Lifecycle methods can throw (or reject). When they do:
 - The error propagates to the caller (`createApp(...)` or `await app.start()`).
 - No catch-and-silence. No error swallowing. No retry logic.
 - The consumer decides how to handle errors.
+- The kernel does not attempt rollback or compensation.
+- Detached async work outside the awaited lifecycle chain is outside the kernel contract.
+
+### 1.14 Non-Transactional Lifecycle
+
+The lifecycle is not transactional. A failed `start()` does not imply rollback, and a failed `stop()` does not imply best-effort continuation. The safest default after lifecycle failure is to discard the app instance and recreate it if needed.
 
 ---
 
@@ -241,17 +255,20 @@ const authPlugin = createPlugin('auth', { ... });
 
 **The primitives are:** `createCoreConfig`, `createCore`, `createApp`, `createPlugin`. If you need something the framework does not have, you build a plugin. Not a new abstraction.
 
-### 2.9 Forgetting await on createApp
+### 2.9 createApp() is synchronous
 
 ```typescript
-// BAD: missing await -- app is a Promise, not an App
+// BAD: assuming createApp() is lazy
 const app = createApp({ config: { siteName: 'Blog' } });
-app.router.navigate('home');  // runtime error: app.router is undefined
+// init/onReady have already run here
 
-// GOOD: await the Promise
+// GOOD: createApp() is sync; start() is optional and only begins the runtime start phase
 const app = createApp({ config: { siteName: 'Blog' } });
-app.router.navigate('home');  // works
+await app.start();
+app.router.navigate('home');
 ```
+
+`start()` and `stop()` are optional. Use them when your app has a real runtime phase (servers, workers, long-lived resources). If not, `createApp()` plus direct API calls may be the whole lifecycle you need.
 
 ---
 

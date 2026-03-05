@@ -96,6 +96,12 @@ ctx.emit('unknown:event', { anything: true });                         // ERROR 
 
 **Hook error resilience.** `emit` is fire-and-forget (returns `void`). Hooks run sequentially via an internal async `dispatch`. If a hook throws, the error is reported via a combined error handler that calls both the framework `onError` (from `createCore`) and the consumer `onError` (from `createApp`), if either is provided. If neither handler is provided, hook errors are silently caught and discarded. One failing hook does not prevent other hooks from running.
 
+**No barrier semantics.** Because `emit()` does not await hook completion:
+
+- `createApp()` does not wait for async hook work triggered during `onInit`
+- `app.start()` does not wait for async hook work triggered during `onStart`
+- lifecycle completion only means the lifecycle methods themselves completed, not all event-driven follow-up work
+
 ---
 
 ## 4. Hooks
