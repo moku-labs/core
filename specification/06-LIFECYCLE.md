@@ -1,6 +1,6 @@
 # 06 - Lifecycle
 
-**Domain:** 3 lifecycle phases, ordering, async execution, error handling
+**Domain:** 3 lifecycle phases, ordering, async execution, error handling, core plugin lifecycle
 **Architecture:** 3-step (createCoreConfig -> createCore -> createApp)
 
 ---
@@ -17,6 +17,14 @@ The kernel has exactly three lifecycle phases:
 
 Forward = plugin array order (first registered runs first). Reverse = last registered runs first.
 
+**Core plugins run on a separate timeline from regular plugins.** Core plugin init/start runs BEFORE any regular plugin init/start. Core plugin stop runs AFTER all regular plugins have stopped. This guarantees that infrastructure services (logging, env, storage) are available for the entire lifetime of regular plugins.
+
+| Phase | Core Plugins | Regular Plugins |
+|-------|-------------|-----------------|
+| init  | First (forward order) | Second (forward order) |
+| start | First (forward order) | Second (forward order) |
+| stop  | Second (reverse order) | First (reverse order) |
+
 The `start` / `stop` phases are optional. They exist for applications that have a distinct runtime phase (for example servers, workers, long-lived connections, file watchers, background processes). If an app does all its useful work during init and plain API calls, it may never need to call `start()` or `stop()`.
 
 ---
@@ -27,16 +35,18 @@ Runs during `createApp(...)`. This single phase encompasses all initialization w
 
 1. **Merge plugin lists:** `[...frameworkDefaultPlugins, ...consumerExtraPlugins]`
 2. **Validate reserved names:** No plugin name can conflict with app methods or dangerous object keys (`start`, `stop`, `emit`, `require`, `has`, `config`, `__proto__`, `constructor`, `prototype`).
-3. **Validate names:** No duplicate plugin names in the final list. Throw if any collision.
+3. **Validate names:** No duplicate plugin names in the final list (including core plugin names). Throw if any collision.
 4. **Validate dependencies:** For each plugin with `depends`, verify all dependencies exist and appear earlier in the array. Throw with clear error if either fails.
 5. **Resolve global config:** Shallow merge `{ ...configDefaults, ...consumerOverrides }`. Freeze the result.
-6. **Resolve per-plugin config:** For each plugin, 3-level shallow merge `{ ...plugin.config, ...frameworkOverride, ...consumerOverride }`. Freeze each result.
-7. **Create state:** For each plugin (forward order), call `createState({ global, config })`. Store mutable state. Default `{}` if no `createState`.
-8. **Register hooks:** For each plugin (forward order), call `hooks(PluginContext)`, register handlers in the event bus.
-9. **Build API:** For each plugin (forward order), call `api(PluginContext)`. Register the API in the plugin registry.
-10. **Run onInit:** For each plugin (forward order), call `onInit(PluginContext)`. Synchronous. This is where plugins validate dependencies with `require()`/`has()`.
-11. **Call framework onReady:** If `onReady` was passed to `createCore`, call it with `{ config: globalConfig }`. Synchronous.
-12. **Call consumer onReady:** If `onReady` was passed to `createApp`, call it with full `AppCallbackContext` (config, emit, require, has, plugin APIs). Synchronous.
+6. **Resolve core plugin configs:** For each core plugin, 4-level shallow merge `{ ...spec.config, ...coreConfigOverrides, ...frameworkOverrides, ...consumerOverrides }`. Freeze each result.
+7. **Init core plugins:** For each core plugin (forward order), create state via `createState({ config })`, build API via `api({ config, state })`, run `onInit({ config, state })`. Core plugin APIs are now available for injection into regular plugin contexts.
+8. **Resolve per-plugin config:** For each regular plugin, 3-level shallow merge `{ ...plugin.config, ...frameworkOverride, ...consumerOverride }`. Freeze each result.
+9. **Create state:** For each regular plugin (forward order), call `createState({ global, config })`. Store mutable state. Default `{}` if no `createState`.
+10. **Register hooks:** For each regular plugin (forward order), call `hooks(PluginContext)`, register handlers in the event bus.
+11. **Build API:** For each regular plugin (forward order), call `api(PluginContext)`. Register the API in the plugin registry.
+12. **Run onInit:** For each regular plugin (forward order), call `onInit(PluginContext)`. Synchronous. This is where plugins validate dependencies with `require()`/`has()`. Core APIs (e.g., `ctx.log`, `ctx.env`) are available on the context.
+13. **Call framework onReady:** If `onReady` was passed to `createCore`, call it with `{ config: globalConfig }`. Synchronous.
+14. **Call consumer onReady:** If `onReady` was passed to `createApp`, call it with full `AppCallbackContext` (config, emit, require, has, plugin APIs). Synchronous.
 
 These sub-steps are presented as ONE phase with internal mechanics. Plugin authors write `onInit` -- the rest is kernel machinery.
 
@@ -46,16 +56,19 @@ After init completes, `createApp` returns the app object.
 
 ## 3. The start Phase
 
-Runs when the consumer calls `await app.start()`. Forward order through the plugin array. Each plugin's `onStart` is called and awaited sequentially.
+Runs when the consumer calls `await app.start()`. Core plugins start first (forward order), then regular plugins start (forward order). Each plugin's `onStart` is called and awaited sequentially.
 
 ```typescript
 const app = createApp({ ... });
-await app.start();  // triggers onStart for each plugin, forward order
+await app.start();
+// 1. Core plugins onStart (forward order) -- infrastructure starts first
+// 2. Regular plugins onStart (forward order)
+// 3. Consumer onStart callback (if provided)
 ```
 
 This is where plugins perform runtime setup: opening connections, starting servers, loading data. Plugins that need async initialization should use `onStart`, not `onInit`.
 
-After all plugin `onStart` methods complete, the consumer `onStart` callback (if provided) is called with `AppCallbackContext`.
+After all core and regular plugin `onStart` methods complete, the consumer `onStart` callback (if provided) is called with `AppCallbackContext`.
 
 **Error behavior:** If any plugin's `onStart` throws, the error propagates immediately. Remaining plugins do not get their `onStart` called. There is no automatic rollback or teardown-after-failed-start -- any recovery is domain-specific.
 
@@ -63,15 +76,17 @@ After all plugin `onStart` methods complete, the consumer `onStart` callback (if
 
 ## 4. The stop Phase
 
-Runs when the consumer calls `await app.stop()`. **REVERSE** order through the plugin array. Each plugin's `onStop` is called and awaited sequentially.
+Runs when the consumer calls `await app.stop()`. Regular plugins stop first (reverse order), then core plugins stop (reverse order). Each plugin's `onStop` is called and awaited sequentially.
 
 ```typescript
-await app.stop();  // triggers onStop for each plugin, REVERSE order
+await app.stop();
+// 1. Regular plugins onStop (REVERSE order)
+// 2. Core plugins onStop (REVERSE order) -- infrastructure stops last
 ```
 
-Reverse order ensures that plugins which depend on other plugins stop first. If Plugin B depends on Plugin A, B stops before A -- so B can still clean up using A's resources.
+Reverse order ensures that plugins which depend on other plugins stop first. If Plugin B depends on Plugin A, B stops before A -- so B can still clean up using A's resources. Core plugins stop after all regular plugins, ensuring infrastructure services (logging, env, storage) remain available throughout regular plugin teardown.
 
-The stop phase receives `TeardownContext` -- minimal context with only `{ global }`. During teardown, other plugins may be partially or fully stopped, so the context does not expose inter-plugin communication methods.
+Regular plugins receive `TeardownContext` (`{ global }`) during stop. Core plugins receive `CorePluginContext` (`{ config, state }`) during stop -- they have no inter-plugin dependencies to worry about.
 
 ---
 

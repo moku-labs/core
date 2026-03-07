@@ -47,6 +47,38 @@ All inferred -- plugin authors never write this type. The `_phantom` field carri
 
 ---
 
+## 2b. Core Plugin Instance Type
+
+The internal type created by `createCorePlugin`:
+
+```typescript
+interface CorePluginInstance<
+  N extends string = string,
+  C = void,
+  S = void,
+  A extends Record<string, any> = Record<string, never>,
+> {
+  readonly name: N;
+  readonly spec: CorePluginSpec<any, any, any>;
+  readonly _corePlugin: true;   // brand — distinguishes from regular PluginInstance
+  readonly _phantom: {
+    config: C;
+    state: S;
+    api: A;
+  };
+}
+
+type AnyCorePluginInstance = CorePluginInstance<string, any, any, any>;
+```
+
+`N` = name literal, `C` = config, `S` = state, `A` = api. Core plugins have no `PluginEvents` phantom — they cannot declare events.
+
+The `_corePlugin: true` brand field distinguishes core plugin instances from regular plugin instances at the type level. It is never read at runtime.
+
+Core plugin context is minimal — only `{ config, state }`. No `global`, no `emit`, no `require`, no `has`. Core plugins are self-contained infrastructure; they do not participate in the regular plugin communication graph.
+
+---
+
 ## 3. Type-Level Helpers
 
 ```typescript
@@ -74,6 +106,51 @@ type DepsEvents<Deps extends ReadonlyArray<PluginInstance>> =
 ```
 
 These helpers extract type information from plugin instances for use in mapped types like `BuildPluginApis` and `CreateAppOptions`.
+
+### Core Plugin Extraction Helpers
+
+```typescript
+/** Extract name literal from a core plugin */
+type ExtractCoreName<P> = P extends CorePluginInstance<infer N, any, any, any> ? N : never;
+
+/** Extract config type from a core plugin */
+type ExtractCoreConfig<P> = P extends CorePluginInstance<string, infer C, any, any> ? C : never;
+
+/** Extract API type from a core plugin */
+type ExtractCoreApi<P> = P extends CorePluginInstance<string, any, any, infer A> ? A : never;
+```
+
+---
+
+## 3b. BuildCorePluginApis and CoreApisFromTuple
+
+```typescript
+/** Build the aggregate core API surface from a core plugin union */
+type BuildCorePluginApis<P extends AnyCorePluginInstance> = {
+  readonly [K in P as ExtractCoreApi<K> extends Record<string, never>
+    ? never
+    : IsLiteralString<ExtractCoreName<K>> extends true
+      ? ExtractCoreName<K>
+      : never]: ExtractCoreApi<K>;
+};
+
+/** Convert a core plugin tuple to the aggregate core API map */
+type CoreApisFromTuple<T extends readonly AnyCorePluginInstance[]> =
+  BuildCorePluginApis<T[number]>;
+```
+
+`BuildCorePluginApis` follows the same pattern as `BuildPluginApis` — it maps each core plugin to a readonly property keyed by name, excluding plugins with empty APIs or non-literal names. `CoreApisFromTuple` converts a tuple (the `plugins` array in `createCoreConfig`) to the union needed by the mapped type.
+
+```typescript
+// Given: logPlugin ('log', LogApi), envPlugin ('env', EnvApi)
+// CoreApisFromTuple<[typeof logPlugin, typeof envPlugin]> produces:
+{
+  readonly log: LogApi;
+  readonly env: EnvApi;
+}
+```
+
+These APIs are injected flat onto every regular plugin's context: `ctx.log.info(...)`, `ctx.env.isDev()`.
 
 ---
 
@@ -125,6 +202,54 @@ This maps each plugin in the union to a property on the app, keyed by the plugin
 
 ---
 
+## 5b. CoreApis Generic Parameter Threading
+
+Core plugin APIs are threaded through the type system via a `CoreApis` generic parameter with a default of `{}`. This parameter appears on every type that provides or consumes plugin context:
+
+```typescript
+// CoreApis added as a defaulted generic parameter:
+type PluginContext<Config, Events, C, S, CoreApis = {}> = {
+  global: Readonly<Config>;
+  config: Readonly<C>;
+  state: S;
+  emit: EmitFunction<Events>;
+  require: RequireFunction;
+  has: HasFunction;
+} & CoreApis;  // <-- core plugin APIs injected via intersection
+
+type PluginSpec<Config, Events, C, S, A, PluginEvents, CoreApis = {}> = { ... };
+type App<Config, Events, P extends PluginInstance, CoreApis = {}> = { ... };
+type AppCallbackContext<Config, Events, CoreApis = {}> = { ... };
+type CreateAppOptions<Config, Events, P, ExtraP, CoreApis = {}> = { ... };
+type PluginExecutionContext<...CoreApis = {}> = { ... };
+type CreatePluginSpec<...CoreApis = {}> = { ... };
+type BoundCreatePluginFunction<...CoreApis = {}> = { ... };
+```
+
+The `= {}` default ensures backward compatibility — `{}` is the identity element for intersection (`T & {} = T`). When no core plugins exist, the context type is unchanged.
+
+When core plugins are provided, `CoreApis` resolves to something like `{ readonly log: LogApi; readonly env: EnvApi }`, and the intersection makes these available on every plugin context:
+
+```typescript
+// With core plugins [logPlugin, envPlugin]:
+// CoreApis = { readonly log: LogApi; readonly env: EnvApi }
+// PluginContext becomes:
+{
+  global: Readonly<Config>;
+  config: Readonly<C>;
+  state: S;
+  emit: EmitFunction<Events>;
+  require: RequireFunction;
+  has: HasFunction;
+  log: LogApi;    // from core plugin
+  env: EnvApi;    // from core plugin
+}
+```
+
+The `CoreApis` type is computed once from the core plugin tuple via `CoreApisFromTuple` at the `createCoreConfig` level and threaded through closures to all downstream types — the same closure-capture strategy used for `Config` and `Events`.
+
+---
+
 ## 6. The App Type
 
 ```typescript
@@ -132,6 +257,7 @@ type App<
   _Config extends Record<string, unknown>,
   Events extends Record<string, unknown>,
   P extends PluginInstance,
+  CoreApis = {},
 > = {
   /** Start the app. Forward order. Throws on second call. */
   readonly start: () => Promise<void>;
@@ -179,15 +305,18 @@ await app.stop();
 Trace types from `createCoreConfig` through to app usage:
 
 ```
-Step 1: createCoreConfig<Config, Events>('framework-id', { config })
+Step 1: createCoreConfig<Config, Events>('framework-id', { config, plugins? })
   | Captures Config + Events in closure
+  | If plugins (core plugins) provided: CoreApis = CoreApisFromTuple<typeof plugins>
+  | Otherwise: CoreApis = {} (identity for intersection, backward compatible)
   | Returns: { createPlugin, createCore }
-  | createPlugin is bound to Config + Events
+  | createPlugin is bound to Config + Events + CoreApis
 
 Step 2: createPlugin(name, spec)
   | Infers N (name literal), C (config), S (state), A (api) from spec
-  | Config + Events already bound from Step 1 closure
+  | Config + Events + CoreApis already bound from Step 1 closure
   | PluginEvents inferred from events register callback: events: (register) => ({...})
+  | PluginContext includes CoreApis via intersection (ctx.log, ctx.env, etc.)
   | Returns: PluginInstance<N, C, S, A, PluginEvents>
 
 Step 3: createCore(coreConfig, { plugins: [routerPlugin, loggerPlugin] })

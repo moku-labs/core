@@ -1,6 +1,6 @@
 # 02 - Core API
 
-**Domain:** createCoreConfig, createCore, createApp, createPlugin signatures
+**Domain:** createCoreConfig, createCore, createApp, createPlugin, createCorePlugin signatures
 **Architecture:** 3-step factory chain (Layer 1 -> Layer 2 -> Layer 3)
 
 ---
@@ -10,13 +10,14 @@
 ```typescript
 // @moku-labs/core — Package Entry Point
 export { createCoreConfig } from './config';
+export { createCorePlugin } from './core-plugin';
 
 // Public type utilities for plugin authors
 export type { PluginCtx } from './types';
 export type { EmitFn } from './utilities';
 ```
 
-One function and two type utilities. The function is the package. The types are optional helpers for plugin authors at Standard+ tier who extract domain logic into separate files.
+Two functions and two type utilities. `createCoreConfig` is the main entry point. `createCorePlugin` is a standalone factory for creating core plugins (log, storage, env) whose APIs are injected onto every regular plugin's context. The types are optional helpers for plugin authors at Standard+ tier who extract domain logic into separate files.
 
 ### Public Type Utilities
 
@@ -51,7 +52,11 @@ function createCoreConfig<
   Events extends Record<string, unknown> = Record<string, never>,
 >(
   id: string,
-  options: { config: Config },
+  options: {
+    config: Config;
+    plugins?: CorePluginInstance[];
+    pluginConfigs?: { [corePluginName: string]?: Partial<CorePluginConfig> };
+  },
 ): {
   createPlugin: BoundCreatePluginFunction<Config, Events>;
   createCore: BoundCreateCoreFunction<Config, Events>;
@@ -70,6 +75,10 @@ When `Events` is `Record<string, never>` (the default), `emit()` accepts no even
 **`id`:** Human-readable framework name. Used in error messages: `"[moku-site] Duplicate plugin name: router"`
 
 **`options.config`:** Default values for the Config type. Consumers can override any field via `createApp`. These defaults are shallow-merged with consumer overrides.
+
+**`options.plugins`:** Optional array of core plugin instances (created via `createCorePlugin`). Core plugins provide infrastructure APIs (log, storage, env) that are injected flat onto every regular plugin's context. See [03-PLUGIN-SYSTEM §5](./03-PLUGIN-SYSTEM.md) for core plugin details.
+
+**`options.pluginConfigs`:** Optional config overrides for core plugins at this level. This is the second level of the 4-level core plugin config merge: spec defaults -> `createCoreConfig` pluginConfigs -> `createCore` pluginConfigs -> `createApp` pluginConfigs.
 
 **Returns:** An object with two bound functions:
 
@@ -255,7 +264,74 @@ Brief here -- see [03-PLUGIN-SYSTEM](./03-PLUGIN-SYSTEM.md) for full plugin spec
 
 ---
 
-## 6. The App Type
+## 6. createCorePlugin Signature
+
+```typescript
+function createCorePlugin<const N extends string, C, S, A>(
+  name: N,
+  spec: CorePluginSpec<C, S, A>,
+): CorePluginInstance<N, C, S, A>;
+```
+
+**`CorePluginSpec` shape:**
+
+```typescript
+type CorePluginContext<C, S> = {
+  readonly config: Readonly<C>;
+  state: S;
+};
+
+type CorePluginSpec<C, S, A> = {
+  config?: C;
+  createState?: (context: { readonly config: Readonly<C> }) => S;
+  api?: (context: CorePluginContext<C, S>) => A;
+  onInit?: (context: CorePluginContext<C, S>) => void;
+  onStart?: (context: CorePluginContext<C, S>) => void | Promise<void>;
+  onStop?: (context: CorePluginContext<C, S>) => void | Promise<void>;
+};
+```
+
+**Key differences from `createPlugin`:**
+
+| Aspect | `createPlugin` (regular) | `createCorePlugin` (core) |
+|---|---|---|
+| Context | `{ global, config, state, emit, require, has }` | `{ config, state }` only |
+| `depends` | Supported | Not available |
+| `events` | Register callback | Not available |
+| `hooks` | Event subscriptions | Not available |
+| API injection | Mounted on `app.<name>` | Injected flat on every regular plugin's `ctx.<name>` |
+| Lifecycle order | After core plugins | Before regular plugins (init/start); after regular plugins (stop) |
+
+Core plugins are self-contained infrastructure. They have no access to `global` config, `emit`, `require`, or `has`. Their APIs are injected directly onto every regular plugin's context: `ctx.log.info(...)`, `ctx.env.isDev()`.
+
+**Standalone function:** `createCorePlugin` is exported directly from `@moku-labs/core` and is not bound to any framework. Core plugin instances are passed to `createCoreConfig` via the `plugins` option.
+
+```typescript
+import { createCoreConfig, createCorePlugin } from '@moku-labs/core';
+
+const logPlugin = createCorePlugin('log', {
+  config: { level: 'info' },
+  createState: () => ({ entries: [] as string[] }),
+  api: (ctx) => ({
+    info: (msg: string) => {
+      ctx.state.entries.push(msg);
+      console.log(msg);
+    },
+  }),
+});
+
+const { createPlugin, createCore } = createCoreConfig<Config, Events>('my-site', {
+  config: { siteName: 'My Site' },
+  plugins: [logPlugin],
+  pluginConfigs: { log: { level: 'debug' } },
+});
+```
+
+Brief here -- see [03-PLUGIN-SYSTEM §5](./03-PLUGIN-SYSTEM.md) for full core plugin details.
+
+---
+
+## 7. The App Type
 
 What `createApp` returns after all plugins are initialized:
 
@@ -293,7 +369,7 @@ Plugin APIs are mounted via `BuildPluginApis<P>`, a mapped type that selectively
 
 ---
 
-## 7. Complete Three-Layer Example
+## 8. Complete Three-Layer Example
 
 ### Layer 2: Framework config.ts (Step 1)
 

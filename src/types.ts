@@ -148,14 +148,21 @@ type MinimalContext<Config, C> = {
  * })
  * ```
  */
-type PluginContext<Config, Events extends Record<string, unknown>, C, S> = {
+type PluginContext<
+  Config,
+  Events extends Record<string, unknown>,
+  C,
+  S,
+  // biome-ignore lint/complexity/noBannedTypes: {} is the identity element for intersection; no core APIs by default
+  CoreApis extends Record<string, unknown> = {}
+> = {
   readonly global: Readonly<Config>;
   readonly config: Readonly<C>;
   state: S;
   emit: EmitFunction<Events>;
   require: RequireFunction;
   has: HasFunction;
-};
+} & { readonly [K in keyof CoreApis]: CoreApis[K] };
 
 // =============================================================================
 // Section 2: Emit Function Type
@@ -248,18 +255,26 @@ type PluginSpec<
   // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability
   A extends Record<string, any>,
   // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability
-  Deps extends ReadonlyArray<PluginInstance<string, any, any, any, any>>
+  Deps extends ReadonlyArray<PluginInstance<string, any, any, any, any>>,
+  // biome-ignore lint/complexity/noBannedTypes: {} is the identity element for intersection; no core APIs by default
+  CoreApis extends Record<string, unknown> = {}
 > = {
   config?: C;
   depends?: Deps;
   createState?: (context: MinimalContext<Config, C>) => S;
-  api?: (context: PluginContext<Config, Events & PluginEvents & DepsEvents<Deps>, C, S>) => A;
-  onInit?: (context: PluginContext<Config, Events & PluginEvents & DepsEvents<Deps>, C, S>) => void;
+  api?: (
+    context: PluginContext<Config, Events & PluginEvents & DepsEvents<Deps>, C, S, CoreApis>
+  ) => A;
+  onInit?: (
+    context: PluginContext<Config, Events & PluginEvents & DepsEvents<Deps>, C, S, CoreApis>
+  ) => void;
   onStart?: (
-    context: PluginContext<Config, Events & PluginEvents & DepsEvents<Deps>, C, S>
+    context: PluginContext<Config, Events & PluginEvents & DepsEvents<Deps>, C, S, CoreApis>
   ) => void | Promise<void>;
   onStop?: (context: TeardownContext<Config>) => void | Promise<void>;
-  hooks?: (context: PluginContext<Config, Events & PluginEvents & DepsEvents<Deps>, C, S>) => {
+  hooks?: (
+    context: PluginContext<Config, Events & PluginEvents & DepsEvents<Deps>, C, S, CoreApis>
+  ) => {
     [K in string & keyof (Events & PluginEvents & DepsEvents<Deps>)]?: (
       payload: (Events & PluginEvents & DepsEvents<Deps>)[K]
     ) => void | Promise<void>;
@@ -475,14 +490,16 @@ type App<
   _Config extends Record<string, unknown>,
   Events extends Record<string, unknown>,
   // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability
-  P extends PluginInstance<string, any, any, any, any>
+  P extends PluginInstance<string, any, any, any, any>,
+  // biome-ignore lint/complexity/noBannedTypes: {} is the identity element for intersection; no core APIs by default
+  CoreApis extends Record<string, unknown> = {}
 > = {
   readonly start: () => Promise<void>;
   readonly stop: () => Promise<void>;
   readonly emit: EmitFunction<Events>;
   readonly require: RequireFunction;
   readonly has: HasFunction;
-} & BuildPluginApis<P>;
+} & BuildPluginApis<P> & { readonly [K in keyof CoreApis]: CoreApis[K] };
 
 /**
  * Context passed to consumer lifecycle callbacks (onReady, onStart, onStop).
@@ -501,13 +518,15 @@ type AppCallbackContext<
   Config extends Record<string, unknown>,
   Events extends Record<string, unknown>,
   // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability
-  P extends PluginInstance<string, any, any, any, any>
+  P extends PluginInstance<string, any, any, any, any>,
+  // biome-ignore lint/complexity/noBannedTypes: {} is the identity element for intersection; no core APIs by default
+  CoreApis extends Record<string, unknown> = {}
 > = {
   readonly config: Readonly<Config>;
   readonly emit: EmitFunction<Events>;
   readonly require: RequireFunction;
   readonly has: HasFunction;
-} & BuildPluginApis<P>;
+} & BuildPluginApis<P> & { readonly [K in keyof CoreApis]: CoreApis[K] };
 
 /**
  * Options for createApp (Step 3). Structured namespaces replace flat key discrimination:
@@ -531,7 +550,9 @@ type CreateAppOptions<
   // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability
   P extends PluginInstance<string, any, any, any, any>,
   // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability
-  ExtraPlugins extends readonly PluginInstance<string, any, any, any, any>[]
+  ExtraPlugins extends readonly PluginInstance<string, any, any, any, any>[],
+  // biome-ignore lint/complexity/noBannedTypes: {} is the identity element for intersection; no core APIs by default
+  CoreApis extends Record<string, unknown> = {}
 > = {
   plugins?: ExtraPlugins;
   config?: { [K in keyof Config]?: Config[K] };
@@ -542,10 +563,10 @@ type CreateAppOptions<
         ? ExtractName<K>
         : never]?: Partial<ExtractConfig<K>>;
   };
-  onReady?: (context: AppCallbackContext<Config, Events, P>) => void;
-  onError?: (error: Error, context: AppCallbackContext<Config, Events, P>) => void;
-  onStart?: (context: AppCallbackContext<Config, Events, P>) => void | Promise<void>;
-  onStop?: (context: AppCallbackContext<Config, Events, P>) => void | Promise<void>;
+  onReady?: (context: AppCallbackContext<Config, Events, P, CoreApis>) => void;
+  onError?: (error: Error, context: AppCallbackContext<Config, Events, P, CoreApis>) => void;
+  onStart?: (context: AppCallbackContext<Config, Events, P, CoreApis>) => void | Promise<void>;
+  onStop?: (context: AppCallbackContext<Config, Events, P, CoreApis>) => void | Promise<void>;
 };
 
 // =============================================================================

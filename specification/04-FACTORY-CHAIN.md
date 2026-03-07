@@ -12,15 +12,18 @@ The factory chain is the defining architectural feature of Moku. Three function 
 ```
 Step 1: createCoreConfig<Config, Events>(id, options)
   -> Returns: { createPlugin, createCore }
-  -> Captures: framework ID, Config type + defaults, Events type
+  -> Captures: framework ID, Config type + defaults, Events type,
+               core plugins + core plugin configs (level 2 of 4-level merge)
 
 Step 2: createCore(coreConfig, { plugins, pluginConfigs })
   -> Returns: { createApp, createPlugin }
-  -> Captures: default plugins, default plugin configs, framework callbacks
+  -> Captures: default plugins, default plugin configs, framework callbacks,
+               core plugin config overrides (level 3 of 4-level merge)
 
 Step 3: createApp({ plugins?, config?, pluginConfigs?, onReady?, onError?, onStart?, onStop? })
   -> Returns: App
-  -> Captures: everything from steps 1 and 2, plus consumer additions
+  -> Captures: everything from steps 1 and 2, plus consumer additions,
+               core plugin config overrides (level 4 of 4-level merge)
 ```
 
 Each step lives in a separate file. This is not a style preference -- it solves a real circular dependency problem.
@@ -77,14 +80,16 @@ Config.ts is the root. It depends on nothing in the framework. Plugin files impo
 - Framework ID (used in error messages)
 - `Config` type and default values
 - `Events` type (event contract for typed emit/hooks)
+- Core plugins (infrastructure plugins whose APIs are injected onto every regular plugin's context)
+- Core plugin configs at level 2 of the 4-level merge
 
 **What it returns:**
-- `createPlugin` -- bound to `Config` and `Events`. Plugins created with this function get typed `ctx.global`, typed `ctx.emit`, and typed `hooks`.
+- `createPlugin` -- bound to `Config` and `Events`. Plugins created with this function get typed `ctx.global`, typed `ctx.emit`, and typed `hooks`. Core plugin APIs are also available on the context (e.g., `ctx.log`, `ctx.env`).
 - `createCore` -- bound to `Config` and `Events`. Called once in the framework's index.ts.
 
 ```typescript
 // my-framework/src/config.ts
-import { createCoreConfig } from '@moku-labs/core';
+import { createCoreConfig, createCorePlugin } from '@moku-labs/core';
 
 type Config = {
   siteName: string;
@@ -96,19 +101,30 @@ type Events = {
   'router:navigate': { from: string; to: string };
 };
 
-// Step 1: Define the type contract
+// Core plugins are created with the standalone createCorePlugin function
+const logPlugin = createCorePlugin('log', {
+  config: { level: 'info' as const },
+  createState: () => ({ entries: [] as string[] }),
+  api: (ctx) => ({
+    info: (msg: string) => { ctx.state.entries.push(msg); console.log(msg); },
+  }),
+});
+
+// Step 1: Define the type contract + attach core plugins
 export const coreConfig = createCoreConfig<Config, Events>('moku-site', {
   config: {
     siteName: 'Untitled',
     mode: 'development',
   },
+  plugins: [logPlugin],                       // core plugins enter here
+  pluginConfigs: { log: { level: 'debug' } }, // level 2 of 4-level merge
 });
 
 // These are bound to Config + Events
 export const { createPlugin, createCore } = coreConfig;
 ```
 
-**Closure pattern:** `createCoreConfig` returns functions that close over `id`, `Config` defaults, and the generic parameters. When `createPlugin` is called later in a plugin file, it already knows the framework's types without any import from index.ts.
+**Closure pattern:** `createCoreConfig` returns functions that close over `id`, `Config` defaults, core plugins, and the generic parameters. When `createPlugin` is called later in a plugin file, it already knows the framework's types without any import from index.ts. Core plugin APIs are automatically available on every regular plugin's context.
 
 ---
 
@@ -212,15 +228,22 @@ await app.stop();
 Types established in Step 1 flow through closures into every subsequent step:
 
 ```
+createCorePlugin('log', spec)  -- standalone, no framework binding
+    |
+    +---> CorePluginInstance carries: name (literal), C, S, A
+
 createCoreConfig<Config, Events>
     |
     |  Config = { siteName: string; mode: ... }
     |  Events = { 'page:render': ...; 'router:navigate': ... }
+    |  CorePlugins = [logPlugin, envPlugin, ...]  (entered via plugins option)
+    |  Core plugin configs merged at level 2
     |
     +---> createPlugin(name, spec)
     |       |
     |       |  spec.createState ctx has: { global: Readonly<Config>, config: Readonly<C> }
-    |       |  spec.api ctx has: { global, config, state, emit<Events & PluginEvents>, ... }
+    |       |  spec.api ctx has: { global, config, state, emit<Events & PluginEvents>,
+    |       |                      log, env, ... (core plugin APIs injected flat) }
     |       |  spec.hooks keys typed as: keyof (Events & PluginEvents & DepsEvents)
     |       |
     |       +---> PluginInstance carries: name (literal), C, S, A, PluginEvents
@@ -228,19 +251,21 @@ createCoreConfig<Config, Events>
     +---> createCore(coreConfig, { plugins: [router, renderer] })
               |
               |  DefaultPlugins = [typeof routerPlugin, typeof rendererPlugin]
+              |  Core plugin configs merged at level 3
               |
               +---> createApp({ plugins?, config?, pluginConfigs?, onReady?, ... })
                       |
                       |  AllPlugins = [...DefaultPlugins, ...ConsumerPlugins]
                       |  config typed as Partial<Config>, pluginConfigs keyed by plugin name
+                      |  Core plugin configs merged at level 4
                       |
                       +---> App<Config, Events, AllPlugins>
                               |
                               |  app.router  -> RouterApi (from DefaultPlugins)
                               |  app.blog    -> BlogApi (from ConsumerPlugins)
                               |  app.emit    -> typed for Events & all PluginEvents
-                              |  app.start() -> runs onStart for all plugins
-                              |  app.stop()  -> runs onStop in reverse
+                              |  app.start() -> core onStart first, then plugin onStart
+                              |  app.stop()  -> plugin onStop first, then core onStop (reverse)
 ```
 
 The key insight: `Config` and `Events` are defined ONCE in config.ts and flow everywhere through closures. No type imports needed. No generic annotations needed at the consumer level.

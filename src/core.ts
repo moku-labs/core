@@ -25,9 +25,10 @@
 // =============================================================================
 
 import { kernel } from "./app";
+import type { AnyCorePluginInstance, CoreApisFromTuple } from "./core-plugin";
 import type { BoundCreatePluginFunction } from "./plugin";
 import type { AnyPluginInstance, App, CreateAppOptions } from "./types";
-import { validatePlugins } from "./utilities";
+import { checkCorePluginConflicts, validatePlugins } from "./utilities";
 
 // =============================================================================
 // Section 1: Options Types
@@ -85,7 +86,8 @@ interface ConsumerAppOptions {
 interface CreateCoreResult<
   Config extends Record<string, unknown>,
   Events extends Record<string, unknown>,
-  Plugins extends readonly AnyPluginInstance[] = readonly AnyPluginInstance[]
+  Plugins extends readonly AnyPluginInstance[] = readonly AnyPluginInstance[],
+  CorePlugins extends readonly AnyCorePluginInstance[] = readonly []
 > {
   /**
    * Step 3: Creates and initializes the application.
@@ -99,11 +101,12 @@ interface CreateCoreResult<
       Config,
       Events,
       Plugins[number] | ExtraPlugins[number],
-      [...ExtraPlugins]
+      [...ExtraPlugins],
+      CoreApisFromTuple<CorePlugins>
     >
-  ) => App<Config, Events, Plugins[number] | ExtraPlugins[number]>;
+  ) => App<Config, Events, Plugins[number] | ExtraPlugins[number], CoreApisFromTuple<CorePlugins>>;
   /** Re-exported createPlugin for consumer convenience. */
-  readonly createPlugin: BoundCreatePluginFunction<Config, Events>;
+  readonly createPlugin: BoundCreatePluginFunction<Config, Events, CoreApisFromTuple<CorePlugins>>;
 }
 
 // =============================================================================
@@ -121,13 +124,18 @@ interface CreateCoreResult<
  */
 type BoundCreateCoreFunction<
   Config extends Record<string, unknown>,
-  Events extends Record<string, unknown>
+  Events extends Record<string, unknown>,
+  CorePlugins extends readonly AnyCorePluginInstance[] = readonly []
 > = <const Plugins extends readonly AnyPluginInstance[]>(
   coreConfig: {
-    readonly createPlugin: BoundCreatePluginFunction<Config, Events>;
+    readonly createPlugin: BoundCreatePluginFunction<
+      Config,
+      Events,
+      CoreApisFromTuple<CorePlugins>
+    >;
   },
   options: CreateCoreOptions<Config> & { readonly plugins: [...Plugins] }
-) => CreateCoreResult<Config, Events, Plugins>;
+) => CreateCoreResult<Config, Events, Plugins, CorePlugins>;
 
 // =============================================================================
 // Section 4: Core Factory
@@ -143,6 +151,8 @@ type BoundCreateCoreFunction<
  * @param frameworkId - The framework identifier for error messages.
  * @param configDefaults - Default config values captured from Step 1.
  * @param createPlugin - Bound createPlugin function from Step 1.
+ * @param corePlugins - Core plugin instances from createCoreConfig.
+ * @param corePluginConfigs - Core plugin config overrides from createCoreConfig.
  * @returns A createCore function bound to the framework's Config and Events types.
  * @example
  * ```ts
@@ -153,12 +163,15 @@ type BoundCreateCoreFunction<
  */
 function createCoreFactory<
   Config extends Record<string, unknown>,
-  Events extends Record<string, unknown>
+  Events extends Record<string, unknown>,
+  CorePlugins extends readonly AnyCorePluginInstance[] = readonly []
 >(
   frameworkId: string,
   configDefaults: Config,
-  createPlugin: BoundCreatePluginFunction<Config, Events>
-): BoundCreateCoreFunction<Config, Events> {
+  createPlugin: BoundCreatePluginFunction<Config, Events, CoreApisFromTuple<CorePlugins>>,
+  corePlugins: CorePlugins,
+  corePluginConfigs: Record<string, unknown>
+): BoundCreateCoreFunction<Config, Events, CorePlugins> {
   /**
    * Step 2: Captures framework default plugins and returns createApp.
    *
@@ -202,12 +215,18 @@ function createCoreFactory<
       // Validate: reserved names, duplicates, dependency existence and order
       validatePlugins(frameworkId, allPlugins);
 
+      // Validate: no regular plugin name conflicts with a core plugin name
+      const coreNames = new Set((corePlugins as readonly AnyCorePluginInstance[]).map(p => p.name));
+      checkCorePluginConflicts(frameworkId, allPlugins, coreNames);
+
       // Delegate to kernel with pre-separated config and plugin configs
       return kernel({
         id: frameworkId,
         configDefaults,
         frameworkPluginConfigs,
         flatPlugins: allPlugins,
+        corePlugins: corePlugins as readonly AnyCorePluginInstance[],
+        corePluginConfigs: corePluginConfigs as Record<string, unknown>,
         configOverrides: appOptions.config ?? {},
         consumerPluginConfigs: appOptions.pluginConfigs ?? {},
         onReady,
@@ -224,7 +243,7 @@ function createCoreFactory<
     return { createApp, createPlugin };
   };
 
-  return createCore as BoundCreateCoreFunction<Config, Events>;
+  return createCore as BoundCreateCoreFunction<Config, Events, CorePlugins>;
 }
 
 export { createCoreFactory };

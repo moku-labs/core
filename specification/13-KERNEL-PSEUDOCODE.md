@@ -36,10 +36,14 @@ function createCoreConfig<
   Events extends Record<string, unknown> = Record<string, never>,
 >(
   id: string,
-  options: { config: Config },
+  options: {
+    config: Config;
+    plugins?: AnyCorePluginInstance[];       // core plugins (log, env, storage)
+    pluginConfigs?: Record<string, unknown>; // core plugin config overrides (level 2 of 4)
+  },
 ): {
-  createPlugin: BoundCreatePlugin<Config, Events>;
-  createCore: BoundCreateCore<Config, Events>;
+  createPlugin: BoundCreatePlugin<Config, Events, CoreApis>;
+  createCore: BoundCreateCore<Config, Events, CoreApis>;
 } {
   // RATIONALE: This is the key trick of the 3-step chain.
   // Config and Events generics are captured in this closure.
@@ -48,8 +52,14 @@ function createCoreConfig<
   //
   // Framework plugins import createPlugin from config.ts and automatically
   // get typed ctx.global, ctx.emit, hooks without any explicit generics.
+  //
+  // Core plugins are also captured here. Their APIs (CoreApis) are computed
+  // via CoreApisFromTuple and threaded to createPlugin so that regular
+  // plugin contexts include ctx.log, ctx.env, etc.
 
   const configDefaults: Config = options.config;
+  const corePlugins = options.plugins ?? [];
+  const coreConfigPluginConfigs = options.pluginConfigs ?? {};
 
   function createPlugin(...) { /* see Section 3 */ }
   function createCore(...) { /* see Section 4 */ }
@@ -58,7 +68,7 @@ function createCoreConfig<
 }
 ```
 
-**What this captures:** The framework ID (`id`), the default config values (`configDefaults`), and the generic types `Config` and `Events` in a closure. All downstream functions inherit these.
+**What this captures:** The framework ID (`id`), the default config values (`configDefaults`), the core plugins array, the core plugin config overrides (level 2 of 4), and the generic types `Config`, `Events`, and `CoreApis` in a closure. All downstream functions inherit these.
 
 **File location:** This function lives in the framework's `config.ts`. Plugin files import `createPlugin` from this module.
 
@@ -126,16 +136,17 @@ function createPlugin(
 
 ```pseudo-typescript
 function createCore(
-  coreConfig: { readonly createPlugin: BoundCreatePlugin<Config, Events> },
+  coreConfig: { readonly createPlugin: BoundCreatePlugin<Config, Events, CoreApis> },
   options: {
     plugins: PluginInstance[],          // framework default plugins
     pluginConfigs?: Record<string, unknown>, // framework-level plugin config overrides
+                                             // (also accepts core plugin config overrides — level 3 of 4)
     onReady?: (ctx: { config: Readonly<Config> }) => void,
     onError?: (error: Error) => void,
   },
 ): {
-  createApp: BoundCreateApp<Config, Events, DefaultPlugins>;
-  createPlugin: BoundCreatePlugin<Config, Events>;
+  createApp: BoundCreateApp<Config, Events, DefaultPlugins, CoreApis>;
+  createPlugin: BoundCreatePlugin<Config, Events, CoreApis>;
 } {
   // RATIONALE: createCore captures the framework's default plugins, their configs,
   // and the framework callbacks. It returns createApp which already "knows" about
@@ -145,6 +156,7 @@ function createCore(
   // id and configDefaults are captured in the createCoreConfig closure.
   const defaultPlugins = options.plugins;
   const frameworkPluginConfigs = options.pluginConfigs ?? {};
+  const createCorePluginConfigs = options.pluginConfigs ?? {};  // level 3 for core plugins
 
   async function createApp(consumerOptions?) { /* see Section 5 */ }
 
@@ -166,7 +178,7 @@ This is the longest section. It covers the entire init phase.
 function createApp(consumerOptions?: {
   plugins?: PluginInstance[];
   config?: Partial<Config>;
-  pluginConfigs?: Record<string, unknown>;
+  pluginConfigs?: Record<string, unknown>;  // includes both regular and core plugin configs (level 4 of 4)
   onReady?: (context: AppCallbackContext) => void;
   onError?: (error: Error, context: AppCallbackContext) => void;
   onStart?: (context: AppCallbackContext) => void | Promise<void>;
@@ -198,12 +210,14 @@ function createApp(consumerOptions?: {
   // =========================================================================
   // Step 3: Validate plugins
   // =========================================================================
-  // RATIONALE: All validation runs before the kernel. Three checks:
-  //   3a. Reserved names: no plugin can use app method names
+  // RATIONALE: All validation runs before the kernel. Checks include:
+  //   3a. Reserved names: no plugin (regular or core) can use app method names
   //   3b. Duplicate names: no two plugins with the same name
   //   3c. Dependency order: all deps exist and appear earlier in array
+  //   3d. Core/regular name conflict: core plugin names cannot collide with regular plugin names
   // Error format: [frameworkId] description.\n  actionable suggestion.
   // All validation errors use TypeError.
+  validateCorePlugins(id, corePlugins, allPlugins);
   validatePlugins(id, allPlugins);
   // (see validatePlugins for implementation: checkReservedNames,
   //  checkDuplicateNames, checkDependencyOrder)
@@ -225,6 +239,72 @@ function createApp(consumerOptions?: {
     ...configDefaults,
     ...(configOverrides ?? {}),
   });
+
+  // =========================================================================
+  // Step 5b: Resolve core plugin configs (4-level merge)
+  // =========================================================================
+  // RATIONALE: Core plugins use a 4-level config merge:
+  //   Level 1: spec defaults (from createCorePlugin)
+  //   Level 2: createCoreConfig pluginConfigs
+  //   Level 3: createCore pluginConfigs
+  //   Level 4: createApp pluginConfigs
+  // This gives each layer a chance to override core plugin config.
+  const coreResolvedConfigs = new Map<string, Readonly<any>>();
+  for (const corePlugin of corePlugins) {
+    const merged = Object.freeze({
+      ...corePlugin.spec.config,                              // level 1: spec defaults
+      ...coreConfigPluginConfigs[corePlugin.name],            // level 2: createCoreConfig
+      ...createCorePluginConfigs[corePlugin.name],            // level 3: createCore
+      ...(consumerPluginConfigs ?? {})[corePlugin.name],      // level 4: createApp
+    });
+    coreResolvedConfigs.set(corePlugin.name, merged);
+  }
+
+  // =========================================================================
+  // Step 5c: Create core plugin states
+  // =========================================================================
+  // RATIONALE: Core plugins get minimal context: { config, state } only.
+  // No global, no emit, no require. Self-contained.
+  const coreStates = new Map<string, any>();
+  for (const corePlugin of corePlugins) {
+    if (corePlugin.spec.createState) {
+      const ctx = { config: coreResolvedConfigs.get(corePlugin.name) };
+      coreStates.set(corePlugin.name, corePlugin.spec.createState(ctx));
+    } else {
+      coreStates.set(corePlugin.name, {});
+    }
+  }
+
+  // =========================================================================
+  // Step 5d: Build core plugin APIs
+  // =========================================================================
+  // RATIONALE: Core plugin APIs are built before any regular plugin processing.
+  // These APIs will be injected flat onto every regular plugin's context.
+  const coreApis = new Map<string, any>();
+  for (const corePlugin of corePlugins) {
+    if (corePlugin.spec.api) {
+      const ctx = {
+        config: coreResolvedConfigs.get(corePlugin.name),
+        state: coreStates.get(corePlugin.name),
+      };
+      coreApis.set(corePlugin.name, corePlugin.spec.api(ctx));
+    }
+  }
+
+  // =========================================================================
+  // Step 5e: Run core plugin onInit (forward order, synchronous)
+  // =========================================================================
+  // RATIONALE: Core plugins init before regular plugins so their APIs are
+  // fully ready when regular plugins access them via ctx.log, ctx.env, etc.
+  for (const corePlugin of corePlugins) {
+    if (corePlugin.spec.onInit) {
+      const ctx = {
+        config: coreResolvedConfigs.get(corePlugin.name),
+        state: coreStates.get(corePlugin.name),
+      };
+      corePlugin.spec.onInit(ctx);
+    }
+  }
 
   // =========================================================================
   // Step 6: Resolve per-plugin config
@@ -308,6 +388,16 @@ function createApp(consumerOptions?: {
   // by which point all APIs are built.
   const apis = new Map<string, any>();
 
+  // Helper to build core API object for injection onto plugin contexts
+  // Produces: { log: LogApi, env: EnvApi, ... } from the coreApis map.
+  function buildCoreApiInjection() {
+    const injection: Record<string, any> = {};
+    for (const [name, api] of coreApis) {
+      injection[name] = api;
+    }
+    return injection;
+  }
+
   // Helper to build plugin context for a specific plugin
   function buildPluginContext(plugin: PluginInstance) {
     return {
@@ -329,6 +419,8 @@ function createApp(consumerOptions?: {
       },
       // has stays string-based (boolean check) -- checks pluginNameSet, not apis
       has: (name: string) => pluginNameSet.has(name),
+      // Core plugin APIs injected flat: ctx.log, ctx.env, etc.
+      ...buildCoreApiInjection(),
     };
   }
 
@@ -423,12 +515,25 @@ function createApp(consumerOptions?: {
 ```pseudo-typescript
 async start() {
   // RATIONALE: Forward order. Sequential. Each plugin awaited.
+  // Core plugins start BEFORE regular plugins.
   // Throws if already started (catches misuse).
   // No rollback -- errors propagate immediately.
   if (started) {
     throw new Error(`[${id}] App already started.\n  start() can only be called once.`);
   }
 
+  // Core plugins start first (forward order)
+  for (const corePlugin of corePlugins) {
+    if (corePlugin.spec.onStart) {
+      const ctx = {
+        config: coreResolvedConfigs.get(corePlugin.name),
+        state: coreStates.get(corePlugin.name),
+      };
+      await corePlugin.spec.onStart(ctx);
+    }
+  }
+
+  // Regular plugins start second (forward order)
   for (const plugin of allPlugins) {
     if (plugin.spec.onStart) {
       const ctx = buildPluginContext(plugin);
@@ -452,8 +557,8 @@ async start() {
 ```pseudo-typescript
 async stop() {
   // RATIONALE: REVERSE order. Plugins that depend on others stop first.
-  // If B depends on A, B stops before A -- B can still use A's resources
-  // during its own cleanup.
+  // Regular plugins stop BEFORE core plugins -- core plugin APIs (log, env)
+  // remain available throughout regular plugin teardown.
   //
   // Errors propagate immediately. No best-effort -- if a plugin's onStop
   // throws, remaining plugins do not get their onStop called.
@@ -462,13 +567,25 @@ async stop() {
     throw new Error(`[${id}] App not started.\n  Call start() before stop().`);
   }
 
+  // Regular plugins stop first (reverse order)
   for (const plugin of [...allPlugins].reverse()) {
     if (plugin.spec.onStop) {
       await plugin.spec.onStop({ global: globalConfig });
     }
   }
 
-  // Consumer onStop fires after all plugin onStop
+  // Core plugins stop second (reverse order)
+  for (const corePlugin of [...corePlugins].reverse()) {
+    if (corePlugin.spec.onStop) {
+      const ctx = {
+        config: coreResolvedConfigs.get(corePlugin.name),
+        state: coreStates.get(corePlugin.name),
+      };
+      await corePlugin.spec.onStop(ctx);
+    }
+  }
+
+  // Consumer onStop fires after all plugin onStop (regular + core)
   if (consumerOnStop) {
     await consumerOnStop(buildCallbackContext());
   }
@@ -487,6 +604,7 @@ See Section 5, Step 8b for the full implementation. Constructs the appropriate c
 - `state` -- mutable plugin state
 - `emit` -- event dispatch function
 - `require` / `has` -- inter-plugin communication
+- Core plugin APIs injected flat via spread (`ctx.log`, `ctx.env`, etc.)
 
 ---
 
@@ -494,8 +612,10 @@ See Section 5, Step 8b for the full implementation. Constructs the appropriate c
 
 ```
 Framework config.ts:
-  createCoreConfig<Config, Events>(id, { config })
-    -> captures generics in closure
+  createCoreConfig<Config, Events>(id, { config, plugins?, pluginConfigs? })
+    -> captures generics + core plugins in closure
+    -> core plugin config level 2 (createCoreConfig pluginConfigs)
+    -> CoreApis computed from core plugin tuple
     -> returns { createPlugin, createCore }
 
 Framework plugin files:
@@ -513,24 +633,30 @@ Consumer main.ts:
   createApp({ plugins?, config?, pluginConfigs?, onReady?, onError?, onStart?, onStop? })
     Step 1: destructure structured options (no key discrimination)
     Step 2: merge plugins: [...defaults, ...extras]
-    Step 3: validate plugins (reserved names, duplicates, dependency order)
+    Step 3: validate plugins (reserved names, duplicates, dependency order, core/regular name conflicts)
     Step 4: build plugin name set
     Step 5: resolve global config (shallow merge, freeze)
+    Step 5b: resolve core plugin configs (4-level merge: spec -> createCoreConfig -> createCore -> createApp)
+    Step 5c: create core plugin states (minimal context: { config } only)
+    Step 5d: build core plugin APIs (context: { config, state } only)
+    Step 5e: run core plugin onInit (forward, synchronous, BEFORE regular plugins)
     Step 6: resolve per-plugin config (3-level merge, freeze)
     Step 7: create state (MinimalContext; default {} if no createState)
     Step 8a: build event bus (empty hookMap, emit, registerHook)
-    Step 8b: build context factory, register hooks (hooks(ctx), context-aware)
-    Step 9: build APIs (PluginContext)
+    Step 8b: build context factory (injects core APIs: ctx.log, ctx.env, ...), register hooks
+    Step 9: build APIs (PluginContext + core APIs)
     Step 10: run onInit (PluginContext, forward, synchronous)
     call framework onReady, then consumer onReady (synchronous)
     Step 11: build app, mount plugin APIs, freeze and return
 
   await app.start()
-    -> run onStart (PluginContext, forward, sequential)
+    -> run core plugin onStart (forward, sequential, BEFORE regular plugins)
+    -> run regular plugin onStart (PluginContext, forward, sequential)
     -> call consumer onStart
 
   await app.stop()
-    -> run onStop (TeardownContext, REVERSE, sequential)
+    -> run regular plugin onStop (TeardownContext, REVERSE, sequential)
+    -> run core plugin onStop (REVERSE, sequential, AFTER regular plugins)
     -> call consumer onStop
 ```
 

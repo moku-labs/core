@@ -241,6 +241,129 @@ See [06-LIFECYCLE](./06-LIFECYCLE.md) for detailed phase documentation.
 
 ---
 
+## 5. Core Plugins
+
+Core plugins are self-contained infrastructure plugins (log, storage, env) whose APIs are injected directly onto every regular plugin's context. They are created with the standalone `createCorePlugin(name, spec)` function, which is independent of any framework binding.
+
+### CorePluginSpec Shape
+
+```typescript
+type CorePluginContext<C, S> = {
+  readonly config: Readonly<C>;
+  state: S;
+};
+
+type CorePluginSpec<C, S, A> = {
+  config?: C;
+  createState?: (context: { readonly config: Readonly<C> }) => S;
+  api?: (context: CorePluginContext<C, S>) => A;
+  onInit?: (context: CorePluginContext<C, S>) => void;
+  onStart?: (context: CorePluginContext<C, S>) => void | Promise<void>;
+  onStop?: (context: CorePluginContext<C, S>) => void | Promise<void>;
+};
+```
+
+### Constraints (Self-Contained by Design)
+
+Core plugins deliberately omit everything that connects regular plugins to each other and to the framework:
+
+| Feature | Regular Plugin | Core Plugin |
+|---|---|---|
+| `require` | Yes -- access other plugin APIs | **No** |
+| `depends` | Yes -- declare dependencies | **No** |
+| `has` | Yes -- check plugin existence | **No** |
+| `events` | Yes -- register callback | **No** |
+| `hooks` | Yes -- subscribe to events | **No** |
+| `ctx.global` | Yes -- framework global config | **No** |
+| `ctx.emit` | Yes -- emit typed events | **No** |
+
+Core plugin context is minimal: `{ config, state }`. This makes core plugins completely independent of the plugin graph, event system, and global config. They can be tested in isolation with zero framework setup.
+
+### API Injection
+
+Core plugin APIs are injected flat onto every regular plugin's context, namespaced by the core plugin's name:
+
+```typescript
+// In any regular plugin's api, onInit, onStart, hooks, etc.:
+api: (ctx) => ({
+  doSomething: () => {
+    ctx.log.info('hello');     // core plugin API — injected flat
+    ctx.env.isDev();           // another core plugin API
+    ctx.storage.get('key');    // another core plugin API
+  },
+}),
+```
+
+Regular plugins do not need to declare `depends` on core plugins. Core plugin APIs are always available on the context.
+
+### Lifecycle Order
+
+Core plugins run their lifecycle before regular plugins on startup and after regular plugins on shutdown:
+
+| Phase | Order |
+|---|---|
+| `onInit` | Core plugins first (forward), then regular plugins (forward) |
+| `onStart` | Core plugins first (forward), then regular plugins (forward) |
+| `onStop` | Regular plugins first (reverse), then core plugins (reverse) |
+
+This guarantees that infrastructure (logging, storage, env) is available before any regular plugin runs and remains available until all regular plugins have stopped.
+
+### 4-Level Config Merge
+
+Core plugin config is resolved through a 4-level shallow merge:
+
+```
+1. Spec defaults          — createCorePlugin('log', { config: { level: 'info' } })
+2. createCoreConfig       — pluginConfigs: { log: { level: 'debug' } }
+3. createCore             — pluginConfigs: { log: { level: 'warn' } }
+4. createApp              — pluginConfigs: { log: { level: 'error' } }
+```
+
+Each level overrides the previous. This allows the core plugin author, framework author, framework assembler, and consumer to each set appropriate defaults.
+
+### Example
+
+```typescript
+import { createCoreConfig, createCorePlugin } from '@moku-labs/core';
+
+const logPlugin = createCorePlugin('log', {
+  config: { level: 'info' },
+  createState: () => ({ entries: [] as string[] }),
+  api: (ctx) => ({
+    info: (msg: string) => {
+      ctx.state.entries.push(msg);
+      console.log(msg);
+    },
+    warn: (msg: string) => {
+      ctx.state.entries.push(msg);
+      console.warn(msg);
+    },
+  }),
+  onInit: (ctx) => {
+    // Core plugin init runs before any regular plugin
+  },
+});
+
+const { createPlugin, createCore } = createCoreConfig<Config, Events>('my-site', {
+  config: { siteName: 'My Site' },
+  plugins: [logPlugin],
+  pluginConfigs: { log: { level: 'debug' } },
+});
+
+// Regular plugins automatically get ctx.log.info(...), ctx.log.warn(...)
+const routerPlugin = createPlugin('router', {
+  api: (ctx) => ({
+    navigate: (path: string) => {
+      ctx.log.info(`Navigating to ${path}`);  // core plugin API on context
+    },
+  }),
+});
+```
+
+See [02-CORE-API §6](./02-CORE-API.md) for the `createCorePlugin` function signature.
+
+---
+
 ## Cross-References
 
 - Core API: [02-CORE-API](./02-CORE-API.md)

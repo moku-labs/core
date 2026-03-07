@@ -243,7 +243,9 @@ type PluginExecutionContext<
   GlobalConfig extends FrameworkConfig,
   AllEvents extends Record<string, unknown>,
   PluginConfig,
-  PluginState
+  PluginState,
+  // biome-ignore lint/complexity/noBannedTypes: {} is the identity element for intersection; no core APIs by default
+  CoreApis extends Record<string, unknown> = {}
 > = {
   /**
    * Frozen app-wide config from `createCoreConfig`. Shared by all plugins.
@@ -305,7 +307,7 @@ type PluginExecutionContext<
    * ```
    */
   has: (name: string) => boolean;
-};
+} & { readonly [K in keyof CoreApis]: CoreApis[K] };
 
 // =============================================================================
 // Section 5: Event Registration
@@ -385,7 +387,9 @@ type CreatePluginSpec<
   PluginConfig extends Record<string, unknown>,
   PluginState,
   PluginApi extends Record<string, unknown>,
-  DependencyPlugins extends DependencyPluginTuple
+  DependencyPlugins extends DependencyPluginTuple,
+  // biome-ignore lint/complexity/noBannedTypes: {} is the identity element for intersection; no core APIs by default
+  CoreApis extends Record<string, unknown> = {}
 > = {
   /**
    * Declare plugin-specific events via a register callback.
@@ -450,7 +454,8 @@ type CreatePluginSpec<
       GlobalConfig,
       MergedPluginEvents<GlobalEventMap, PluginEventMap, DependencyPlugins>,
       PluginConfig,
-      PluginState
+      PluginState,
+      CoreApis
     >
   ) => PluginApi;
   /**
@@ -471,7 +476,8 @@ type CreatePluginSpec<
       GlobalConfig,
       MergedPluginEvents<GlobalEventMap, PluginEventMap, DependencyPlugins>,
       PluginConfig,
-      PluginState
+      PluginState,
+      CoreApis
     >
   ) => void;
   /**
@@ -490,7 +496,8 @@ type CreatePluginSpec<
       GlobalConfig,
       MergedPluginEvents<GlobalEventMap, PluginEventMap, DependencyPlugins>,
       PluginConfig,
-      PluginState
+      PluginState,
+      CoreApis
     >
   ) => void | Promise<void>;
   /**
@@ -525,7 +532,8 @@ type CreatePluginSpec<
       GlobalConfig,
       MergedPluginEvents<GlobalEventMap, PluginEventMap, DependencyPlugins>,
       PluginConfig,
-      PluginState
+      PluginState,
+      CoreApis
     >
   ) => {
     [EventName in string &
@@ -553,11 +561,14 @@ type CreatePluginSpec<
  */
 type BoundCreatePluginFunction<
   GlobalConfig extends FrameworkConfig,
-  GlobalEventMap extends FrameworkEventMap
+  GlobalEventMap extends FrameworkEventMap,
+  // biome-ignore lint/complexity/noBannedTypes: {} is the identity element for intersection; no core APIs by default
+  CoreApis extends Record<string, unknown> = {}
 > = {
   // All type parameters inferred from the spec object.
   // Per-plugin events use the register callback: events: register => ({ ... })
   // HookHandlerMap captures the return keys of hooks() to reject unknown event names.
+  // biome-ignore lint/style/useShorthandFunctionType: Cannot use shorthand — outer generics + inner generics on the call signature
   <
     const PluginName extends string = string,
     PluginConfig extends Record<string, unknown> = Record<string, never>,
@@ -577,7 +588,8 @@ type BoundCreatePluginFunction<
         PluginConfig,
         PluginState,
         PluginApi,
-        DependencyPlugins
+        DependencyPlugins,
+        CoreApis
       >,
       "hooks"
     > & {
@@ -586,7 +598,8 @@ type BoundCreatePluginFunction<
           GlobalConfig,
           MergedPluginEvents<GlobalEventMap, PluginEventMap, DependencyPlugins>,
           PluginConfig,
-          PluginState
+          PluginState,
+          CoreApis
         >
       ) => {
         [K in keyof HookHandlerMap]: K extends string &
@@ -829,8 +842,10 @@ function assertValidCreateState(
  */
 function createPluginFactory<
   GlobalConfig extends FrameworkConfig,
-  GlobalEventMap extends FrameworkEventMap
->(frameworkId: string): BoundCreatePluginFunction<GlobalConfig, GlobalEventMap> {
+  GlobalEventMap extends FrameworkEventMap,
+  // biome-ignore lint/complexity/noBannedTypes: {} is the identity element for intersection; no core APIs by default
+  CoreApis extends Record<string, unknown> = {}
+>(frameworkId: string): BoundCreatePluginFunction<GlobalConfig, GlobalEventMap, CoreApis> {
   /**
    * Creates a plugin instance with inferred types from the spec object.
    *
@@ -866,7 +881,7 @@ function createPluginFactory<
     };
   };
 
-  return createPlugin as BoundCreatePluginFunction<GlobalConfig, GlobalEventMap>;
+  return createPlugin as BoundCreatePluginFunction<GlobalConfig, GlobalEventMap, CoreApis>;
 }
 
 export { createPluginFactory };

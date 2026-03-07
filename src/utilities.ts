@@ -21,7 +21,8 @@
 //      Runtime validation: reserved names, duplicates, dependency order.
 // =============================================================================
 
-// Type-only import -- must NOT become a value import (see file header).
+// Type-only imports -- must NOT become value imports (see file header).
+import type { AnyCorePluginInstance } from "./core-plugin";
 import type { AnyPluginInstance } from "./types";
 
 // =============================================================================
@@ -157,6 +158,8 @@ const RESERVED_NAMES = new Set([
   "require",
   "has",
   "config",
+  "global",
+  "state",
   "__proto__",
   "constructor",
   "prototype"
@@ -264,6 +267,51 @@ function validatePlugins(id: string, plugins: AnyPluginInstance[]): void {
   checkDependencyOrder(id, plugins, names);
 }
 
+/**
+ * Validate core plugins: no reserved names, no duplicates.
+ *
+ * @param id - Framework identifier for error messages.
+ * @param corePlugins - The core plugin list to validate.
+ * @throws {TypeError} If validation fails.
+ * @example
+ * ```ts
+ * validateCorePlugins("my-site", [logPlugin, envPlugin]); // throws if invalid
+ * ```
+ */
+function validateCorePlugins(id: string, corePlugins: readonly AnyCorePluginInstance[]): void {
+  const names = corePlugins.map(p => p.name);
+
+  checkReservedNames(id, names);
+  checkDuplicateNames(id, names);
+}
+
+/**
+ * Validate that no regular plugin name conflicts with a core plugin name.
+ *
+ * @param id - Framework identifier for error messages.
+ * @param plugins - The regular plugin list.
+ * @param corePluginNames - Set of core plugin names.
+ * @throws {TypeError} If a name conflict is found.
+ * @example
+ * ```ts
+ * checkCorePluginConflicts("my-site", [routerPlugin], new Set(["log", "env"]));
+ * ```
+ */
+function checkCorePluginConflicts(
+  id: string,
+  plugins: AnyPluginInstance[],
+  corePluginNames: Set<string>
+): void {
+  for (const plugin of plugins) {
+    if (corePluginNames.has(plugin.name)) {
+      throw new TypeError(
+        `[${id}] Plugin name "${plugin.name}" conflicts with core plugin "${plugin.name}".\n` +
+          `  Choose a different plugin name.`
+      );
+    }
+  }
+}
+
 // =============================================================================
 // Exports
 // =============================================================================
@@ -279,4 +327,4 @@ export type {
   EmitFunction as EmitFn
 };
 
-export { isRecord, validatePlugins };
+export { isRecord, validatePlugins, validateCorePlugins, checkCorePluginConflicts };

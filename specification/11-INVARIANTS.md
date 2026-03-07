@@ -152,6 +152,46 @@ Lifecycle methods can throw (or reject). When they do:
 
 The lifecycle is not transactional. A failed `start()` does not imply rollback, and a failed `stop()` does not imply best-effort continuation. The safest default after lifecycle failure is to discard the app instance and recreate it if needed.
 
+### 1.15 Core Plugin Self-Containment
+
+Core plugins (created with `createCorePlugin`) are strictly self-contained infrastructure. They have **no access to** and **cannot declare**: `require`, `depends`, `has`, `events`, `hooks`. A core plugin spec that includes any of these fields is a kernel bug (or a validation error if runtime-checked).
+
+Core plugins do not participate in the regular plugin dependency or event graph. They provide infrastructure APIs (logging, storage, environment) that are injected onto regular plugin contexts, but they themselves cannot consume other plugins or emit/listen to events.
+
+### 1.16 Core Plugin Minimal Context
+
+Core plugin lifecycle methods (`onInit`, `onStart`, `onStop`) and `api` receive only `{ config, state }`. No `global`, no `emit`, no `require`, no `has`. This minimal context reflects their self-contained nature — they depend on nothing outside their own config and state.
+
+### 1.17 Core Plugin Name Uniqueness
+
+Core plugin names must not conflict with:
+- Regular plugin names
+- Other core plugin names
+- Reserved app method names (`start`, `stop`, `emit`, `require`, `has`, `config`, `__proto__`, `constructor`, `prototype`)
+
+```
+TypeError: [moku-site] Core plugin name "log" conflicts with regular plugin name "log".
+  Core plugins and regular plugins share the same namespace. Choose a different name.
+
+TypeError: [moku-site] Duplicate core plugin name: "env".
+  Each core plugin must have a unique name.
+
+TypeError: [moku-site] Core plugin name "start" conflicts with a reserved app method.
+  Choose a different plugin name.
+```
+
+### 1.18 Core Plugin Lifecycle Ordering
+
+Core plugins always process before regular plugins during init and start, and after regular plugins during stop:
+
+| Phase | Core Plugins | Regular Plugins |
+|-------|-------------|-----------------|
+| init (`onInit`) | First (forward order) | Second (forward order) |
+| start (`onStart`) | First (forward order) | Second (forward order) |
+| stop (`onStop`) | Second (reverse order) | First (reverse order) |
+
+This ensures that core plugin APIs (log, env, storage) are fully initialized before any regular plugin accesses them, and remain available throughout regular plugin teardown.
+
 ---
 
 ## Part 2: Anti-Patterns

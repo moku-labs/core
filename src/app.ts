@@ -14,6 +14,7 @@
 //   §7 Kernel Orchestrator       — kernel
 // =============================================================================
 
+import type { AnyCorePluginInstance } from "./core-plugin";
 import type { AnyPluginInstance } from "./types";
 import { isRecord } from "./utilities";
 
@@ -78,6 +79,8 @@ interface KernelParameters {
   readonly configDefaults: Record<string, unknown>;
   readonly frameworkPluginConfigs: Record<string, unknown>;
   readonly flatPlugins: AnyPluginInstance[];
+  readonly corePlugins: readonly AnyCorePluginInstance[];
+  readonly corePluginConfigs: Record<string, unknown>;
   readonly configOverrides: Record<string, unknown>;
   readonly consumerPluginConfigs: Record<string, unknown>;
   readonly onReady?: OnReadyCallback | undefined;
@@ -338,6 +341,7 @@ function registerPluginHooks(
  * @param runtime - The kernel runtime with shared state.
  * @param resolvedConfigs - The resolved per-plugin config map.
  * @param states - The plugin state map.
+ * @param coreApis - Core plugin APIs to spread onto every plugin context.
  * @returns A factory function that produces a PluginContext for any plugin.
  * @example
  * ```ts
@@ -348,7 +352,8 @@ function registerPluginHooks(
 function createContextFactory(
   runtime: KernelRuntime,
   resolvedConfigs: Map<string, Readonly<Record<string, unknown>>>,
-  states: StateMap
+  states: StateMap,
+  coreApis: Record<string, unknown>
 ): ContextFactory {
   const has = createHas(runtime);
 
@@ -363,7 +368,8 @@ function createContextFactory(
         `[${runtime.id}] Plugin "${plugin.name}" requires "${name}", but "${name}" is not registered.\n` +
         `  Add "${name}" to your plugin list.`
     ),
-    has
+    has,
+    ...coreApis
   });
 }
 
@@ -426,6 +432,10 @@ async function executeStop(
  * @param runtime - The kernel runtime with shared state and APIs.
  * @param flatPlugins - The flattened plugin list.
  * @param buildPluginContext - Factory that builds context for a plugin.
+ * @param corePluginData - Core plugin instances, resolved configs, and states.
+ * @param corePluginData.plugins - The core plugin instances.
+ * @param corePluginData.configs - Resolved core plugin config map.
+ * @param corePluginData.states - Core plugin state map.
  * @param consumer - Optional consumer lifecycle callbacks.
  * @returns A frozen app object with lifecycle methods and plugin APIs.
  * @example
@@ -438,6 +448,11 @@ function buildApp(
   runtime: KernelRuntime,
   flatPlugins: AnyPluginInstance[],
   buildPluginContext: ContextFactory,
+  corePluginData: {
+    readonly plugins: readonly AnyCorePluginInstance[];
+    readonly configs: Map<string, Readonly<Record<string, unknown>>>;
+    readonly states: StateMap;
+  },
   consumer?: KernelParameters["consumer"]
 ): DynamicObject {
   let started = false;
@@ -463,6 +478,17 @@ function buildApp(
         throw new Error(`[${runtime.id}] App already started.\n  start() can only be called once.`);
       }
 
+      // Core plugins start first (forward order)
+      for (const plugin of corePluginData.plugins) {
+        if (plugin.spec.onStart) {
+          await plugin.spec.onStart({
+            config: corePluginData.configs.get(plugin.name) ?? {},
+            state: corePluginData.states.get(plugin.name)
+          });
+        }
+      }
+
+      // Regular plugins start second (forward order)
       for (const plugin of flatPlugins) {
         if (plugin.spec.onStart) {
           await plugin.spec.onStart(buildPluginContext(plugin));
@@ -488,7 +514,19 @@ function buildApp(
       if (!started) {
         throw new Error(`[${runtime.id}] App not started.\n  Call start() before stop().`);
       }
+
+      // Regular plugins stop first (reverse order)
       await executeStop(flatPlugins, runtime.globalConfig);
+
+      // Core plugins stop second (reverse order)
+      for (const plugin of corePluginData.plugins.toReversed()) {
+        if (plugin.spec.onStop) {
+          await plugin.spec.onStop({
+            config: corePluginData.configs.get(plugin.name) ?? {},
+            state: corePluginData.states.get(plugin.name)
+          });
+        }
+      }
 
       if (consumer?.onStop) {
         await consumer.onStop(buildCallbackContext(runtime));
@@ -543,7 +581,88 @@ function buildApp(
 }
 
 // =============================================================================
-// Section 7: Kernel Orchestrator
+// Section 7: Core Plugin Initialization
+// =============================================================================
+
+/**
+ * Initialize core plugins: resolve configs, create states, build APIs, run onInit.
+ *
+ * @param corePlugins - Core plugin instances.
+ * @param corePluginConfigs - Config overrides from createCoreConfig.
+ * @param frameworkPluginConfigs - Config overrides from createCore.
+ * @param consumerPluginConfigs - Config overrides from createApp.
+ * @returns Resolved configs, states, core APIs map, and shared apis Map.
+ * @example
+ * ```ts
+ * const { coreResolvedConfigs, coreStates, coreApis, apis } = initCorePlugins(
+ *   corePlugins, corePluginConfigs, frameworkPluginConfigs, consumerPluginConfigs
+ * );
+ * ```
+ */
+function initCorePlugins(
+  corePlugins: readonly AnyCorePluginInstance[],
+  corePluginConfigs: Record<string, unknown>,
+  frameworkPluginConfigs: Record<string, unknown>,
+  consumerPluginConfigs: Record<string, unknown>
+): {
+  coreResolvedConfigs: Map<string, Readonly<Record<string, unknown>>>;
+  coreStates: StateMap;
+  coreApis: Record<string, unknown>;
+  apis: ApiMap;
+} {
+  // Resolve core plugin configs (4-level merge: spec defaults → coreConfig → framework → consumer)
+  const coreResolvedConfigs = new Map<string, Readonly<Record<string, unknown>>>();
+  for (const plugin of corePlugins) {
+    const merged = Object.freeze({
+      ...(plugin.spec.config as Record<string, unknown> | undefined),
+      ...asRecord(corePluginConfigs[plugin.name]),
+      ...asRecord(frameworkPluginConfigs[plugin.name]),
+      ...asRecord(consumerPluginConfigs[plugin.name])
+    });
+    coreResolvedConfigs.set(plugin.name, merged);
+  }
+
+  // Create core plugin states (context: { config } only)
+  const coreStates: StateMap = new Map();
+  for (const plugin of corePlugins) {
+    if (plugin.spec.createState) {
+      const pluginConfig = coreResolvedConfigs.get(plugin.name) ?? {};
+      coreStates.set(plugin.name, plugin.spec.createState({ config: pluginConfig }));
+    } else {
+      coreStates.set(plugin.name, {});
+    }
+  }
+
+  // Build core plugin APIs (context: { config, state })
+  const coreApis: Record<string, unknown> = {};
+  const apis: ApiMap = new Map();
+  for (const plugin of corePlugins) {
+    if (plugin.spec.api) {
+      const context = {
+        config: coreResolvedConfigs.get(plugin.name) ?? {},
+        state: coreStates.get(plugin.name)
+      };
+      const api = plugin.spec.api(context);
+      coreApis[plugin.name] = api;
+      apis.set(plugin.name, api);
+    }
+  }
+
+  // Run core plugin onInit (synchronous, forward order)
+  for (const plugin of corePlugins) {
+    if (plugin.spec.onInit) {
+      plugin.spec.onInit({
+        config: coreResolvedConfigs.get(plugin.name) ?? {},
+        state: coreStates.get(plugin.name)
+      });
+    }
+  }
+
+  return { coreResolvedConfigs, coreStates, coreApis, apis };
+}
+
+// =============================================================================
+// Section 8: Kernel Orchestrator
 // =============================================================================
 
 /**
@@ -566,6 +685,8 @@ function kernel(parameters: KernelParameters): DynamicObject {
     configDefaults,
     frameworkPluginConfigs,
     flatPlugins,
+    corePlugins,
+    corePluginConfigs,
     configOverrides,
     consumerPluginConfigs,
     onReady,
@@ -573,14 +694,27 @@ function kernel(parameters: KernelParameters): DynamicObject {
     consumer
   } = parameters;
 
-  // Step 4: Build plugin name set
-  const pluginNameSet = new Set(flatPlugins.map(plugin => plugin.name));
+  // Step 4: Build plugin name set (core + regular)
+  const pluginNameSet = new Set([
+    ...corePlugins.map(plugin => plugin.name),
+    ...flatPlugins.map(plugin => plugin.name)
+  ]);
 
   // Step 5: Resolve global config (shallow merge, freeze)
   const globalConfig: Readonly<Record<string, unknown>> = Object.freeze({
     ...configDefaults,
     ...configOverrides
   });
+
+  // ---------- Core plugin processing (before regular plugins) ----------
+  const { coreResolvedConfigs, coreStates, coreApis, apis } = initCorePlugins(
+    corePlugins,
+    corePluginConfigs,
+    frameworkPluginConfigs,
+    consumerPluginConfigs
+  );
+
+  // ---------- Regular plugin processing ----------
 
   // Step 6: Resolve per-plugin config (3-level merge, freeze)
   const resolvedConfigs = resolvePluginConfigs(
@@ -591,9 +725,6 @@ function kernel(parameters: KernelParameters): DynamicObject {
 
   // Step 7: Create state (MinimalContext — global + config only)
   const states = createPluginStates(flatPlugins, globalConfig, resolvedConfigs);
-
-  // Step 8a: Build event bus (empty — hooks registered in Step 8b)
-  const apis: ApiMap = new Map();
 
   // Combine framework + consumer onError into a single handler.
   // References to runtime are resolved at call time, not definition time.
@@ -610,8 +741,8 @@ function kernel(parameters: KernelParameters): DynamicObject {
   // Assemble runtime (apis Map is populated in Step 9; same reference shared)
   const runtime: KernelRuntime = { id, globalConfig, emit, apis, pluginNameSet };
 
-  // Build context factory (needed by hooks and APIs)
-  const buildPluginContext = createContextFactory(runtime, resolvedConfigs, states);
+  // Build context factory (needed by hooks and APIs — core APIs injected on context)
+  const buildPluginContext = createContextFactory(runtime, resolvedConfigs, states, coreApis);
 
   // Step 8b: Register hooks (context-aware)
   registerPluginHooks(flatPlugins, buildPluginContext, registerHook);
@@ -641,7 +772,12 @@ function kernel(parameters: KernelParameters): DynamicObject {
   }
 
   // Step 11: Build and freeze app
-  return buildApp(runtime, flatPlugins, buildPluginContext, consumer);
+  const corePluginData = {
+    plugins: corePlugins,
+    configs: coreResolvedConfigs,
+    states: coreStates
+  };
+  return buildApp(runtime, flatPlugins, buildPluginContext, corePluginData, consumer);
 }
 
 export { kernel };

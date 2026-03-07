@@ -1,6 +1,6 @@
 # 05 - Config System
 
-**Domain:** Config resolution, defaults, pluginConfigs mapped type, structured createApp namespaces
+**Domain:** Config resolution, defaults, pluginConfigs mapped type, structured createApp namespaces, core plugin config merge
 **Architecture:** 3-step (createCoreConfig -> createCore -> createApp)
 
 ---
@@ -14,6 +14,57 @@ The system has two levels of configuration:
 **Per-Plugin Config:** Defined via `config` on each plugin's spec. The consumer can override any field via `createApp({ pluginConfigs: { pluginName: { ... } } })`.
 
 Both levels use the same resolution strategy: **shallow merge**.
+
+---
+
+## 1b. Core Plugin Config
+
+Core plugins (created with `createCorePlugin`) follow a **4-level merge**. Each layer in the factory chain can override core plugin config:
+
+```
+spec defaults → createCoreConfig pluginConfigs → createCore pluginConfigs → createApp pluginConfigs
+```
+
+```typescript
+resolvedCorePluginConfig = {
+  ...corePluginSpec.config,         // 1. spec defaults (from createCorePlugin)
+  ...coreConfigOverrides,           // 2. createCoreConfig pluginConfigs
+  ...frameworkOverrides,            // 3. createCore pluginConfigs
+  ...consumerOverrides,             // 4. createApp pluginConfigs
+}
+```
+
+The extra level (compared to regular plugins' 3-level merge) exists because core plugins are declared at the `createCoreConfig` level, giving that layer its own override opportunity. All four levels use the same shallow merge strategy.
+
+**Example:**
+
+```typescript
+// Core plugin spec provides defaults
+const logPlugin = createCorePlugin('log', {
+  config: { level: 'info', prefix: '[app]' },
+  // ...
+});
+
+// Layer 1: createCoreConfig can override
+const coreConfig = createCoreConfig('my-framework', {
+  plugins: [logPlugin],
+  pluginConfigs: { log: { level: 'warn' } },          // level → 'warn'
+});
+
+// Layer 2: createCore can override
+const { createApp } = createCore({
+  pluginConfigs: { log: { prefix: '[my-framework]' } }, // prefix → '[my-framework]'
+});
+
+// Layer 3: createApp can override
+const app = createApp({
+  pluginConfigs: { log: { level: 'debug' } },           // level → 'debug'
+});
+
+// Result: { level: 'debug', prefix: '[my-framework]' }
+```
+
+The same shallow merge rule applies: no deep merge, ever. Each level replaces the keys it provides.
 
 ---
 
@@ -38,7 +89,7 @@ TypeScript's own type system determines config behavior. No flags. No metadata. 
 
 **Shallow merge. No deep merge. Ever.**
 
-Per-plugin config uses a 3-level merge: plugin defaults, then framework overrides (from `createCore`), then consumer overrides (from `createApp`):
+Regular per-plugin config uses a 3-level merge: plugin defaults, then framework overrides (from `createCore`), then consumer overrides (from `createApp`). (Core plugins use a 4-level merge -- see section 1b.)
 
 ```typescript
 resolvedConfig = { ...spec.config, ...frameworkOverrides, ...consumerOverrides }

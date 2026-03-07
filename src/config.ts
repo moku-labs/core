@@ -20,7 +20,15 @@
 // =============================================================================
 
 import { type BoundCreateCoreFunction, createCoreFactory } from "./core";
+import type {
+  AnyCorePluginInstance,
+  CoreApisFromTuple,
+  ExtractCoreConfig,
+  ExtractCoreName
+} from "./core-plugin";
 import { type BoundCreatePluginFunction, createPluginFactory } from "./plugin";
+import type { IsLiteralString } from "./utilities";
+import { validateCorePlugins } from "./utilities";
 
 // =============================================================================
 // Section 1: Config Result Type
@@ -36,12 +44,13 @@ import { type BoundCreatePluginFunction, createPluginFactory } from "./plugin";
  */
 interface CoreConfigResult<
   Config extends Record<string, unknown>,
-  Events extends Record<string, unknown>
+  Events extends Record<string, unknown>,
+  CorePlugins extends readonly AnyCorePluginInstance[] = readonly []
 > {
   /** Creates a plugin instance with all types inferred from the spec object. */
-  readonly createPlugin: BoundCreatePluginFunction<Config, Events>;
+  readonly createPlugin: BoundCreatePluginFunction<Config, Events, CoreApisFromTuple<CorePlugins>>;
   /** Step 2 factory: captures default plugins and returns createApp + createPlugin. */
-  readonly createCore: BoundCreateCoreFunction<Config, Events>;
+  readonly createCore: BoundCreateCoreFunction<Config, Events, CorePlugins>;
 }
 
 // =============================================================================
@@ -58,6 +67,8 @@ interface CoreConfigResult<
  * @param id - Framework identifier used in error messages.
  * @param options - Configuration options containing the default config values.
  * @param options.config - Default configuration values for the framework.
+ * @param options.plugins - Optional core plugin instances to register.
+ * @param options.pluginConfigs - Optional config overrides for core plugins.
  * @returns An object with createPlugin (bound to Config/Events) and createCore.
  * @example
  * ```ts
@@ -69,20 +80,43 @@ interface CoreConfigResult<
  */
 function createCoreConfig<
   Config extends Record<string, unknown>,
-  Events extends Record<string, unknown> = Record<string, never>
->(id: string, options: { config: Config }): CoreConfigResult<Config, Events> {
+  Events extends Record<string, unknown> = Record<string, never>,
+  const CorePlugins extends readonly AnyCorePluginInstance[] = readonly []
+>(
+  id: string,
+  options: {
+    config: Config;
+    plugins?: [...CorePlugins];
+    pluginConfigs?: {
+      [K in CorePlugins[number] as ExtractCoreConfig<K> extends Record<string, never>
+        ? never
+        : IsLiteralString<ExtractCoreName<K>> extends true
+          ? ExtractCoreName<K>
+          : never]?: Partial<ExtractCoreConfig<K>>;
+    };
+  }
+): CoreConfigResult<Config, Events, CorePlugins> {
   const configDefaults: Config = options.config;
   const frameworkId: string = id;
+  const corePlugins = (options.plugins ?? []) as CorePlugins;
+  const corePluginConfigs: Record<string, unknown> = (options.pluginConfigs ?? {}) as Record<
+    string,
+    unknown
+  >;
 
-  const createPlugin: BoundCreatePluginFunction<Config, Events> = createPluginFactory<
-    Config,
-    Events
-  >(frameworkId);
+  // Validate core plugins: reserved names, duplicates
+  validateCorePlugins(frameworkId, corePlugins);
 
-  const createCore: BoundCreateCoreFunction<Config, Events> = createCoreFactory<Config, Events>(
+  const createPlugin = createPluginFactory<Config, Events, CoreApisFromTuple<CorePlugins>>(
+    frameworkId
+  );
+
+  const createCore = createCoreFactory<Config, Events, CorePlugins>(
     frameworkId,
     configDefaults,
-    createPlugin
+    createPlugin,
+    corePlugins,
+    corePluginConfigs
   );
 
   return { createPlugin, createCore };

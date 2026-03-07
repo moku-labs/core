@@ -1,6 +1,6 @@
 # 08 - Context Object
 
-**Domain:** ctx object, context tiers, phase-appropriate context rules
+**Domain:** ctx object, context tiers, phase-appropriate context rules, core plugin context, core API injection
 **Architecture:** 3-step (createCoreConfig -> createCore -> createApp)
 
 ---
@@ -15,7 +15,22 @@ The context is the plugin's window into the kernel. It provides access to config
 
 ## 2. Context Tiers
 
-There are three context tiers, each providing progressively more functionality:
+There are four context tiers. Three are for regular plugins (progressively more functionality), and one is for core plugins (self-contained):
+
+### CorePluginContext
+
+```typescript
+type CorePluginContext<C, S> = {
+  /** This core plugin's resolved config. Frozen. */
+  readonly config: Readonly<C>;
+  /** This core plugin's internal mutable state. */
+  state: S;
+};
+```
+
+Used by: all core plugin methods (`api`, `onInit`, `onStart`, `onStop`). Core plugins are self-contained infrastructure -- they have NO `global`, NO `emit`, NO `require`, NO `has`. Their context is intentionally minimal: just their own config and state. This enforces the constraint that core plugins cannot depend on other plugins or participate in the event system.
+
+The `createState` method on a core plugin receives `{ readonly config: Readonly<C> }` (config only, no state yet).
 
 ### MinimalContext
 
@@ -51,10 +66,11 @@ type PluginContext<Config, Events extends Record<string, unknown>, C, S> = {
   require: RequireFunction;
   /** Check if a plugin is registered by name. String-based (boolean check). */
   has: (name: string) => boolean;
+  // Plus: core plugin APIs injected flat (see section 2b below)
 };
 ```
 
-Used by: `api`, `onInit`, `onStart`, `hooks`. Everything is live. The plugin's mutable state is available. Other plugins' APIs are accessible via `require`. Events can be emitted.
+Used by: `api`, `onInit`, `onStart`, `hooks`. Everything is live. The plugin's mutable state is available. Other plugins' APIs are accessible via `require`. Events can be emitted. Core plugin APIs are injected directly onto this context (see section 2b).
 
 The `Events` parameter in PluginContext is the merged event map (`Events & PluginEvents & DepsEvents`), computed by the PluginSpec type. Dependencies are handled at the PluginSpec level, not within PluginContext itself.
 
@@ -71,30 +87,83 @@ Used by: `onStop`. During teardown, plugins are being stopped in reverse order. 
 
 ---
 
+### 2b. Core API Injection on Regular Plugin Context
+
+Core plugin APIs are injected **flat** onto every regular plugin's `PluginContext`. Each core plugin's `api()` return value becomes a property on `ctx`, keyed by the core plugin's name.
+
+```typescript
+// Given core plugins "log" and "env":
+onInit: (ctx) => {
+  ctx.log.info('Plugin initialized');   // from core plugin "log"
+  ctx.log.error('Something failed');
+  if (ctx.env.isDev()) {                // from core plugin "env"
+    ctx.log.info('Running in dev mode');
+  }
+
+  // Standard PluginContext properties still available:
+  ctx.global;       // global config
+  ctx.config;       // this plugin's config
+  ctx.state;        // this plugin's state
+  ctx.emit;         // event dispatch
+  ctx.require;      // inter-plugin API access
+  ctx.has;          // plugin existence check
+},
+```
+
+Core APIs are available on the context in all regular plugin methods that receive `PluginContext` (`api`, `hooks`, `onInit`, `onStart`). They are NOT available on `MinimalContext` (used by `createState`) or `TeardownContext` (used by `onStop`).
+
+Core APIs are always present -- regular plugins do not need to declare dependencies on core plugins via `depends`, and cannot opt out. This is infrastructure, not a dependency.
+
+---
+
 ## 3. Which Method Gets What
+
+**Regular plugins:**
 
 | Method | Context Tier | Why |
 |--------|-------------|------|
 | `createState` | MinimalContext | State not yet created, only config available |
-| `hooks` | PluginContext | Full context needed to build hook handlers |
-| `api` | PluginContext | Full context needed to build API methods |
-| `onInit` | PluginContext | Plugin fully initialized, can interact with deps |
-| `onStart` | PluginContext | App is starting, full context |
+| `hooks` | PluginContext (+ core APIs) | Full context needed to build hook handlers |
+| `api` | PluginContext (+ core APIs) | Full context needed to build API methods |
+| `onInit` | PluginContext (+ core APIs) | Plugin fully initialized, can interact with deps |
+| `onStart` | PluginContext (+ core APIs) | App is starting, full context |
 | `onStop` | TeardownContext | Minimal context, teardown should not depend on other plugins' state |
+
+**Core plugins:**
+
+| Method | Context Tier | Why |
+|--------|-------------|------|
+| `createState` | `{ config }` | State not yet created, only config available |
+| `api` | CorePluginContext | Self-contained, only own config and state |
+| `onInit` | CorePluginContext | Self-contained, only own config and state |
+| `onStart` | CorePluginContext | Self-contained, only own config and state |
+| `onStop` | CorePluginContext | Self-contained, only own config and state |
 
 ### Context Growth Through Lifecycle
 
+**Regular plugins:**
+
 ```
 createState:    { global, config }                            (minimal)
-hooks:          { global, config, state, emit,                (full)
-                  require, has }
-api:            { global, config, state, emit,                (full)
-                  require, has }
-onInit:         { global, config, state, emit,                (full)
-                  require, has }
-onStart:        { global, config, state, emit,                (full)
-                  require, has }
-onStop:         { global }                                    (minimal)
+hooks:          { global, config, state, emit,                (full + core APIs)
+                  require, has, log, env, ... }
+api:            { global, config, state, emit,                (full + core APIs)
+                  require, has, log, env, ... }
+onInit:         { global, config, state, emit,                (full + core APIs)
+                  require, has, log, env, ... }
+onStart:        { global, config, state, emit,                (full + core APIs)
+                  require, has, log, env, ... }
+onStop:         { global }                                    (teardown)
+```
+
+**Core plugins (all methods):**
+
+```
+createState:    { config }                                    (config only)
+api:            { config, state }                             (self-contained)
+onInit:         { config, state }                             (self-contained)
+onStart:        { config, state }                             (self-contained)
+onStop:         { config, state }                             (self-contained)
 ```
 
 ---
