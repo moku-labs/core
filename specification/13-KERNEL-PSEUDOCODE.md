@@ -25,6 +25,7 @@ Every significant "why" in the architecture:
 | 12 | No sub-plugins — all plugins listed explicitly | Sub-plugins flattened depth-first | Explicit listing is simpler, gives full type visibility. Frameworks can re-export plugin arrays for convenience. |
 | 13 | Supported lifecycle is `createApp -> start? -> stop?` | Transactional lifecycle or broad misuse guarantees | Minimal contract. Repeated/concurrent calls and failure recovery are outside the primary guarantee. |
 | 14 | Stop propagates errors | Stop is best-effort (continue on error) | Simple. If a plugin's onStop throws, the error propagates immediately. Consumer handles error recovery. |
+| 15 | Helpers as intersection return type (`PluginInstance & Helpers`) | 6th generic on PluginInstance | Avoids cascading changes to AnyPluginInstance, Extract* types, and all constraint positions. The `& Helpers` intersection widens away naturally when used in `depends`/`plugins` arrays. |
 
 ---
 
@@ -89,8 +90,9 @@ function createPlugin(
     onStart?: (ctx: PluginContext<...>) => void | Promise<void>,
     onStop?: (ctx: TeardownContext<Config>) => void | Promise<void>,
     hooks?: (ctx: PluginContext<...>) => Partial<EventHandlers<Events & PluginEvents & DepsEvents>>,
+    helpers?: Helpers,  // H extends Record<string, (...args) => any> = Record<never, never>
   },
-): PluginInstance<N, C, S, A, PluginEvents> {
+): PluginInstance<N, C, S, A, PluginEvents> & Helpers {
   // RATIONALE: All generics (N, C, S, A, PluginEvents) are inferred from the spec object.
   // The framework doesn't pass them. The plugin author doesn't write them.
   // TypeScript infers N from the name string literal, C from config,
@@ -107,6 +109,10 @@ function createPlugin(
   // TypeScript computes this from the phantom types on the PluginInstance objects
   // via UnionToIntersection.
 
+  // Validate helpers if present: must be plain object of functions,
+  // no keys conflicting with PluginInstance fields (name, spec, _phantom).
+  assertValidHelpers(id, name, spec.helpers);
+
   return {
     name,
     spec,
@@ -117,6 +123,8 @@ function createPlugin(
       api: A;
       events: PluginEvents;
     },
+    // Spread helpers onto instance -- consumers call plugin.route(...) etc.
+    ...(spec.helpers ?? {}),
   };
 }
 ```
@@ -129,6 +137,7 @@ function createPlugin(
 - `A` -- inferred from `api` return type
 - `PluginEvents` -- inferred from `events` register callback return type
 - `DepsEvents` -- intersection of dependency phantom types via `UnionToIntersection`
+- `Helpers` -- inferred from `helpers` object (defaults to `Record<never, never>` when absent)
 
 ---
 
@@ -619,10 +628,11 @@ Framework config.ts:
     -> returns { createPlugin, createCore }
 
 Framework plugin files:
-  createPlugin('name', { events, config, createState, api, onInit, onStart, onStop, hooks })
+  createPlugin('name', { events, config, createState, api, onInit, onStart, onStop, hooks, helpers })
     -> all types inferred from spec; Config + Events from closure
     -> PluginEvents inferred from events register callback
-    -> returns PluginInstance with phantom types
+    -> Helpers inferred from helpers object (spread onto instance)
+    -> returns PluginInstance & Helpers (helpers callable on plugin instance)
 
 Framework index.ts:
   createCore(coreConfig, { plugins: [defaultPlugins...] })

@@ -32,7 +32,7 @@ The key constraint: each layer limits the layer above. Consumer code cannot brea
 | `specification/README.md` | Full spec index + open design variants table |
 | `specification/01-ARCHITECTURE.md` | Three-layer model, philosophy, design principles |
 | `specification/02-CORE-API.md` | All function signatures, createCore/createConfig/createApp |
-| `specification/03-PLUGIN-SYSTEM.md` | PluginSpec, PluginInstance, createPlugin, depends |
+| `specification/03-PLUGIN-SYSTEM.md` | PluginSpec, PluginInstance, createPlugin, depends, helpers |
 | `specification/04-FACTORY-CHAIN.md` | 3-step factory chain: why, how, type flow |
 | `specification/05-CONFIG-SYSTEM.md` | Config resolution, defaults, BuildPluginConfigs |
 | `specification/06-LIFECYCLE.md` | 3 phases (init, start, stop), async model |
@@ -72,6 +72,7 @@ Full specification: `specification/14-EVENT-REGISTRATION.md`
 - **Strict emit, no escape hatch**: `emit` only accepts known event names with typed payloads.
 - **Hooks receive context**: `hooks: ctx => ({ ... })` follows the same closure pattern as `api`, `onInit`, `onStart`. Handlers can access `ctx.state`, `ctx.emit`, `ctx.require`, etc. Payloads are strictly typed from the merged event map (global + own + dependency events).
 - **Instance-only require**: `require(plugin)` only accepts PluginInstance references, not strings. Returns fully typed API or throws. `has(name)` stays string-based (boolean check). No escape hatch.
+- **Helpers as intersection return type**: `createPlugin` returns `PluginInstance<...> & Helpers`. Helpers are static pure functions (no `ctx`, no lifecycle) spread onto the plugin instance. Consumers call `plugin.route(...)` before `createApp`. No 6th generic on `PluginInstance` — the intersection widens away in constraint positions (`AnyPluginInstance`, `depends`, `plugins` arrays).
 
 ## Error Message Format
 
@@ -81,4 +82,4 @@ All kernel errors must follow: `[framework-name] <description>.\n  <actionable s
 
 - Runtime target: < 200 lines. The type system does the heavy lifting.
 - Bundle target: < 5KB minified + gzipped, zero runtime dependencies.
-- Plugin file structure convention: `index.ts` (30-line connection point), `api.ts`, `state.ts`, `handlers.ts` for logic.
+- Plugin file structure convention: `index.ts` (30-line connection point), `api.ts`, `state.ts`, `handlers.ts`, `helpers.ts` for logic.

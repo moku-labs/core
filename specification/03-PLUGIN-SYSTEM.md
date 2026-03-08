@@ -37,10 +37,17 @@ The plugin spec is a plain object that describes a plugin's behavior. All fields
   hooks?: (ctx: PluginContext) => {
     [K in string & keyof MergedEvents]?: (payload: MergedEvents[K]) => void | Promise<void>;
   },
+
+  /** Static helper/factory functions spread onto the PluginInstance.
+      Helpers run BEFORE createApp -- they produce typed values for pluginConfigs.
+      No ctx, no lifecycle, no side effects. Pure factories only. */
+  helpers?: {
+    [key: string]: (...args: any[]) => any;
+  },
 }
 ```
 
-**Type inference:** `C` is inferred from `config`, `S` from `createState` return value, `A` from `api` return value. The framework's `Config` and `Events` types flow in from `createCoreConfig` via closures. No manual annotation needed.
+**Type inference:** `C` is inferred from `config`, `S` from `createState` return value, `A` from `api` return value, `Helpers` from the `helpers` object. The framework's `Config` and `Events` types flow in from `createCoreConfig` via closures. No manual annotation needed.
 
 **MergedEvents:** The intersection of global `Events` (from `createCoreConfig`) + any `PluginEvents` declared via the `events` register callback on this plugin + events from plugins in `depends`. This determines what event names are typed in `hooks` and `ctx.emit`. See [14-EVENT-REGISTRATION](./14-EVENT-REGISTRATION.md) for the register callback pattern.
 
@@ -173,6 +180,49 @@ Because `depends: [routerPlugin, rendererPlugin]` is declared:
 - `ctx.require(routerPlugin)` returns the router API, fully typed
 - `hooks` can listen to events from both global Events and renderer's plugin events
 - Dependency validation ensures router and renderer are registered before seo
+
+### Example 4: Plugin with Helpers
+
+```typescript
+// my-framework/src/plugins/router/index.ts
+import { createPlugin } from '../../config';
+
+type Route = { path: string; component: string };
+
+export const routerPlugin = createPlugin('router', {
+  config: { routes: [] as Route[] },
+  createState: () => ({ currentPath: '/' }),
+  api: (ctx) => ({
+    navigate: (path: string) => {
+      ctx.state.currentPath = path;
+    },
+    current: () => ctx.state.currentPath,
+  }),
+  helpers: {
+    route: (path: string, component: string): Route => ({ path, component }),
+  },
+});
+```
+
+Consumer usage:
+
+```typescript
+// my-blog/src/main.ts
+import { createApp } from 'my-framework';
+import { routerPlugin } from 'my-framework/plugins/router';
+
+// Helpers are available on the plugin instance BEFORE createApp:
+const home = routerPlugin.route('/home', 'HomePage');
+const about = routerPlugin.route('/about', 'AboutPage');
+
+const app = createApp({
+  pluginConfigs: {
+    router: { routes: [home, about] },
+  },
+});
+```
+
+Helpers are **static pure functions** — no `ctx`, no lifecycle access, no side effects. They run before `createApp` and produce typed values that consumers pass into `pluginConfigs`. The return type of `createPlugin` is `PluginInstance<...> & Helpers`, so `routerPlugin.route(...)` is fully typed with IDE autocomplete.
 
 ---
 

@@ -327,6 +327,184 @@ describe("createPlugin - return value", () => {
 });
 
 // ---------------------------------------------------------------------------
+// createPlugin - helpers validation
+// ---------------------------------------------------------------------------
+
+describe("createPlugin - helpers validation", () => {
+  it("accepts valid helpers object of functions", () => {
+    const { createPlugin } = setup();
+
+    const plugin = createPlugin("router", {
+      helpers: {
+        route: (path: string) => ({ path }),
+        redirect: (from: string, to: string) => ({ from, to })
+      }
+    });
+    expect(plugin.name).toBe("router");
+  });
+
+  it("accepts undefined helpers (optional)", () => {
+    const { createPlugin } = setup();
+
+    const plugin = createPlugin("minimal", {});
+    expect(plugin.name).toBe("minimal");
+  });
+
+  it("throws on null helpers", () => {
+    const { createPlugin } = setup();
+
+    expect(() =>
+      createPlugin("bad", {
+        // eslint-disable-next-line unicorn/no-null -- testing runtime null rejection
+        helpers: null as never
+      })
+    ).toThrow(TypeError);
+    expect(() =>
+      createPlugin("bad", {
+        // eslint-disable-next-line unicorn/no-null -- testing runtime null rejection
+        helpers: null as never
+      })
+    ).toThrow("invalid helpers");
+  });
+
+  it("throws on non-object helpers", () => {
+    const { createPlugin } = setup();
+
+    // Type system accepts these (Helpers falls back to {}), but runtime catches them
+    expect(() =>
+      createPlugin("bad", {
+        helpers: "not an object" as never
+      })
+    ).toThrow(TypeError);
+    expect(() =>
+      createPlugin("bad", {
+        helpers: "not an object" as never
+      })
+    ).toThrow("invalid helpers");
+  });
+
+  it("throws on non-function helper value", () => {
+    const { createPlugin } = setup();
+
+    // Type system accepts these (Helpers falls back to {}), but runtime catches them
+    expect(() =>
+      createPlugin("bad", {
+        helpers: { route: "not a function" } as never
+      })
+    ).toThrow(TypeError);
+    expect(() =>
+      createPlugin("bad", {
+        helpers: { route: "not a function" } as never
+      })
+    ).toThrow('invalid helper "route"');
+  });
+
+  it("throws on helper name conflicting with PluginInstance fields", () => {
+    const { createPlugin } = setup();
+
+    // These are valid at the type level (functions in a helpers object),
+    // but conflict with PluginInstance fields at runtime
+    expect(() =>
+      createPlugin("bad", {
+        helpers: { name: () => {} }
+      })
+    ).toThrow(TypeError);
+    expect(() =>
+      createPlugin("bad", {
+        helpers: { name: () => {} }
+      })
+    ).toThrow("conflicts with a PluginInstance property");
+
+    expect(() =>
+      createPlugin("bad", {
+        helpers: { spec: () => {} }
+      })
+    ).toThrow("conflicts with a PluginInstance property");
+
+    expect(() =>
+      createPlugin("bad", {
+        helpers: { _phantom: () => {} }
+      })
+    ).toThrow("conflicts with a PluginInstance property");
+  });
+
+  it("error includes framework id and plugin name", () => {
+    const { createPlugin } = setup("my-framework");
+
+    // Type system accepts (Helpers falls back to {}), but runtime catches
+    expect(() =>
+      createPlugin("router", {
+        helpers: 42 as never
+      })
+    ).toThrow("[my-framework]");
+    expect(() =>
+      createPlugin("router", {
+        helpers: 42 as never
+      })
+    ).toThrow('"router"');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// createPlugin - helpers on return value
+// ---------------------------------------------------------------------------
+
+describe("createPlugin - helpers on return value", () => {
+  it("spreads helpers onto the plugin instance", () => {
+    const { createPlugin } = setup();
+
+    const plugin = createPlugin("router", {
+      helpers: {
+        route: (path: string) => ({ path })
+      }
+    });
+
+    expect(plugin.route).toBeTypeOf("function");
+    expect(plugin.route("/home")).toEqual({ path: "/home" });
+  });
+
+  it("helpers are callable with correct types", () => {
+    const { createPlugin } = setup();
+
+    const plugin = createPlugin("router", {
+      helpers: {
+        route: (path: string, component: string) => ({ path, component }),
+        redirect: (from: string, to: string) => ({ from, to, type: "redirect" as const })
+      }
+    });
+
+    const r = plugin.route("/home", "HomePage");
+    expect(r).toEqual({ path: "/home", component: "HomePage" });
+
+    const rd = plugin.redirect("/old", "/new");
+    expect(rd).toEqual({ from: "/old", to: "/new", type: "redirect" });
+  });
+
+  it("plugin without helpers has no extra properties", () => {
+    const { createPlugin } = setup();
+
+    const plugin = createPlugin("minimal", {});
+
+    expect(Object.keys(plugin)).toEqual(expect.arrayContaining(["name", "spec", "_phantom"]));
+    expect(Object.keys(plugin)).toHaveLength(3);
+  });
+
+  it("plugin with helpers retains name, spec, _phantom", () => {
+    const { createPlugin } = setup();
+
+    const plugin = createPlugin("router", {
+      config: { basePath: "/" },
+      helpers: { route: (path: string) => ({ path }) }
+    });
+
+    expect(plugin.name).toBe("router");
+    expect(plugin.spec).toBeDefined();
+    expect(plugin._phantom).toBeDefined();
+    expect(plugin.spec.config).toEqual({ basePath: "/" });
+  });
+});
+
+// ---------------------------------------------------------------------------
 // createPlugin - depends
 // ---------------------------------------------------------------------------
 
@@ -335,6 +513,19 @@ describe("createPlugin - depends", () => {
     const { createPlugin } = setup();
 
     const dep = createPlugin("dep", {});
+    const consumer = createPlugin("consumer", {
+      depends: [dep]
+    });
+
+    expect(consumer.spec.depends).toHaveLength(1);
+  });
+
+  it("plugin with helpers works as dependency", () => {
+    const { createPlugin } = setup();
+
+    const dep = createPlugin("dep", {
+      helpers: { create: () => ({}) }
+    });
     const consumer = createPlugin("consumer", {
       depends: [dep]
     });

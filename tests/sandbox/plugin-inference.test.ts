@@ -1,5 +1,6 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 
+import type { AnyPluginInstance } from "../../src";
 import { createPlugin } from "./demo/framework/config";
 import { createApp } from "./demo/framework/index";
 import { authPlugin } from "./demo/framework/plugins/auth";
@@ -176,5 +177,132 @@ describe("plugin config is typed and flows through ctx (SAND-04)", () => {
     });
 
     expect(plugin.name).toBe("typed-config-test");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Plugin helpers type inference (SAND-09)
+// ---------------------------------------------------------------------------
+
+describe("plugin helpers type inference (SAND-09)", () => {
+  it("helpers are typed and accessible on the plugin instance", () => {
+    type RouteDefinition = { path: string; component: string };
+
+    const plugin = createPlugin("router-with-helpers", {
+      config: { routes: [] as RouteDefinition[] },
+      helpers: {
+        route: (path: string, component: string): RouteDefinition => ({ path, component })
+      }
+    });
+
+    // Type-level: helper is callable with correct signature
+    expectTypeOf(plugin.route).toBeFunction();
+    expectTypeOf(plugin.route).parameters.toEqualTypeOf<[string, string]>();
+    expectTypeOf(plugin.route("/home", "Home")).toEqualTypeOf<RouteDefinition>();
+
+    // Runtime: helper works
+    const r = plugin.route("/home", "HomePage");
+    expect(r).toEqual({ path: "/home", component: "HomePage" });
+  });
+
+  it("multiple helpers are all typed on the instance", () => {
+    const plugin = createPlugin("multi-helpers", {
+      helpers: {
+        route: (path: string) => ({ path }),
+        redirect: (from: string, to: string) => ({ from, to, type: "redirect" as const })
+      }
+    });
+
+    // Both helpers are typed
+    expectTypeOf(plugin.route).toBeFunction();
+    expectTypeOf(plugin.redirect).toBeFunction();
+
+    // Return types are inferred
+    expectTypeOf(plugin.route("/x")).toEqualTypeOf<{ path: string }>();
+    expectTypeOf(plugin.redirect("/a", "/b")).toEqualTypeOf<{
+      from: string;
+      to: string;
+      type: "redirect";
+    }>();
+  });
+
+  it("plugin without helpers has no extra properties on the type", () => {
+    const plugin = createPlugin("no-helpers", {});
+
+    // Standard PluginInstance fields exist
+    expectTypeOf(plugin.name).toEqualTypeOf<"no-helpers">();
+    expectTypeOf(plugin).toHaveProperty("spec");
+    expectTypeOf(plugin).toHaveProperty("_phantom");
+
+    // No helpers — accessing unknown property is a compile error
+    // @ts-expect-error -- no helpers defined, route does not exist
+    plugin.route;
+  });
+
+  it("destructuring helpers preserves types", () => {
+    type RouteDefinition = { path: string; component: string };
+
+    const plugin = createPlugin("destruct-test", {
+      helpers: {
+        route: (path: string, component: string): RouteDefinition => ({ path, component })
+      }
+    });
+
+    // Destructuring preserves types
+    const { route } = plugin;
+    expectTypeOf(route).toBeFunction();
+    expectTypeOf(route("/x", "Y")).toEqualTypeOf<RouteDefinition>();
+
+    // Runtime: destructured helper works
+    expect(route("/home", "Home")).toEqual({ path: "/home", component: "Home" });
+  });
+
+  it("plugin with helpers is assignable to AnyPluginInstance", () => {
+    const plugin = createPlugin("assignable-test", {
+      helpers: { create: () => ({}) }
+    });
+
+    // The intersection PluginInstance<...> & Helpers is assignable to AnyPluginInstance
+    const _arr: AnyPluginInstance[] = [plugin];
+    expect(_arr).toHaveLength(1);
+  });
+
+  it("plugin with helpers works in depends array", () => {
+    const dep = createPlugin("dep-with-helpers", {
+      api: _ctx => ({ getValue: () => 42 }),
+      helpers: { define: (x: number) => ({ value: x }) }
+    });
+
+    const consumer = createPlugin("consumer", {
+      depends: [dep]
+    });
+
+    // Both plugins are valid
+    expect(consumer.name).toBe("consumer");
+    expect(dep.define(5)).toEqual({ value: 5 });
+  });
+
+  it("helpers coexist with all other plugin spec fields", () => {
+    const plugin = createPlugin("full-featured", {
+      config: { basePath: "/" },
+      createState: () => ({ count: 0 }),
+      api: ctx => ({
+        getCount: () => ctx.state.count,
+        getBase: () => ctx.config.basePath
+      }),
+      onInit: () => {},
+      onStart: () => {},
+      onStop: () => {},
+      helpers: {
+        route: (path: string) => ({ path })
+      }
+    });
+
+    // Standard fields work
+    expectTypeOf(plugin.name).toEqualTypeOf<"full-featured">();
+
+    // Helper works
+    expectTypeOf(plugin.route).toBeFunction();
+    expect(plugin.route("/test")).toEqual({ path: "/test" });
   });
 });

@@ -63,6 +63,7 @@ plugins/
     state.ts          <-- createRouterState() factory
     api.ts            <-- createRouterApi() factory
     handlers.ts       <-- Event handlers (navigation, errors)
+    helpers.ts        <-- Helper/factory functions (if any)
     __tests__/
       state.test.ts   <-- Test state logic independently
       api.test.ts     <-- Test API logic independently
@@ -295,11 +296,22 @@ CREATING PLUGINS:
     hooks: (ctx) => ({
       'eventName': (payload) => { /* react to typed events */ },
     }),
+    helpers: {
+      /* static factory functions -- available on plugin instance BEFORE createApp */
+      /* e.g. route: (path, component) => ({ path, component }) */
+    },
   });
 
   Per-plugin events via register callback:
   events: (register) => ({ 'event:name': register<PayloadType>('description') })
   Zero explicit generics. All types are inferred.
+
+  HELPERS (pre-createApp factory functions):
+  helpers: { myHelper: (...args) => result }
+  Helpers are static pure functions spread onto the plugin instance.
+  Consumers call pluginInstance.myHelper(...) BEFORE createApp.
+  Results are passed into createApp via pluginConfigs.
+  No ctx, no lifecycle, no side effects. Pure factories only.
 
 CONTEXT RULES:
   createState: only { global, config }. NO require/emit.
@@ -340,6 +352,7 @@ FILE STRUCTURE:
       state.ts       <- createState factory
       api.ts         <- API factory
       handlers.ts    <- Event handlers
+      helpers.ts     <- Helper/factory functions (if any)
       __tests__/     <- Tests for each domain file independently
 
 RULES:

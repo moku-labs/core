@@ -389,7 +389,9 @@ type CreatePluginSpec<
   PluginApi extends Record<string, unknown>,
   DependencyPlugins extends DependencyPluginTuple,
   // biome-ignore lint/complexity/noBannedTypes: {} is the identity element for intersection; no core APIs by default
-  CoreApis extends Record<string, unknown> = {}
+  CoreApis extends Record<string, unknown> = {},
+  // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability on helper functions
+  Helpers extends Record<string, (...arguments_: any[]) => any> = Record<never, never>
 > = {
   /**
    * Declare plugin-specific events via a register callback.
@@ -541,6 +543,20 @@ type CreatePluginSpec<
       payload: MergedPluginEvents<GlobalEventMap, PluginEventMap, DependencyPlugins>[EventName]
     ) => void | Promise<void>;
   };
+  /**
+   * Static helper functions exposed directly on the plugin instance.
+   * Helpers run before createApp — they receive no context.
+   * Use for typed factories and builders that produce config values.
+   *
+   * @example
+   * ```ts
+   * helpers: {
+   *   route: (path: string, component: string) => ({ path, component }),
+   *   redirect: (from: string, to: string) => ({ from, to, type: 'redirect' as const }),
+   * }
+   * ```
+   */
+  helpers?: Helpers;
 };
 
 // =============================================================================
@@ -577,7 +593,9 @@ type BoundCreatePluginFunction<
     DependencyPlugins extends DependencyPluginTuple = readonly [],
     PluginEventMap extends Record<string, unknown> = EmptyPluginEventMap,
     // biome-ignore lint/suspicious/noExplicitAny: Inferred from hooks return; keys checked against merged events
-    HookHandlerMap extends Record<string, any> = Record<never, never>
+    HookHandlerMap extends Record<string, any> = Record<never, never>,
+    // biome-ignore lint/suspicious/noExplicitAny: Inferred from spec.helpers; functions have arbitrary signatures
+    Helpers extends Record<string, (...arguments_: any[]) => any> = Record<never, never>
   >(
     name: PluginName,
     spec: Omit<
@@ -591,7 +609,7 @@ type BoundCreatePluginFunction<
         DependencyPlugins,
         CoreApis
       >,
-      "hooks"
+      "hooks" | "helpers"
     > & {
       hooks?: (
         context: PluginExecutionContext<
@@ -610,8 +628,9 @@ type BoundCreatePluginFunction<
             ) => void | Promise<void>
           : never;
       };
+      helpers?: Helpers;
     }
-  ): PluginInstance<PluginName, PluginConfig, PluginState, PluginApi, PluginEventMap>;
+  ): PluginInstance<PluginName, PluginConfig, PluginState, PluginApi, PluginEventMap> & Helpers;
 };
 
 // =============================================================================
@@ -644,6 +663,7 @@ type RuntimePluginSpec = Record<string, unknown> & {
   readonly onStart?: unknown;
   readonly onStop?: unknown;
   readonly hooks?: unknown;
+  readonly helpers?: unknown;
 };
 
 // =============================================================================
@@ -821,6 +841,49 @@ function assertValidCreateState(
   }
 }
 
+/** PluginInstance field names that cannot be used as helper names. */
+const PLUGIN_INSTANCE_RESERVED_KEYS = new Set(["name", "spec", "_phantom"]);
+
+/**
+ * Validates that `helpers` is a plain object of functions if provided.
+ * Also rejects helper names that collide with PluginInstance properties.
+ *
+ * @param frameworkId - Framework identifier used in error messages.
+ * @param pluginName - Validated plugin name.
+ * @param helpers - Candidate helpers value from plugin spec.
+ * @example
+ * ```ts
+ * assertValidHelpers("my-app", "router", { route: () => ({}) });
+ * ```
+ */
+function assertValidHelpers(frameworkId: string, pluginName: string, helpers: unknown): void {
+  if (helpers === undefined) {
+    return;
+  }
+
+  if (!isRecord(helpers)) {
+    throw new TypeError(
+      `[${frameworkId}] Plugin "${pluginName}" has invalid helpers: expected an object.\n` +
+        `  Provide an object of functions: helpers: { myHelper: (...args) => result }`
+    );
+  }
+
+  for (const [key, value] of Object.entries(helpers)) {
+    if (typeof value !== "function") {
+      throw new TypeError(
+        `[${frameworkId}] Plugin "${pluginName}" has invalid helper "${key}": expected a function.\n` +
+          `  Each helper must be a function.`
+      );
+    }
+    if (PLUGIN_INSTANCE_RESERVED_KEYS.has(key)) {
+      throw new TypeError(
+        `[${frameworkId}] Plugin "${pluginName}" helper "${key}" conflicts with a PluginInstance property.\n` +
+          `  Choose a different helper name.`
+      );
+    }
+  }
+}
+
 // =============================================================================
 // Section 10: Plugin Factory
 // =============================================================================
@@ -868,6 +931,7 @@ function createPluginFactory<
     assertValidHooks(frameworkId, name, spec.hooks);
     assertValidApi(frameworkId, name, spec.api);
     assertValidCreateState(frameworkId, name, spec.createState);
+    assertValidHelpers(frameworkId, name, spec.helpers);
 
     return {
       name,
@@ -877,7 +941,8 @@ function createPluginFactory<
         state: unknown;
         api: unknown;
         events: unknown;
-      }
+      },
+      ...(isRecord(spec.helpers) ? spec.helpers : {})
     };
   };
 
