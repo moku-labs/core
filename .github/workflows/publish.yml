@@ -9,6 +9,10 @@ on:
         description: "Dry run (skip actual publish)"
         type: boolean
         default: false
+      force-latest:
+        description: "Force publish as latest (overrides version-based tag)"
+        type: boolean
+        default: false
 
 jobs:
   ci:
@@ -34,15 +38,19 @@ jobs:
       - name: Determine npm dist-tag
         id: dist-tag
         run: |
-          VERSION=$(node -p "require('./package.json').version")
-          if [[ "$VERSION" == *-alpha* ]]; then
-            echo "tag=alpha" >> "$GITHUB_OUTPUT"
-          elif [[ "$VERSION" == *-beta* ]]; then
-            echo "tag=beta" >> "$GITHUB_OUTPUT"
-          elif [[ "$VERSION" == *-rc* ]]; then
-            echo "tag=next" >> "$GITHUB_OUTPUT"
-          else
+          if [[ "${{ inputs.force-latest }}" == "true" ]]; then
             echo "tag=latest" >> "$GITHUB_OUTPUT"
+          else
+            VERSION=$(node -p "require('./package.json').version")
+            if [[ "$VERSION" == *-alpha* ]]; then
+              echo "tag=alpha" >> "$GITHUB_OUTPUT"
+            elif [[ "$VERSION" == *-beta* ]]; then
+              echo "tag=beta" >> "$GITHUB_OUTPUT"
+            elif [[ "$VERSION" == *-rc* ]]; then
+              echo "tag=next" >> "$GITHUB_OUTPUT"
+            else
+              echo "tag=latest" >> "$GITHUB_OUTPUT"
+            fi
           fi
       - name: Publish to npm
         if: ${{ !inputs.dry-run }}
