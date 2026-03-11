@@ -344,7 +344,7 @@ type EventDescriptor<PayloadType = unknown> = {
  * })
  * ```
  */
-type RegisterFunction = {
+export type RegisterFunction = {
   <PayloadType>(description?: string): EventDescriptor<PayloadType>;
   map: <EventMap extends Record<string, unknown>>(
     descriptions?: { [K in keyof EventMap]?: string }

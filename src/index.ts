@@ -35,6 +35,11 @@ export type { EmitFn } from "./utilities";
 
 export type { CoreConfigResult } from "./config";
 export type { BoundCreateCoreFunction, CreateCoreOptions, CreateCoreResult } from "./core";
-export type { AnyCorePluginInstance, CoreApisFromTuple, CorePluginInstance } from "./core-plugin";
-export type { BoundCreatePluginFunction } from "./plugin";
+export type {
+  AnyCorePluginInstance,
+  CoreApisFromTuple,
+  CorePluginContext,
+  CorePluginInstance
+} from "./core-plugin";
+export type { BoundCreatePluginFunction, RegisterFunction } from "./plugin";
 export type { AnyPluginInstance, App, CreateAppOptions, PluginInstance } from "./types";
