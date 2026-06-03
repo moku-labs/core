@@ -1,6 +1,6 @@
 {
   "name": "@moku-labs/core",
-  "version": "0.1.0-alpha.6",
+  "version": "0.1.1",
   "author": "Alex Kucherenko",
   "repository": {
     "type": "git",
@@ -23,9 +23,9 @@
     "jiti": "2.6.1",
     "lefthook": "2.1.1",
     "publint": "0.3.17",
-    "tsdown": "0.20.3",
-    "typescript": "5.9.3",
-    "typescript-eslint": "8.56.0",
+    "tsdown": "0.22.1",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.58.0",
     "vitest": "4.0.18"
   },
   "exports": {
@@ -40,6 +40,7 @@
       }
     }
   },
+  "sideEffects": false,
   "bugs": {
     "url": "https://github.com/moku-labs/core/issues"
   },

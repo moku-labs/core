@@ -26,7 +26,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        ts-version: ["5.7", "5.8", "5.9"]
+        ts-version: ["5.7", "5.8", "5.9", "6.0"]
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -38,7 +38,7 @@ jobs:
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
           restore-keys: bun-${{ runner.os }}-
       - run: bun ci
-      - if: matrix.ts-version != '5.9'
+      - if: matrix.ts-version != '6.0'
         run: bun add --no-save typescript@~${{ matrix.ts-version }}
       - run: bunx tsc --version
       - run: bun run lint
@@ -49,7 +49,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        ts-version: ["5.7", "5.8", "5.9"]
+        ts-version: ["5.7", "5.8", "5.9", "6.0"]
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -61,7 +61,7 @@ jobs:
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
           restore-keys: bun-${{ runner.os }}-
       - run: bun ci
-      - if: matrix.ts-version != '5.9'
+      - if: matrix.ts-version != '6.0'
         run: bun add --no-save typescript@~${{ matrix.ts-version }}
       - run: bunx tsc --version
       - run: bunx tsc --noEmit
@@ -72,7 +72,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        ts-version: ["5.7", "5.8", "5.9"]
+        ts-version: ["5.7", "5.8", "5.9", "6.0"]
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -84,7 +84,7 @@ jobs:
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
           restore-keys: bun-${{ runner.os }}-
       - run: bun ci
-      - if: matrix.ts-version != '5.9'
+      - if: matrix.ts-version != '6.0'
         run: bun add --no-save typescript@~${{ matrix.ts-version }}
       - run: bunx tsc --version
       - run: bun run test:coverage
@@ -95,7 +95,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        ts-version: ["5.7", "5.8", "5.9"]
+        ts-version: ["5.7", "5.8", "5.9", "6.0"]
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -107,7 +107,7 @@ jobs:
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
           restore-keys: bun-${{ runner.os }}-
       - run: bun ci
-      - if: matrix.ts-version != '5.9'
+      - if: matrix.ts-version != '6.0'
         run: bun add --no-save typescript@~${{ matrix.ts-version }}
       - run: bunx tsc --version
       - run: bun run build
