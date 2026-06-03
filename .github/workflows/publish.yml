@@ -31,10 +31,23 @@ jobs:
           bun-version: "1.3.8"
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          # Node 24 bundles npm >= 11.5.1, the floor for OIDC trusted publishing.
+          node-version: "24"
+          # Targets the publish at npm. Auth is OIDC trusted publishing (configured
+          # on npmjs.com for this repo + publish.yml) — no NODE_AUTH_TOKEN needed.
           registry-url: "https://registry.npmjs.org"
       - run: bun install --frozen-lockfile
       - run: bun run build
+      - name: Assert bundled npm supports OIDC trusted publishing
+        # Read-only, fails closed: trusted publishing needs npm >= 11.5.1. Node 24
+        # bundles it, but this guards against a node-version regression.
+        run: |
+          MIN=11.5.1
+          CUR="$(npm --version)"
+          if [ "$(printf '%s\n%s\n' "$MIN" "$CUR" | sort -V | head -n1)" != "$MIN" ]; then
+            echo "::error::npm ${CUR} < ${MIN} (OIDC trusted publishing needs >= ${MIN}); bump node-version"
+            exit 1
+          fi
       - name: Determine npm dist-tag
         id: dist-tag
         run: |
@@ -52,11 +65,11 @@ jobs:
               echo "tag=latest" >> "$GITHUB_OUTPUT"
             fi
           fi
-      - name: Publish to npm
+      - name: Publish to npm (OIDC trusted publishing)
         if: ${{ !inputs.dry-run }}
-        run: npm publish --provenance --tag ${{ steps.dist-tag.outputs.tag }}
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        # No NODE_AUTH_TOKEN: auth is OIDC via the npm trusted publisher, which
+        # also attaches provenance automatically (no --provenance flag required).
+        run: npm publish --tag ${{ steps.dist-tag.outputs.tag }}
       - name: Dry run
         if: ${{ inputs.dry-run }}
         run: npm publish --dry-run --tag ${{ steps.dist-tag.outputs.tag }}
