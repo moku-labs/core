@@ -1,0 +1,150 @@
+# @moku-labs/core
+
+> Micro-kernel plugin framework for TypeScript. Three layers of isolation (core → framework → consumer), one runtime concept (the factory chain), built for LLM-scale codebases. The kernel has zero domain knowledge — it is pure machinery: plugin registry, lifecycle, a strictly-typed event bus, shallow config resolution, and phantom-type inference. The type system does the heavy lifting; the runtime is < 200 lines, the bundle < 5KB gzipped, with zero dependencies. The entire API fits in an LLM context window by design.
+
+## Mental model
+
+Three layers, each constraining the one above. Slop doesn't spread: consumer code cannot break a plugin; a plugin cannot break the framework; the framework cannot break the kernel.
+
+- **Layer 1 — `@moku-labs/core`:** Pure machinery, zero domain knowledge. Exposes `createCoreConfig` (+ `createCorePlugin` for infrastructure plugins). This is the kernel.
+- **Layer 2 — Framework:** Calls `createCoreConfig<Config, Events>(id, { config })` to capture its config shape + event contract, then `createCore(...)` to capture default plugins. Exports `createApp` + `createPlugin` to consumers.
+- **Layer 3 — Consumer:** Imports `createApp` / `createPlugin` from the *framework*. Never imports `@moku-labs/core` directly — if it needs to, the framework is missing something.
+
+The factory chain is three steps, each capturing types in a closure: `createCoreConfig` (Step 1, binds `Config`/`Events`/core plugins) → `createCore` (Step 2, binds default plugins) → `createApp` (Step 3, merges consumer plugins, runs init, returns a frozen `App`). Plugin order is explicit array order — there is no topological sort.
+
+## Quickstart
+
+```typescript
+// 1. Define the framework (Layer 2)
+import { createCoreConfig } from "@moku-labs/core";
+
+type Config = { siteName: string; mode: "development" | "production" };
+type Events = { "item:added": { id: string }; "item:removed": { id: string } };
+
+const coreConfig = createCoreConfig<Config, Events>("my-fw", {
+  config: { siteName: "Untitled", mode: "development" },
+});
+const { createPlugin, createCore } = coreConfig;
+
+// 2. Write a plugin (all generics inferred from the spec)
+const storePlugin = createPlugin("store", {
+  config: { capacity: 100 },
+  events: (register) => ({
+    "item:added": register<{ id: string }>("An item was added"),
+  }),
+  createState: () => ({ items: [] as string[] }),
+  api: (ctx) => ({
+    add: (id: string) => {
+      ctx.state.items.push(id);
+      ctx.emit("item:added", { id });
+    },
+    count: () => ctx.state.items.length,
+  }),
+});
+
+// 3. Wire the framework — capture defaults, re-export createApp
+const framework = createCore(coreConfig, { plugins: [storePlugin] });
+export const { createApp } = framework;
+
+// 4. Ship the product (Layer 3) — imports from the framework, not the kernel
+const app = createApp({
+  config: { siteName: "My App", mode: "production" },
+  pluginConfigs: { store: { capacity: 500 } },
+});
+
+await app.start();          // optional: onStart, forward order
+app.store.add("a");         // plugin APIs mounted by name, fully typed
+app.emit("item:added", { id: "b" }); // strictly typed, fire-and-forget
+await app.stop();           // optional: onStop, reverse order
+```
+
+## The kernel
+
+Six responsibilities — nothing else:
+
+1. **Collect plugins** into one ordered list: `[...frameworkDefaults, ...consumerExtras]`. Consumers add, never remove or reorder defaults.
+2. **Validate** names and dependencies: no reserved names, no duplicates, every `depends` entry exists and appears *before* its dependent. `TypeError` on failure.
+3. **Resolve config** by shallow merge only (`{ ...defaults, ...overrides }`) — no deep merge; nested objects replace wholesale.
+4. **Run 3 lifecycle phases** sequentially (one plugin at a time, awaited): `onInit` (forward, during `createApp`, sync), `onStart` (forward, during `app.start()`), `onStop` (**reverse**, during `app.stop()`). Core plugins run first on init/start, last on stop.
+5. **Dispatch events** via `emit` — strictly typed, no escape hatch. Fire-and-forget; handlers run sequentially, each awaited.
+6. **Freeze** the app object and all configs (`Object.freeze`). Plugin `state` stays mutable — the only escape hatch.
+
+Lifecycle is non-transactional: errors propagate, the kernel does not roll back. `start()` throws if called twice; `stop()` throws if `start()` never ran. Error format: `[framework-name] <description>.\n  <actionable suggestion>.`
+
+## Plugin spec shape
+
+`createPlugin(name, spec)` — zero explicit generics; every type is inferred from the spec. All fields optional.
+
+```typescript
+createPlugin("name", {
+  config:      { /* defaults, shallow-merged then frozen */ },
+  events:      (register) => ({ "name:event": register<Payload>("description") }),
+  depends:     [otherPlugin],          // validation + type-merge only; instance refs
+  createState: (ctx) => ({ /* mutable state; ctx = { global, config } */ }),
+  api:         (ctx) => ({ /* public methods, mounted on app.name */ }),
+  hooks:       (ctx) => ({ "event:name": (payload) => { /* sync or async */ } }),
+  onInit:      (ctx) => { /* all plugins exist; sync only */ },
+  onStart:     async (ctx) => { /* runtime startup */ },
+  onStop:      async (ctx) => { /* teardown; ctx = { global } only */ },
+  helpers:     { make: (x: string) => ({ x }) }, // static, pre-createApp, no ctx
+});
+```
+
+- `ctx` in `api`/`hooks`/`onInit`/`onStart` is the full `PluginContext`: `{ global, config, state, emit, require, has }` plus any injected core-plugin APIs. `createState` gets `{ global, config }`; `onStop` gets `{ global }`.
+- `emit` is typed by the merged event map: global `Events` + own declared events + dependency events (`UnionToIntersection`). Only known names and exact payloads compile.
+- `require(plugin)` accepts plugin *instance* references only (not strings), returns a typed API or throws. `has(name)` is string-based and returns a boolean.
+- `helpers` are static pure functions spread onto the instance (`PluginInstance<...> & Helpers`), called before `createApp` to produce typed config values. Reserved keys: `name`, `spec`, `_phantom`.
+- Reserved plugin names: `start`, `stop`, `emit`, `require`, `has`, `config`, `global`, `state`, `__proto__`, `constructor`, `prototype`.
+
+**Core plugins** (`createCorePlugin(name, spec)`) are self-contained infrastructure (e.g. log, env, storage). Their APIs are injected flat onto every regular plugin's `ctx` (`ctx.log.info(...)`). They have **no** `depends`, `events`, or `hooks`, and a minimal context (`{ config, state }` only — no `global`/`emit`/`require`/`has`). Spec fields: `config`, `createState`, `api`, `onInit`, `onStart`, `onStop`. Pass them via `createCoreConfig(id, { config, plugins: [logPlugin], pluginConfigs })`.
+
+## Public API
+
+The complete public surface from `src/index.ts`:
+
+```typescript
+// Runtime exports (the only two)
+export { createCoreConfig } from "./config";   // Step 1 of the factory chain
+export { createCorePlugin } from "./core-plugin"; // self-contained infra plugins
+
+// Type utilities for plugin authors (Standard+ tier domain context files)
+export type { PluginCtx } from "./types";      // PluginCtx<C, S, E> — config/state/emit
+export type { EmitFn } from "./utilities";     // EmitFn<E> — event map → emit overloads
+
+// Framework-facing types (return positions; exported to prevent TS4023 in .d.ts)
+export type { CoreConfigResult } from "./config";
+export type { BoundCreateCoreFunction, CreateCoreOptions, CreateCoreResult } from "./core";
+export type {
+  AnyCorePluginInstance,
+  CoreApisFromTuple,
+  CorePluginContext,
+  CorePluginInstance,
+} from "./core-plugin";
+export type { BoundCreatePluginFunction, RegisterFunction } from "./plugin";
+export type { AnyPluginInstance, App, CreateAppOptions, PluginInstance } from "./types";
+```
+
+Signatures (verbatim shapes):
+
+```typescript
+createCoreConfig<Config extends Record<string, unknown>,
+                 Events extends Record<string, unknown> = Record<string, never>,
+                 const CorePlugins extends readonly AnyCorePluginInstance[] = readonly []>(
+  id: string,
+  options: { config: Config; plugins?: [...CorePlugins]; pluginConfigs?: {...} },
+): CoreConfigResult<Config, Events, CorePlugins>;  // { createPlugin, createCore }
+
+createCorePlugin<const N extends string, C, S, A>(
+  name: N, spec: CorePluginSpec<C, S, A>,
+): CorePluginInstance<N, C, S, A>;
+```
+
+`createPlugin` (a `BoundCreatePluginFunction`) and `createCore` (a `BoundCreateCoreFunction`) are obtained from `createCoreConfig`'s result, not imported. `createApp` is obtained from `createCore`'s result and returns a frozen `App` with `start`, `stop`, `emit`, `require`, `has`, plus each non-empty plugin API mounted by literal name.
+
+Event registration uses `RegisterFunction`: `register<T>(description?)` inline, or bulk `register.map<EventMap>({ ... })`. Each call yields an `EventDescriptor<T>` carrying the payload type as a phantom for inference (never read at runtime).
+
+## Further reading
+
+- `llms-full.txt` — the complete API reference: every type, every context tier, full signatures, and runtime semantics.
+- `README.md` — the elevator pitch, four-step quickstart, design principles, and the "why it works for LLMs" framing.
+- `specification/` — the authoritative spec set. Start with `README.md` (index), then `01-ARCHITECTURE.md`, `02-CORE-API.md`, `03-PLUGIN-SYSTEM.md`, `04-FACTORY-CHAIN.md`, `06-LIFECYCLE.md`, `08-CONTEXT.md`, `11-INVARIANTS.md`, `14-EVENT-REGISTRATION.md`, and `13-KERNEL-PSEUDOCODE.md` (reference implementation with rationale).

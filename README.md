@@ -308,7 +308,7 @@ The full specification lives in [`specification/`](specification/):
 
 ## Status
 
-Alpha. API is stabilizing. Not yet published to npm.
+Early release (`0.1.x`). The public API — `createCoreConfig` → `createCore` → `createApp` — is stable; pre-1.0 means internals may still be refined. Published to npm: `bun add @moku-labs/core`.
 
 ## License
 
