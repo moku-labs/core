@@ -64,6 +64,26 @@ describe("validatePlugins - reserved names", () => {
 
     expect(() => validatePlugins("test", flat)).toThrow("reserved app method");
   });
+
+  it("throws on reserved name 'global'", () => {
+    const { createPlugin } = setup();
+
+    const plugin = createPlugin("global", {});
+    const flat = [plugin];
+
+    expect(() => validatePlugins("test", flat)).toThrow(TypeError);
+    expect(() => validatePlugins("test", flat)).toThrow("reserved app method");
+  });
+
+  it("throws on reserved name 'state'", () => {
+    const { createPlugin } = setup();
+
+    const plugin = createPlugin("state", {});
+    const flat = [plugin];
+
+    expect(() => validatePlugins("test", flat)).toThrow(TypeError);
+    expect(() => validatePlugins("test", flat)).toThrow("reserved app method");
+  });
 });
 
 // ---------------------------------------------------------------------------

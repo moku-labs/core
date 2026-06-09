@@ -70,18 +70,14 @@ The same shallow merge rule applies: no deep merge, ever. Each level replaces th
 
 ## 2. The Rule
 
-TypeScript's own type system determines config behavior. No flags. No metadata. Just the type plus the presence of `config`.
+TypeScript's own type system determines config behavior. No flags. No metadata. Just the type inferred from `config`.
 
-| Plugin Config Type `C` | `config` | Consumer must provide |
-|---|---|---|
-| `void` | (ignored) | Nothing. No key in createApp. |
-| `{}` | (ignored) | Nothing. No key in createApp. |
-| `{ field: string }` | absent | **Required.** `{ field: "value" }` -- must provide full C. |
-| `{ field: string }` | present | **Optional.** Can omit entirely or partially override. |
-| `{ req: string; opt?: number }` | absent | **Required.** `{ req: "value" }` at minimum. |
-| `{ req: string; opt?: number }` | present | **Optional.** Defaults cover everything. Override what you want. |
+| Plugin Config Type `C` | `pluginConfigs` key in `createApp` |
+|---|---|
+| `void` / `{}` (no `config` field) | No key. The plugin is excluded from `pluginConfigs` entirely. |
+| `{ field: string }` (inferred from `config`) | **Optional.** Omit entirely or override partially (`Partial<C>`). Overrides are shape-checked: unknown keys and wrong value types are compile errors. |
 
-**Single canonical rule:** Config key is optional in `createApp` if and only if `config` is provided. Otherwise it's required (unless C is void/{}).
+**Single canonical rule:** `C` is inferred from `config`, which declares the complete default value. The consumer's `pluginConfigs` entry is always optional -- there is no compile-time "required config". Values that must come from the consumer are enforced at runtime (section 7).
 
 ---
 
@@ -173,12 +169,11 @@ Plugin config types fully support TypeScript's `?` optional modifier:
 
 ```typescript
 type AnalyticsConfig = {
-  trackingId: string;        // consumer MUST provide this
+  trackingId: string;        // must hold a real value -- enforced at runtime, not compile time
   sampleRate?: number;       // consumer CAN provide this, or leave as undefined
   debugMode?: boolean;       // same -- optional
 };
 
-// With config: config key is optional in createApp
 const analyticsPlugin = createPlugin('analytics', {
   config: {
     trackingId: '',          // empty string -- must be overridden at runtime
@@ -191,21 +186,13 @@ const analyticsPlugin = createPlugin('analytics', {
     }
   },
 });
-
-// Without config: config key is required in createApp
-const strictAnalyticsPlugin = createPlugin('analytics', {
-  // no config -> consumer MUST provide at minimum: { trackingId: 'G-XXXXX' }
-  // sampleRate and debugMode are optional per the type, so consumer can omit them
-  onInit: (ctx) => { /* config is required at createApp call site */ },
-});
 ```
 
 **The interplay:**
 
-- `C`'s required fields (`trackingId: string`) -- consumer must provide them if no `config`
-- `C`'s optional fields (`sampleRate?: number`) -- consumer can always omit them
-- `config` present -- the entire config key becomes optional in `createApp`
-- `config` absent -- the config key is required, but optional `?` fields within C can still be omitted
+- Every `pluginConfigs` entry in `createApp` is optional (`?: Partial<C>`) -- the type system never forces the consumer to provide a config
+- `config` declares the complete default value for `C` (see section 6), so omitted overrides always resolve to defined values
+- Values that genuinely must come from the consumer use a sentinel default plus a runtime check in `onInit` (as above)
 
 ---
 
@@ -229,7 +216,7 @@ pluginConfigs?: {
 - Plugins with non-literal name type (`string`) are excluded — prevents index signature pollution
 - All included plugins get an optional `Partial<ExtractConfig<K>>` key
 
-Config enforcement is **compile-time only** via the TypeScript type system. There is no runtime validation for missing required configs — the type system prevents this at the call site.
+Config enforcement is **compile-time and shape-only**: any override the consumer passes is checked against the plugin's declared config type. Neither the type system nor the runtime flags a *missing* config — every `pluginConfigs` key is optional, and plugin `config` defaults fill the gap. Plugins that need a consumer-provided value validate it at runtime (see section 7).
 
 ---
 

@@ -2,7 +2,7 @@
 
 **Micro-kernel plugin framework for TypeScript. Three layers of isolation. Built for LLM-scale development.**
 
-One runtime export. Bundle < 5KB. Zero dependencies. The type system does the heavy lifting.
+Two runtime exports. Bundle < 8KB gzipped. Zero dependencies. The type system does the heavy lifting.
 
 ```
 bun add @moku-labs/core
@@ -33,7 +33,7 @@ Moku enforces a 3-layer architecture where each layer physically constrains the 
 │  Cannot: modify the kernel                              │
 ├─────────────────────────────────────────────────────────┤
 │  Layer 1: @moku-labs/core                               │
-│  One function. Zero domain knowledge. Pure machinery.   │
+│  Two functions. Zero domain knowledge. Pure machinery.  │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -122,7 +122,7 @@ app.blog.listPosts();           // fully typed
 await app.stop();
 ```
 
-**That's the entire API.** `createCoreConfig` → `createCore` → `createApp`. Three functions, three layers.
+**That's the entire factory chain.** `createCoreConfig` → `createCore` → `createApp`. Three functions, three layers. (A second runtime export, `createCorePlugin`, builds self-contained infrastructure plugins — see the API reference below.)
 
 ---
 
@@ -171,7 +171,7 @@ Moku is designed for a world where LLMs write plugins and CI enforces quality. T
 
 - **Strict emit** — only known event names compile. Wrong payloads are type errors. No `any`, no escape hatch.
 - **Phantom types** — plugin APIs, configs, and events flow through the type system without runtime cost.
-- **Required configs** — if a plugin needs config and you don't provide it, TypeScript tells you.
+- **Typed plugin configs** — `pluginConfigs` overrides are checked against each plugin's declared config shape. Wrong keys or value types don't compile. Overrides are optional — plugin defaults fill anything you omit.
 - **Context tiers** — `createState` can't call `emit` (other plugins don't exist yet). `onStop` can't access other plugins (they may already be stopped). The type system prevents temporal bugs.
 
 ### Runtime guarantees
@@ -248,7 +248,7 @@ Every field is optional. A plugin with only `api` works. A plugin with only `hoo
 
 ```typescript
 // Runtime
-import { createCoreConfig } from '@moku-labs/core';
+import { createCoreConfig, createCorePlugin } from '@moku-labs/core';
 
 // Type utilities for plugin authors
 import type { PluginCtx, EmitFn } from '@moku-labs/core';
@@ -257,6 +257,10 @@ import type { PluginCtx, EmitFn } from '@moku-labs/core';
 ### createCoreConfig\<Config, Events\>(id, options)
 
 Creates a bound factory chain for a framework. Returns `{ createPlugin, createCore }`, both locked to `Config` and `Events`.
+
+### createCorePlugin(name, spec)
+
+Creates a self-contained infrastructure plugin (logging, env, storage). Core plugins are passed to `createCoreConfig` via `plugins`, and their APIs are injected onto every regular plugin's context (`ctx.log.info(...)`). No `depends`, no `events`, no `hooks` — a minimal `{ config, state }` context only.
 
 ### createCore(coreConfig, options)
 

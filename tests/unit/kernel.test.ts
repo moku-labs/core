@@ -705,6 +705,31 @@ describe("onError callback", () => {
     expect(errors).toHaveLength(1);
     expect(errors[0]?.message).toBe("hook b failed");
   });
+
+  it("onError does not receive onStop errors — stop() rejects instead", async () => {
+    const errors: Error[] = [];
+    const cc = createTestCore();
+
+    const a = cc.createPlugin("a", {
+      onStop: () => {
+        throw new Error("teardown failed");
+      }
+    });
+
+    const { createApp } = cc.createCore(cc, {
+      plugins: [a],
+      onError: error => {
+        errors.push(error);
+      }
+    });
+    const app = createApp();
+
+    await app.start();
+
+    // Teardown errors propagate to the stop() caller, not to onError
+    await expect(app.stop()).rejects.toThrow("teardown failed");
+    expect(errors).toHaveLength(0);
+  });
 });
 
 // ---------------------------------------------------------------------------
