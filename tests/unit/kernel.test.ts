@@ -374,9 +374,9 @@ describe("app object shape", () => {
 
     // Plugin is registered (has returns true) but has no mounted API
     expect(app.has("no-api")).toBe(true);
-    // Plugin without api is excluded from App type surface (BuildPluginApis filters it out).
-    // Plugin is registered but has no API to require.
-    expect(() => app.require(noApi)).toThrow();
+    // Plugin without api is excluded from App type surface (BuildPluginApis filters it out)
+    // and is not mounted on the app object at runtime.
+    expect((app as Record<string, unknown>)["no-api"]).toBeUndefined();
   });
 });
 
@@ -560,8 +560,48 @@ describe("require, has", () => {
 
     // Registered by name -> true
     expect(app.has("no-api")).toBe(true);
-    // No API mounted -> require throws
-    expect(() => app.require(noApi)).toThrow();
+    // Registered but api-less -> require agrees with has and returns an empty API
+    expect(app.require(noApi)).toEqual({});
+  });
+
+  it("require returns frozen empty API for registered api-less plugin", async () => {
+    const cc = createTestCore();
+
+    // Hook-only plugin: registered, but declares no api()
+    const noApi = cc.createPlugin("no-api", {
+      onInit: () => {}
+    });
+
+    const { createApp } = cc.createCore(cc, { plugins: [noApi] });
+    const app = createApp();
+
+    const api = app.require(noApi);
+    expect(api).toEqual({});
+    expect(Object.isFrozen(api)).toBe(true);
+    // has() and require() agree for registered plugins
+    expect(app.has("no-api")).toBe(true);
+  });
+
+  it("ctx.require returns empty API for registered api-less plugin inside lifecycle", async () => {
+    const cc = createTestCore();
+    const results: { api: unknown } = { api: undefined };
+
+    const noApi = cc.createPlugin("no-api", {
+      onInit: () => {}
+    });
+
+    const consumer = cc.createPlugin("consumer", {
+      depends: [noApi],
+      onInit: ctx => {
+        results.api = ctx.require(noApi);
+      }
+    });
+
+    const { createApp } = cc.createCore(cc, { plugins: [noApi, consumer] });
+    createApp();
+
+    expect(results.api).toEqual({});
+    expect(Object.isFrozen(results.api)).toBe(true);
   });
 
   it("ctx.require and ctx.has work inside plugin lifecycle", async () => {
