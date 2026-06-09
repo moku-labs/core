@@ -27,7 +27,7 @@ import type {
   ExtractCoreName
 } from "./core-plugin";
 import { type BoundCreatePluginFunction, createPluginFactory } from "./plugin";
-import type { IsLiteralString } from "./utilities";
+import type { EmptyPluginEventMap, IsLiteralString } from "./utilities";
 import { validateCorePlugins } from "./utilities";
 
 // =============================================================================
@@ -80,7 +80,10 @@ interface CoreConfigResult<
  */
 function createCoreConfig<
   Config extends Record<string, unknown>,
-  Events extends Record<string, unknown> = Record<string, never>,
+  // Default must be Record<never, never>, NOT Record<string, never>:
+  // keyof Record<string, never> is string, which would widen the merged event
+  // map's keys and let typo'd hook names compile when Events is omitted.
+  Events extends Record<string, unknown> = EmptyPluginEventMap,
   const CorePlugins extends readonly AnyCorePluginInstance[] = readonly []
 >(
   id: string,
