@@ -409,6 +409,9 @@ function createApp(consumerOptions?: {
   // by which point all APIs are built.
   const apis = new Map<string, any>();
 
+  // Shared frozen API returned by require() for registered plugins without api()
+  const EMPTY_API = Object.freeze({});
+
   // Helper to build core API object for injection onto plugin contexts
   // Produces: { log: LogApi, env: EnvApi, ... } from the coreApis map.
   function buildCoreApiInjection() {
@@ -426,17 +429,18 @@ function createApp(consumerOptions?: {
       config: resolvedConfigs.get(plugin.name),
       state: states.get(plugin.name),
       emit,
-      // Instance-only: accepts PluginInstance, throws if not registered
+      // Instance-only: accepts PluginInstance, throws if not registered.
+      // Registered api-less plugins resolve to a frozen empty object
+      // (matches ExtractApi = Record<string, never> and agrees with has()).
       require: (pluginInstance: PluginInstance) => {
         const api = apis.get(pluginInstance.name);
-        if (!api) {
-          throw new Error(
-            `[${id}] Plugin "${plugin.name}" requires "${pluginInstance.name}", ` +
-            `but "${pluginInstance.name}" is not registered.\n` +
-            `  Add "${pluginInstance.name}" to your plugin list.`
-          );
-        }
-        return api;
+        if (api) return api;
+        if (pluginNameSet.has(pluginInstance.name)) return EMPTY_API;
+        throw new Error(
+          `[${id}] Plugin "${plugin.name}" requires "${pluginInstance.name}", ` +
+          `but "${pluginInstance.name}" is not registered.\n` +
+          `  Add "${pluginInstance.name}" to your plugin list.`
+        );
       },
       // has stays string-based (boolean check) -- checks pluginNameSet, not apis
       has: (name: string) => pluginNameSet.has(name),
@@ -504,16 +508,17 @@ function createApp(consumerOptions?: {
       emit(eventName, payload);
     },
 
-    // Instance-only: accepts PluginInstance, throws if not registered
+    // Instance-only: accepts PluginInstance, throws if not registered.
+    // Registered api-less plugins resolve to a frozen empty object
+    // (matches ExtractApi = Record<string, never> and agrees with has()).
     require: (pluginInstance: PluginInstance) => {
       const api = apis.get(pluginInstance.name);
-      if (!api) {
-        throw new Error(
-          `[${id}] app.require("${pluginInstance.name}") failed: "${pluginInstance.name}" is not registered.\n` +
-          `  Check your plugin list.`
-        );
-      }
-      return api;
+      if (api) return api;
+      if (pluginNameSet.has(pluginInstance.name)) return EMPTY_API;
+      throw new Error(
+        `[${id}] app.require("${pluginInstance.name}") failed: "${pluginInstance.name}" is not registered.\n` +
+        `  Check your plugin list.`
+      );
     },
 
     // has stays string-based (boolean check) -- checks all registered plugins, not just those with APIs

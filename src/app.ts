@@ -121,10 +121,17 @@ function asRecord(value: unknown): Record<string, unknown> {
   return isRecord(value) ? value : {};
 }
 
+/** Shared frozen API for registered plugins that declare no api(). */
+const EMPTY_API: Readonly<Record<string, never>> = Object.freeze({});
+
 /**
  * Create a require function that looks up a plugin API by instance reference.
  *
- * @param runtime - The kernel runtime containing the API map.
+ * Registered plugins without an api() resolve to a frozen empty object —
+ * matching the type contract (ExtractApi = Record<string, never>) and
+ * agreeing with has(). Only genuinely unregistered plugins throw.
+ *
+ * @param runtime - The kernel runtime containing the API map and name set.
  * @param formatError - Formats the error message using the plugin instance name.
  * @returns A function that returns the API for a given plugin instance or throws.
  * @example
@@ -139,8 +146,9 @@ function createRequire(
 ): (instance: AnyPluginInstance) => unknown {
   return (instance: AnyPluginInstance) => {
     const api = runtime.apis.get(instance.name);
-    if (!api) throw new Error(formatError(instance.name));
-    return api;
+    if (api) return api;
+    if (runtime.pluginNameSet.has(instance.name)) return EMPTY_API;
+    throw new Error(formatError(instance.name));
   };
 }
 
