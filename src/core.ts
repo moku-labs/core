@@ -44,7 +44,7 @@ import { checkCorePluginConflicts, validatePlugins } from "./utilities";
  */
 interface CreateCoreOptions<Config> {
   /** Framework default plugins. */
-  readonly plugins: AnyPluginInstance[];
+  readonly plugins: readonly AnyPluginInstance[];
   /** Framework-level plugin config overrides keyed by plugin name. */
   readonly pluginConfigs?: Record<string, unknown>;
   /** Called after all plugins are initialized. */
@@ -134,7 +134,7 @@ type BoundCreateCoreFunction<
       CoreApisFromTuple<CorePlugins>
     >;
   },
-  options: CreateCoreOptions<Config> & { readonly plugins: [...Plugins] }
+  options: CreateCoreOptions<Config> & { readonly plugins: readonly [...Plugins] }
 ) => CreateCoreResult<Config, Events, Plugins, CorePlugins>;
 
 // =============================================================================
