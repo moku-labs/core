@@ -205,6 +205,66 @@ describe("type safety: plugin APIs on app", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Type safety: readonly plugin tuples
+// ---------------------------------------------------------------------------
+
+describe("type safety: readonly plugin tuples", () => {
+  it("createCore accepts an as-const plugin tuple with typed APIs and require", async () => {
+    const cc = createTypedCore();
+
+    const alpha = cc.createPlugin("alpha", {
+      api: () => ({ one: (): number => 1 })
+    });
+    const beta = cc.createPlugin("beta", {
+      api: () => ({ two: (): string => "two" })
+    });
+
+    // Readonly tuple (as const) must be accepted by createCore options.plugins
+    const list = [alpha, beta] as const;
+    const { createApp } = cc.createCore(cc, { plugins: list });
+
+    let readyFired = false;
+    const app = createApp({
+      onReady: ctx => {
+        readyFired = true;
+        // Type-level: require resolves the typed API from a tuple plugin
+        expectTypeOf(ctx.require(alpha)).toEqualTypeOf<{ one: () => number }>();
+        expectTypeOf(ctx.alpha.one).toBeFunction();
+      }
+    });
+
+    // Type-level: APIs inferred from the readonly tuple flow onto the app
+    expectTypeOf(app.alpha.one).toEqualTypeOf<() => number>();
+    expectTypeOf(app.beta.two).toEqualTypeOf<() => string>();
+
+    // @ts-expect-error -- nonExistent is not a registered plugin
+    app.nonExistent;
+
+    // Runtime: plugins from the readonly tuple are initialized and callable
+    expect(readyFired).toBe(true);
+    expect(app.alpha.one()).toBe(1);
+    expect(app.beta.two()).toBe("two");
+  });
+
+  it("createCore still accepts an inline mutable plugin array", () => {
+    const cc = createTypedCore();
+
+    const gamma = cc.createPlugin("gamma", {
+      api: () => ({ three: (): boolean => true })
+    });
+
+    const { createApp } = cc.createCore(cc, { plugins: [gamma] });
+    const app = createApp();
+
+    // Type-level: inference is unchanged for the common inline-array case
+    expectTypeOf(app.gamma.three).toEqualTypeOf<() => boolean>();
+
+    // Runtime
+    expect(app.gamma.three()).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Type safety: config overrides are typed
 // ---------------------------------------------------------------------------
 
