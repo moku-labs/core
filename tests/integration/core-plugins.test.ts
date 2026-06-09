@@ -92,6 +92,9 @@ describe("core plugin API injection", () => {
     const phases: string[] = [];
 
     const probe = cc.createPlugin("probe", {
+      events: register => ({
+        "test:event": register<{ fired: boolean }>("Test event")
+      }),
       api: ctx => {
         if (ctx.log) phases.push("api");
         return { noop: () => {} };

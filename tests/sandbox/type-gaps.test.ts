@@ -1045,7 +1045,93 @@ describe("register.map<Events>() bulk event registration", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Gap 17: Plugin configs are optional overrides, never required
+// Gap 17: Omitted Events generic keeps hook names strict
+// ---------------------------------------------------------------------------
+
+describe("omitted Events generic keeps hook names strict", () => {
+  // Framework that omits the Events generic. The default must be an empty
+  // event map whose keyof is never (Record<never, never>), NOT
+  // Record<string, never> — keyof Record<string, never> is string, which
+  // widens the merged event map and lets typo'd hook names compile silently.
+  const ccNoEvents = createCoreConfig<{ appName: string }>("no-events-test", {
+    config: { appName: "NoEvents" }
+  });
+
+  type StoreEvents = { "store:added": { id: string } };
+
+  const storePlugin = ccNoEvents.createPlugin("store", {
+    events: register => register.map<StoreEvents>({ "store:added": "Item added" }),
+    api: ctx => ({
+      add: (id: string) => {
+        ctx.emit("store:added", { id });
+      }
+    })
+  });
+
+  it("typo'd dependency event hook is rejected at compile time", () => {
+    const plugin = ccNoEvents.createPlugin("typo-hooks", {
+      depends: [storePlugin],
+      // @ts-expect-error -- "store:addde" is a typo of "store:added", mapped to never
+      hooks: _ctx => ({
+        "store:addde": (_payload: unknown) => {}
+      })
+    });
+    expect(plugin.name).toBe("typo-hooks");
+  });
+
+  it("correct dependency event hook compiles and fires at runtime", async () => {
+    const received: Array<{ id: string }> = [];
+
+    const listener = ccNoEvents.createPlugin("good-hooks", {
+      depends: [storePlugin],
+      hooks: _ctx => ({
+        "store:added": payload => {
+          expectTypeOf(payload).toEqualTypeOf<{ id: string }>();
+          received.push(payload);
+        }
+      })
+    });
+
+    const { createApp } = ccNoEvents.createCore(ccNoEvents, {
+      plugins: [storePlugin, listener]
+    });
+    const app = createApp();
+
+    app.require(storePlugin).add("first");
+
+    expect(received).toHaveLength(1);
+    expect(received[0]?.id).toBe("first");
+  });
+
+  it("emit payload inference is unchanged for dependency events", () => {
+    const plugin = ccNoEvents.createPlugin("emit-check", {
+      depends: [storePlugin],
+      api: ctx => ({
+        test: () => {
+          // @ts-expect-error -- id should be string, not number
+          ctx.emit("store:added", { id: 123 });
+        }
+      })
+    });
+    expect(plugin.name).toBe("emit-check");
+  });
+
+  it("unknown event names are rejected in emit", () => {
+    const plugin = ccNoEvents.createPlugin("emit-unknown", {
+      depends: [storePlugin],
+      api: ctx => ({
+        test: () => {
+          // @ts-expect-error -- "store:addde" is not a known event name
+          ctx.emit("store:addde", { id: "1" });
+        }
+      })
+    });
+    expect(plugin.name).toBe("emit-unknown");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Gap 18: Plugin configs are optional overrides, never required
 // ---------------------------------------------------------------------------
 // The docs claim pluginConfigs entries are shape-checked but always optional:
 // there is no compile-time "required config". Plugin spec.config defaults

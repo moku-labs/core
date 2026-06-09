@@ -121,10 +121,17 @@ function asRecord(value: unknown): Record<string, unknown> {
   return isRecord(value) ? value : {};
 }
 
+/** Shared frozen API for registered plugins that declare no api(). */
+const EMPTY_API: Readonly<Record<string, never>> = Object.freeze({});
+
 /**
  * Create a require function that looks up a plugin API by instance reference.
  *
- * @param runtime - The kernel runtime containing the API map.
+ * Registered plugins without an api() resolve to a frozen empty object —
+ * matching the type contract (ExtractApi = Record<string, never>) and
+ * agreeing with has(). Only genuinely unregistered plugins throw.
+ *
+ * @param runtime - The kernel runtime containing the API map and name set.
  * @param formatError - Formats the error message using the plugin instance name.
  * @returns A function that returns the API for a given plugin instance or throws.
  * @example
@@ -139,8 +146,9 @@ function createRequire(
 ): (instance: AnyPluginInstance) => unknown {
   return (instance: AnyPluginInstance) => {
     const api = runtime.apis.get(instance.name);
-    if (!api) throw new Error(formatError(instance.name));
-    return api;
+    if (api) return api;
+    if (runtime.pluginNameSet.has(instance.name)) return EMPTY_API;
+    throw new Error(formatError(instance.name));
   };
 }
 
@@ -263,7 +271,14 @@ function buildEventBus(onError: ((error: Error) => void) | undefined): {
       try {
         await handler(payload);
       } catch (error) {
-        if (onError) onError(error as Error);
+        // A throwing error handler must never abort dispatch: remaining hooks
+        // still run, and the fire-and-forget emit never leaves an unhandled
+        // rejection behind.
+        try {
+          if (onError) onError(error as Error);
+        } catch {
+          // Errors thrown by the error handler itself are discarded.
+        }
       }
     }
   }
@@ -727,11 +742,17 @@ function kernel(parameters: KernelParameters): DynamicObject {
   const states = createPluginStates(flatPlugins, globalConfig, resolvedConfigs);
 
   // Combine framework + consumer onError into a single handler.
+  // Each call is guarded so a throwing framework handler never prevents the
+  // consumer handler from running (spec 07: both are invoked if provided).
   // References to runtime are resolved at call time, not definition time.
   const combinedOnError =
     onError || consumer?.onError
       ? (error: Error): void => {
-          if (onError) onError(error);
+          try {
+            if (onError) onError(error);
+          } catch {
+            // Errors thrown by the framework handler are discarded.
+          }
           if (consumer?.onError) consumer.onError(error, buildCallbackContext(runtime));
         }
       : undefined;
