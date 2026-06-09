@@ -1,6 +1,6 @@
 # @moku-labs/core
 
-> Micro-kernel plugin framework for TypeScript. Three layers of isolation (core → framework → consumer), one runtime concept (the factory chain), built for LLM-scale codebases. The kernel has zero domain knowledge — it is pure machinery: plugin registry, lifecycle, a strictly-typed event bus, shallow config resolution, and phantom-type inference. The type system does the heavy lifting; the runtime is < 200 lines, the bundle < 5KB gzipped, with zero dependencies. The entire API fits in an LLM context window by design.
+> Micro-kernel plugin framework for TypeScript. Three layers of isolation (core → framework → consumer), one runtime concept (the factory chain), built for LLM-scale codebases. The kernel has zero domain knowledge — it is pure machinery: plugin registry, lifecycle, a strictly-typed event bus, shallow config resolution, and phantom-type inference. The type system does the heavy lifting; the runtime stays small, the bundle < 8KB gzipped, with zero dependencies. The entire API fits in an LLM context window by design.
 
 ## Mental model
 

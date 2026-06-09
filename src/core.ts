@@ -49,7 +49,7 @@ interface CreateCoreOptions<Config> {
   readonly pluginConfigs?: Record<string, unknown>;
   /** Called after all plugins are initialized. */
   readonly onReady?: (context: { config: Readonly<Config> }) => void;
-  /** Error handler for hook dispatch and teardown failures. */
+  /** Error handler for hook dispatch failures. Lifecycle errors from start()/stop() propagate to the caller instead. */
   readonly onError?: (error: Error) => void;
 }
 

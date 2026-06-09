@@ -1,6 +1,6 @@
 # @moku-labs/core — full reference
 
-> @moku-labs/core is a micro-kernel plugin framework for TypeScript built for LLM-scale development. It ships exactly two runtime exports (`createCoreConfig` and `createCorePlugin`) and three architectural layers (core → framework → consumer), each one constraining the layer above so generated code cannot break the layers below. The kernel has zero domain knowledge: it collects plugins, validates names and dependencies, resolves config by shallow merge, runs three lifecycle phases in deterministic order, dispatches strictly-typed events, and freezes the app and all configs when done. The type system does the heavy lifting — runtime is < 200 lines, the bundle is < 5KB min+gzip with zero dependencies. This file is the complete briefing: read it before writing any @moku-labs/core code. Package: `@moku-labs/core` (v0.1.1, MIT). Install: `bun add @moku-labs/core`.
+> @moku-labs/core is a micro-kernel plugin framework for TypeScript built for LLM-scale development. It ships exactly two runtime exports (`createCoreConfig` and `createCorePlugin`) and three architectural layers (core → framework → consumer), each one constraining the layer above so generated code cannot break the layers below. The kernel has zero domain knowledge: it collects plugins, validates names and dependencies, resolves config by shallow merge, runs three lifecycle phases in deterministic order, dispatches strictly-typed events, and freezes the app and all configs when done. The type system does the heavy lifting — the runtime stays small, the bundle is < 8KB gzipped with zero dependencies. This file is the complete briefing: read it before writing any @moku-labs/core code. Package: `@moku-labs/core` (v0.1.1, MIT). Install: `bun add @moku-labs/core`.
 
 This document covers the kernel only. It contains NO domain concepts — no routing, HTTP, rendering, persistence, or UI. Those belong to frameworks (Layer 2) built on top of the kernel.
 
@@ -79,7 +79,7 @@ interface CreateCoreOptions<Config> {
 - `options.plugins`: framework default plugins. Always loaded; the consumer cannot remove them, only configure them.
 - `options.pluginConfigs`: framework-level plugin config overrides keyed by plugin name (3rd merge level).
 - `onReady` (framework): runs after all `onInit`, receives only `{ config }`.
-- `onError`: error handler for hook dispatch and teardown failures.
+- `onError`: error handler for hook dispatch failures. Lifecycle errors (`start()`/`stop()`) are not routed here — they propagate to the caller.
 
 Returns `CreateCoreResult` exposing `createApp` (generic over consumer `ExtraPlugins`) and a re-exported `createPlugin`.
 
@@ -308,7 +308,7 @@ Freezing and mutability:
 - The entire `App` object: `Object.freeze`'d after build.
 - **Plugin `state` is never frozen** — it is the deliberate mutable escape hatch for side effects in `api`/`hooks`/`onInit`/`onStart`.
 
-If a plugin requires config (non-`void` `C`), TypeScript rejects `createApp` calls that omit it — required configs are a compile-time guarantee.
+Config typing is shape-only: any `pluginConfigs` override is checked against the plugin's declared config type (unknown keys and wrong value types are compile errors), but every entry is optional — nothing forces a consumer to provide a config. Plugin `spec.config` defaults apply when omitted; values that must come from the consumer are validated at runtime (e.g. in `onInit`).
 
 ## 8. Core plugins — self-contained infrastructure
 
@@ -396,7 +396,7 @@ app.somePlugin.method();    // plugin APIs mounted by name, fully typed
 
 Guarantees:
 
-- **Reserved names** (throw `TypeError` at registration): `start`, `stop`, `emit`, `require`, `has`, `config`, `global`, `state`, `__proto__`, `constructor`, `prototype`. The same set applies to both regular plugins (`RESERVED_NAMES`) and core plugins (`CORE_PLUGIN_RESERVED_NAMES`) — the two sets are identical.
+- **Reserved names** (throw `TypeError` at registration): `start`, `stop`, `emit`, `require`, `has`, `config`, `global`, `state`, `__proto__`, `constructor`, `prototype`. The same `RESERVED_NAMES` set applies to both regular plugins and core plugins.
 - **Name uniqueness:** duplicate plugin names throw; no silent overwrite, no merge, no last-wins.
 - **Dependency validation only:** `depends` validates that array order satisfies declarations (dep exists and appears before the dependent). No topological sort, no reordering.
 - **Deterministic order:** init/start forward (array order); stop reverse. Always.

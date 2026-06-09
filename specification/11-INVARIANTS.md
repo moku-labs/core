@@ -11,7 +11,7 @@ These properties always hold. Breaking any of these is a kernel bug.
 
 ### 1.1 Reserved Names
 
-**Plugin names cannot conflict with reserved app method names.** The reserved names are: `start`, `stop`, `emit`, `require`, `has`, `config`, `__proto__`, `constructor`, `prototype`.
+**Plugin names cannot conflict with reserved app method names, plugin context keys, or dangerous object keys.** The reserved names are: `start`, `stop`, `emit`, `require`, `has`, `config`, `global`, `state`, `__proto__`, `constructor`, `prototype`.
 
 ```
 TypeError: [moku-site] Plugin name "start" conflicts with a reserved app method.
@@ -167,7 +167,7 @@ Core plugin lifecycle methods (`onInit`, `onStart`, `onStop`) and `api` receive 
 Core plugin names must not conflict with:
 - Regular plugin names
 - Other core plugin names
-- Reserved app method names (`start`, `stop`, `emit`, `require`, `has`, `config`, `__proto__`, `constructor`, `prototype`)
+- Reserved names (`start`, `stop`, `emit`, `require`, `has`, `config`, `global`, `state`, `__proto__`, `constructor`, `prototype`)
 
 ```
 TypeError: [moku-site] Core plugin name "log" conflicts with regular plugin name "log".

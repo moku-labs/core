@@ -1129,3 +1129,66 @@ describe("omitted Events generic keeps hook names strict", () => {
     expect(plugin.name).toBe("emit-unknown");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Gap 18: Plugin configs are optional overrides, never required
+// ---------------------------------------------------------------------------
+// The docs claim pluginConfigs entries are shape-checked but always optional:
+// there is no compile-time "required config". Plugin spec.config defaults
+// apply when the consumer omits an override.
+
+describe("plugin configs are optional, shape-checked overrides", () => {
+  const configured = cp("configured", {
+    config: { basePath: "/", retries: 3 },
+    api: ctx => ({
+      base: () => ctx.config.basePath,
+      retries: () => ctx.config.retries
+    })
+  });
+
+  it("createApp compiles with no options even when a plugin declares config", () => {
+    const { createApp } = cc.createCore(cc, { plugins: [configured] });
+
+    // No config override anywhere — defaults apply. This compiling is the
+    // documented behavior: configs are never required at the call site.
+    const app = createApp();
+
+    expect(app.configured.base()).toBe("/");
+  });
+
+  it("partial overrides compile; omitted fields fall back to defaults", () => {
+    const { createApp } = cc.createCore(cc, { plugins: [configured] });
+
+    const app = createApp({
+      pluginConfigs: {
+        configured: { basePath: "/api" } // retries omitted — Partial<C>
+      }
+    });
+
+    expect(app.configured.base()).toBe("/api");
+    expect(app.configured.retries()).toBe(3);
+  });
+
+  it("overrides are shape-checked: wrong types and unknown keys do not compile", () => {
+    const { createApp } = cc.createCore(cc, { plugins: [configured] });
+
+    const app = createApp({
+      pluginConfigs: {
+        // @ts-expect-error -- basePath should be string, not number
+        configured: { basePath: 123 }
+      }
+    });
+
+    createApp({
+      pluginConfigs: {
+        configured: {
+          basePath: "/ok",
+          // @ts-expect-error -- unknown config key is a compile error
+          unknownKey: true
+        }
+      }
+    });
+
+    expect(app).toBeDefined();
+  });
+});
