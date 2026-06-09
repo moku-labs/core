@@ -360,8 +360,14 @@ function createApp(consumerOptions?: {
 
   // Combined onError: calls both framework and consumer handlers.
   // Consumer onError receives (error, AppCallbackContext).
+  // The framework call is guarded: a throwing framework handler must not
+  // prevent the consumer handler from running.
   const combinedOnError = (err: Error) => {
-    if (options.onError) options.onError(err);
+    try {
+      if (options.onError) options.onError(err);
+    } catch {
+      // Errors thrown by the framework handler are discarded.
+    }
     if (consumerOnError) consumerOnError(err, buildCallbackContext());
   };
 
@@ -371,8 +377,14 @@ function createApp(consumerOptions?: {
       try {
         await handler(payload);
       } catch (err) {
-        // One failing hook does not stop other hooks from running.
-        combinedOnError(err as Error);
+        // One failing hook does not stop other hooks from running -- and a
+        // throwing error handler must never abort dispatch or surface an
+        // unhandled rejection through the fire-and-forget emit.
+        try {
+          combinedOnError(err as Error);
+        } catch {
+          // Errors thrown by the error handler itself are discarded.
+        }
       }
     }
   }

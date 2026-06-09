@@ -705,6 +705,64 @@ describe("onError callback", () => {
     expect(errors).toHaveLength(1);
     expect(errors[0]?.message).toBe("hook b failed");
   });
+
+  it("a throwing onError does not abort dispatch or leak an unhandled rejection", async () => {
+    const hookCalls: string[] = [];
+    const handlerCalls: string[] = [];
+    const cc = createTestCore();
+
+    const a = cc.createPlugin("a", {
+      hooks: _ctx => ({
+        "test:event": () => {
+          hookCalls.push("a");
+          throw new Error("hook a failed");
+        }
+      })
+    });
+    const b = cc.createPlugin("b", {
+      hooks: _ctx => ({
+        "test:event": () => {
+          hookCalls.push("b");
+        }
+      })
+    });
+
+    const { createApp } = cc.createCore(cc, {
+      plugins: [a, b],
+      onError: error => {
+        handlerCalls.push(error.message);
+        throw new Error("error handler exploded");
+      }
+    });
+    const app = createApp();
+
+    // Capture unhandled rejections while the fire-and-forget dispatch settles.
+    const rejections: unknown[] = [];
+    const captureRejection = (reason: unknown): void => {
+      rejections.push(reason);
+    };
+    process.on("unhandledRejection", captureRejection);
+
+    try {
+      app.emit("test:event", {});
+
+      // emit is fire-and-forget. Allow microtasks + rejection events to settle.
+      await new Promise(resolve => {
+        setTimeout(resolve, 0);
+      });
+      await new Promise(resolve => {
+        setTimeout(resolve, 0);
+      });
+    } finally {
+      process.off("unhandledRejection", captureRejection);
+    }
+
+    // Hook b still ran despite the error handler throwing for hook a
+    expect(hookCalls).toEqual(["a", "b"]);
+    expect(handlerCalls).toEqual(["hook a failed"]);
+    // The dispatch promise never rejected
+    expect(rejections).toEqual([]);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -892,5 +950,43 @@ describe("consumer lifecycle callbacks", () => {
     });
 
     expect(errors).toEqual(["hook failed"]);
+  });
+
+  it("consumer onError still runs when framework onError throws", async () => {
+    const frameworkErrors: string[] = [];
+    const consumerErrors: string[] = [];
+    const cc = createTestCore();
+
+    const faulty = cc.createPlugin("faulty", {
+      hooks: _ctx => ({
+        "test:event": () => {
+          throw new Error("hook failed");
+        }
+      })
+    });
+
+    const { createApp } = cc.createCore(cc, {
+      plugins: [faulty],
+      onError: error => {
+        frameworkErrors.push(error.message);
+        throw new Error("framework handler exploded");
+      }
+    });
+    const app = createApp({
+      onError: error => {
+        consumerErrors.push(error.message);
+      }
+    });
+
+    app.emit("test:event", {});
+
+    // emit is fire-and-forget (void dispatch). Allow microtasks to settle.
+    await new Promise(resolve => {
+      setTimeout(resolve, 0);
+    });
+
+    // Both handlers were invoked despite the framework handler throwing
+    expect(frameworkErrors).toEqual(["hook failed"]);
+    expect(consumerErrors).toEqual(["hook failed"]);
   });
 });
