@@ -88,6 +88,7 @@ jobs:
         run: bun add --no-save typescript@~${{ matrix.ts-version }}
       - run: bunx tsc --version
       - run: bun run test:coverage
+      - run: bun run test:sandbox
 
   build-validate:
     runs-on: ubuntu-latest
