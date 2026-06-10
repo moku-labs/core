@@ -338,8 +338,11 @@ EVENT SYSTEM:
   Events are notifications. Use ctx.require(pluginInstance) for request/response.
 
 CONFIG RULES:
-  - config present = config key optional in createApp
-  - config absent + non-void config = config key required in createApp
+  - config declares the complete default value; C is inferred from it
+  - pluginConfigs key is ALWAYS optional (Partial<C>) -- defaults fill omissions
+  - Overrides are shape-checked: unknown keys / wrong value types = compile errors
+  - No config field = plugin excluded from pluginConfigs entirely
+  - Consumer-required values: sentinel default + runtime check in onInit
   - Shallow merge: { ...config, ...consumerConfig }
   - Configs are frozen after creation
   - depends: [pluginInstance] declares dependencies (instance-based). Validated at startup. Not a sort.

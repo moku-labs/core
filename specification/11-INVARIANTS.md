@@ -43,9 +43,13 @@ TypeError: [moku-site] Plugin "router" depends on "logger", but "logger" appears
 
 This is **validation only.** It does not change plugin order. It does not compute a topological sort. It checks that the order the consumer provided satisfies the declared constraints.
 
-### 1.4 Config Completeness
+### 1.4 Config Shape Checking
 
-If a plugin requires config (no `config`, non-void `C`), TypeScript rejects `createApp` without it. Config enforcement is compile-time only via the type system.
+Every `pluginConfigs` entry in `createApp` is optional. There is no compile-time "required config" -- a plugin's `config` declares the complete default value, and defaults fill anything the consumer omits. Plugins with no `config` field are excluded from `pluginConfigs` entirely.
+
+Config enforcement is compile-time and shape-only: any override the consumer does pass is checked against the plugin's declared config type (`Partial<C>`). Unknown keys and wrong value types are compile errors.
+
+Values that genuinely must come from the consumer use a sentinel default plus a runtime check in `onInit` (see [05-CONFIG-SYSTEM](./05-CONFIG-SYSTEM.md), section 7).
 
 ### 1.5 Lifecycle Order
 
