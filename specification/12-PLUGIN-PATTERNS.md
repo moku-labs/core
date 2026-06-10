@@ -326,7 +326,7 @@ LIFECYCLE (3 phases):
 
   All lifecycle methods support async (return void | Promise<void>).
   Execution is sequential -- Plugin A completes before Plugin B begins.
-  createApp returns a Promise -- ALWAYS use await.
+  createApp is synchronous -- no await. app.start()/app.stop() return Promises -- ALWAYS await them.
 
 EVENT SYSTEM:
   Two sources of typed events:
@@ -364,7 +364,7 @@ RULES:
   - Never put more than ~50 lines of logic in a plugin index.ts.
   - Plugin index.ts is a CONNECTION POINT. Domain code lives in separate files.
   - Use ctx.require(pluginInstance) for dependencies. Use ctx.has('name') for optional deps.
-  - ALWAYS createApp -- it returns a Promise.
+  - createApp is synchronous. ALWAYS await app.start() and app.stop() -- they return Promises.
 
 APP-LEVEL TYPING:
   app.pluginName.method() is fully typed via the plugin's api return type.

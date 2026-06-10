@@ -196,7 +196,7 @@ This is not "functional programming" as in monads and persistent data structures
 The framework is designed **types-first.** The runtime is trivial (under 200 lines). The type system does the hard work:
 
 - Plugin names become literal string types that flow through the entire system.
-- Plugin config types are enforced at `createApp()` -- if a plugin requires config, you *must* provide it.
+- Plugin config overrides are shape-checked at `createApp()` -- unknown keys and wrong value types do not compile. Every override is optional; plugin defaults fill whatever you omit.
 - Plugin API types are merged into the `App` type -- `app.router.navigate()` is fully typed without any manual type annotation by the consumer.
 - The type system acts as documentation, IDE autocomplete, and compile-time validation simultaneously.
 
@@ -305,7 +305,7 @@ Consumers cannot remove default plugins. They can configure them.
 1. Import `createApp` and optionally `createPlugin` from the framework.
 2. Create custom plugins if needed (using the framework's `createPlugin`).
 3. Call `createApp` with a single flat object: extra plugins, config overrides, plugin configs.
-4. TypeScript tells you what's required and what's optional.
+4. TypeScript tells you the exact shape of every option -- all overrides are optional and shape-checked.
 5. Use `app.pluginName.method()` -- everything is typed.
 
 The consumer never sees `createCoreConfig`. Never sees `@moku-labs/core`. Never thinks about lifecycle phases or plugin validation. They declare, configure, and compose.
