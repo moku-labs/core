@@ -46,7 +46,7 @@
   },
   "description": "Micro-kernel plugin framework for LLMs (TypeScript)",
   "engines": {
-    "node": ">=22.0.0",
+    "node": ">=24.0.0",
     "bun": ">=1.3.8"
   },
   "files": [
