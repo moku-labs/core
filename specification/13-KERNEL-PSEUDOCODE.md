@@ -167,7 +167,7 @@ function createCore(
   const frameworkPluginConfigs = options.pluginConfigs ?? {};
   const createCorePluginConfigs = options.pluginConfigs ?? {};  // level 3 for core plugins
 
-  async function createApp(consumerOptions?) { /* see Section 5 */ }
+  function createApp(consumerOptions?) { /* see Section 5 */ }
 
   return { createApp, createPlugin };
 }

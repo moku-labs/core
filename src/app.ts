@@ -691,7 +691,7 @@ function initCorePlugins(
  * @returns The frozen app object.
  * @example
  * ```ts
- * const app = await kernel({ id: "my-app", configDefaults: {}, ... });
+ * const app = kernel({ id: "my-app", configDefaults: {}, ... });
  * ```
  */
 function kernel(parameters: KernelParameters): DynamicObject {
