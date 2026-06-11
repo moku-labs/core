@@ -81,6 +81,28 @@ describe("core plugin API injection", () => {
     expect(app.log.getEntries()).toEqual(["[info] hello from writer"]);
   });
 
+  it("ctx.require also resolves a core-plugin instance (typed, no cast)", () => {
+    const env = createEnvPlugin();
+
+    const cc = createCoreConfig("test", {
+      config: { siteName: "Test" },
+      plugins: [env]
+    });
+
+    // PluginLike admits core-plugin instances (no events phantom), matching the
+    // runtime: initCorePlugins registers core APIs in the same require lookup map.
+    const probe = cc.createPlugin("probe", {
+      api: ctx => ({
+        readEnv: () => ctx.require(env).getEnv()
+      })
+    });
+
+    const { createApp } = cc.createCore(cc, { plugins: [probe] });
+    const app = createApp();
+
+    expect(app.probe.readEnv()).toBe("development");
+  });
+
   it("core APIs are available in api, onInit, and onStart callbacks", async () => {
     const log = createLogPlugin();
 

@@ -120,6 +120,8 @@ import {
 
 /**
  * Structural plugin shape used for generic constraints without variance issues.
+ * `events` is optional so core-plugin instances (no events phantom) match too —
+ * the runtime already resolves them through the same `require` lookup map.
  *
  * @example
  * ```ts
@@ -133,7 +135,7 @@ type PluginLike = {
     readonly config: unknown;
     readonly state: unknown;
     readonly api: unknown;
-    readonly events: Record<string, unknown>;
+    readonly events?: Record<string, unknown>;
   };
 };
 
