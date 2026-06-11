@@ -227,7 +227,7 @@ const counterPlugin = createPlugin('counter', {
 
 ### `require(plugin)` -- Instance-Only, Fully Typed
 
-Returns the plugin's public API object or throws with a clear error message. Only accepts a PluginInstance reference -- no string overload.
+Returns the plugin's public API object or throws with a clear error message. Only accepts a plugin instance reference -- no string overload. Core-plugin instances resolve too (their APIs live in the same lookup map), though the flat-injected `ctx.log`/`ctx.env` (section 2b) remain the idiomatic access path.
 
 ```typescript
 // In a plugin with depends: [routerPlugin]
