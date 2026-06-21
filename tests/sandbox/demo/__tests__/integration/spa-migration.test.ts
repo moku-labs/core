@@ -2,11 +2,11 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 import {
   bundlerPlugin,
   cliPlugin,
-  islandsPlugin,
   contentPlugin,
   createApp,
   createPlugin,
   headPlugin,
+  islandsPlugin,
   progressPlugin,
   routerPlugin
 } from "../../tools";
