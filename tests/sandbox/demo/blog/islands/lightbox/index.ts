@@ -2,14 +2,14 @@
  * Lightbox island — consumer plugin.
  *
  * Route-specific island (mounts only on `/gallery` and `/photos`).
- * Registers itself with the component manager during `onInit`.
+ * Registers itself with the island manager during `onInit`.
  * Provides open/close API for image viewing.
  */
 import { createPlugin } from "../../../tools";
-import { componentsPlugin } from "../../../tools/plugins/components";
+import { islandsPlugin } from "../../../tools/plugins/islands";
 
 export const lightboxIsland = createPlugin("lightbox", {
-  depends: [componentsPlugin],
+  depends: [islandsPlugin],
   createState: () => ({
     isOpen: false,
     currentImage: ""
@@ -27,7 +27,7 @@ export const lightboxIsland = createPlugin("lightbox", {
     getCurrentImage: (): string => ctx.state.currentImage
   }),
   onInit: ctx => {
-    ctx.require(componentsPlugin).register({
+    ctx.require(islandsPlugin).register({
       name: "lightbox",
       selector: "[data-island='lightbox']",
       routes: ["/gallery", "/photos"]

@@ -8,9 +8,9 @@
 import { coreConfig, createCore } from "./config";
 import { bundlerPlugin } from "./plugins/bundler";
 import { cliPlugin } from "./plugins/cli";
-import { componentsPlugin } from "./plugins/components";
 import { contentPlugin } from "./plugins/content";
 import { headPlugin } from "./plugins/head";
+import { islandsPlugin } from "./plugins/islands";
 import { progressPlugin } from "./plugins/progress";
 import { routerPlugin } from "./plugins/router";
 
@@ -19,7 +19,7 @@ const framework = createCore(coreConfig, {
     // SPA domain
     routerPlugin,
     progressPlugin,
-    componentsPlugin,
+    islandsPlugin,
     headPlugin,
     // Build domain
     contentPlugin,
@@ -40,8 +40,8 @@ export const { createApp, createPlugin } = framework;
 // Re-export all framework plugins for consumer `depends` and test access
 export { bundlerPlugin } from "./plugins/bundler";
 export { cliPlugin } from "./plugins/cli";
-export { componentsPlugin } from "./plugins/components";
 export { contentPlugin } from "./plugins/content";
 export { headPlugin } from "./plugins/head";
+export { islandsPlugin } from "./plugins/islands";
 export { progressPlugin } from "./plugins/progress";
 export { routerPlugin } from "./plugins/router";

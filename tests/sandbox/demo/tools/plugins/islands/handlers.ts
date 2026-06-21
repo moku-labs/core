@@ -1,34 +1,34 @@
-import type { ComponentsCtx } from "./types";
+import type { IslandsCtx } from "./types";
 
 /**
  * Create a `nav:start` handler that unmounts all currently mounted
- * components. Called from the components plugin's `hooks` to simulate
+ * islands. Called from the islands plugin's `hooks` to simulate
  * the SPA kernel's `unmountPageSpecific` behavior. Emits
- * `component:unmount` for each unmounted component.
+ * `island:unmount` for each unmounted island.
  *
- * @param {ComponentsCtx} ctx - The components plugin context.
+ * @param {IslandsCtx} ctx - The islands plugin context.
  * @returns {() => void} A handler for the `nav:start` event.
  */
-export const handleNavStart = (ctx: ComponentsCtx) => () => {
+export const handleNavStart = (ctx: IslandsCtx) => () => {
   for (const [name, instance] of ctx.state.instances) {
     if (instance.mounted) {
       instance.mounted = false;
-      ctx.emit("component:unmount", { name, selector: instance.selector });
+      ctx.emit("island:unmount", { name, selector: instance.selector });
     }
   }
 };
 
 /**
- * Create a `nav:end` handler that mounts components whose routes match
- * the new URL. Called from the components plugin's `hooks` to simulate
+ * Create a `nav:end` handler that mounts islands whose routes match
+ * the new URL. Called from the islands plugin's `hooks` to simulate
  * the SPA kernel's `scanAndMount` behavior. Creates new instances for
- * first-time mounts. Emits `component:mount` for each mounted component.
+ * first-time mounts. Emits `island:mount` for each mounted island.
  *
- * @param {ComponentsCtx} ctx - The components plugin context.
+ * @param {IslandsCtx} ctx - The islands plugin context.
  * @returns {(payload: { to: string }) => void} A handler for the `nav:end` event.
  */
 export const handleNavEnd =
-  (ctx: ComponentsCtx) =>
+  (ctx: IslandsCtx) =>
   ({ to }: { to: string }) => {
     for (const [, def] of ctx.state.registry) {
       const routes = def.routes ?? ["*"];
@@ -45,7 +45,7 @@ export const handleNavEnd =
             mounted: true
           });
         }
-        ctx.emit("component:mount", {
+        ctx.emit("island:mount", {
           name: def.name,
           selector: def.selector
         });
