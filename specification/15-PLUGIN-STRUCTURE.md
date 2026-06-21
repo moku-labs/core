@@ -651,7 +651,7 @@ plugins/
 
 ### 3.5 SPA Plugins
 
-Client routing, component lifecycle, head management, progress indicators, hydration.
+Client routing, island lifecycle, head management, progress indicators, hydration.
 
 **Tier: Standard (single concern) or Very Complex (full SPA engine with multiple modules).**
 
@@ -686,10 +686,10 @@ plugins/
     progress/
       state.ts               # Progress bar state (active flag, element ref).
       api.ts                 # start(), done() — navigation progress bar.
-    components/
-      types.ts               # ComponentDef, ComponentHooks, ComponentInstance.
-      state.ts               # Component registry, mounted instances map.
-      api.ts                 # createComponent(), scanAndMount(), unmountPageSpecific().
+    islands/
+      types.ts               # IslandDef, IslandHooks, IslandInstance.
+      state.ts               # Island registry, mounted instances map.
+      api.ts                 # createIsland(), scanAndMount(), unmountPageSpecific().
     router/
       types.ts               # PageData, RouterHandlers.
       state.ts               # Navigation state (active, cleanup).
@@ -699,7 +699,7 @@ plugins/
       unit/
         head-api.test.ts           # Unit test.
         progress-api.test.ts       # Unit test.
-        components-api.test.ts     # Unit test.
+        islands-api.test.ts     # Unit test.
         router-api.test.ts         # Unit test.
       integration/
         spa.test.ts                # Integration test.
@@ -711,7 +711,7 @@ import { createPlugin } from '../../config';
 import { routerPlugin } from '../router';
 import { createHeadApi } from './head/api';
 import { createProgressState, createProgressApi } from './progress/api';
-import { createComponentsState, createComponentsApi } from './components/api';
+import { createIslandsState, createIslandsApi } from './islands/api';
 import { createSpaRouterState, createSpaRouterApi } from './router/api';
 import type { SpaEvents } from './types';
 
@@ -720,25 +720,25 @@ export const spaPlugin = createPlugin('spa', {
   config: {
     router: { viewTransitions: false, progressBar: true },
     progress: { enabled: true, color: '#0076ff', height: 2 },
-    components: { swapSelector: 'main > section', componentAttribute: 'data-component' },
+    islands: { swapSelector: 'main > section', islandAttribute: 'data-island' },
   },
   createState: () => ({
     router: createSpaRouterState(),
     progress: createProgressState(),
-    components: createComponentsState(),
+    islands: createIslandsState(),
   }),
   events: register => register.map<SpaEvents>({
     'nav:start':          'Navigation started (before fetch)',
     'nav:end':            'Navigation completed (after DOM swap)',
-    'component:create':   'Component instance created',
-    'component:mount':    'Component mounted into DOM',
-    'component:unmount':  'Component unmounted from DOM',
-    'component:destroy':  'Component permanently destroyed',
+    'island:create':   'Island instance created',
+    'island:mount':    'Island mounted into DOM',
+    'island:unmount':  'Island unmounted from DOM',
+    'island:destroy':  'Island permanently destroyed',
   }),
   api: ctx => ({
     head:       createHeadApi(),
     progress:   createProgressApi(ctx),
-    components: createComponentsApi(ctx),
+    islands: createIslandsApi(ctx),
     router:     createSpaRouterApi(ctx),
   }),
   onStart: ctx => {
@@ -754,13 +754,13 @@ export const spaPlugin = createPlugin('spa', {
       }
     },
     'nav:end': () => {
-      // Complete progress bar, scan for new components
+      // Complete progress bar, scan for new islands
     },
   }),
 });
 ```
 
-**Why one plugin, not four:** The head, progress, components, and router modules share navigation events, coordinate during the nav:start → fetch → swap → nav:end flow, and are always used together. Separate plugins would add registration noise (4 array entries) and API surface clutter (4 top-level names on `app`) for modules that have no independent use case. One very complex plugin with namespaced API (`app.spa.head`, `app.spa.router`) is cleaner.
+**Why one plugin, not four:** The head, progress, islands, and router modules share navigation events, coordinate during the nav:start → fetch → swap → nav:end flow, and are always used together. Separate plugins would add registration noise (4 array entries) and API surface clutter (4 top-level names on `app`) for modules that have no independent use case. One very complex plugin with namespaced API (`app.spa.head`, `app.spa.router`) is cleaner.
 
 Store with slices and middleware (complex):
 

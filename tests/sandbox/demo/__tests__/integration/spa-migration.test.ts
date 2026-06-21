@@ -2,7 +2,7 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 import {
   bundlerPlugin,
   cliPlugin,
-  componentsPlugin,
+  islandsPlugin,
   contentPlugin,
   createApp,
   createPlugin,
@@ -19,7 +19,7 @@ import type { Article } from "../../tools/plugins/content";
 // ---------------------------------------------------------------------------
 //
 // createApp is the Layer-2 export — it already has all 7 framework plugins
-// baked in (router, progress, components, head, content, bundler, cli).
+// baked in (router, progress, islands, head, content, bundler, cli).
 //
 // createPlugin is used for ad-hoc listener/tracker plugins in event and
 // lifecycle tests. Those are passed via createApp({ plugins: [...] }).
@@ -43,7 +43,7 @@ const createTestApp = async (
   },
   pluginConfigs?: {
     router?: Partial<{ basePath: string }>;
-    components?: Partial<{ swapSelector: string }>;
+    islands?: Partial<{ swapSelector: string }>;
   }
 ) => {
   return createApp({
@@ -63,7 +63,7 @@ describe("moku-spa framework: SPA migration integration", () => {
 
       expect(app.router).toBeDefined();
       expect(app.progress).toBeDefined();
-      expect(app.components).toBeDefined();
+      expect(app.islands).toBeDefined();
       expect(app.head).toBeDefined();
     });
 
@@ -75,9 +75,9 @@ describe("moku-spa framework: SPA migration integration", () => {
       expect(typeof app.router.back).toBe("function");
       expect(typeof app.progress.isActive).toBe("function");
       expect(typeof app.progress.getPercent).toBe("function");
-      expect(typeof app.components.register).toBe("function");
-      expect(typeof app.components.getMounted).toBe("function");
-      expect(typeof app.components.getByName).toBe("function");
+      expect(typeof app.islands.register).toBe("function");
+      expect(typeof app.islands.getMounted).toBe("function");
+      expect(typeof app.islands.getByName).toBe("function");
       expect(typeof app.head.getTitle).toBe("function");
       expect(typeof app.head.getDescription).toBe("function");
       expect(typeof app.head.setTitle).toBe("function");
@@ -187,14 +187,14 @@ describe("moku-spa framework: SPA migration integration", () => {
   });
 
   // -------------------------------------------------------------------------
-  // Runtime: component lifecycle
+  // Runtime: island lifecycle
   // -------------------------------------------------------------------------
 
-  describe("runtime: component lifecycle", () => {
-    it("wildcard components mount on any route", async () => {
+  describe("runtime: island lifecycle", () => {
+    it("wildcard islands mount on any route", async () => {
       const app = await createTestApp();
 
-      app.components.register({
+      app.islands.register({
         name: "header",
         selector: "#header",
         routes: ["*"]
@@ -203,21 +203,21 @@ describe("moku-spa framework: SPA migration integration", () => {
       await app.start();
       await flush();
 
-      const header = app.components.getByName("header");
+      const header = app.islands.getByName("header");
       expect(header?.mounted).toBe(true);
 
       await app.stop();
     });
 
-    it("route-specific components only mount on matching routes", async () => {
+    it("route-specific islands only mount on matching routes", async () => {
       const app = await createTestApp();
 
-      app.components.register({
+      app.islands.register({
         name: "header",
         selector: "#header",
         routes: ["*"]
       });
-      app.components.register({
+      app.islands.register({
         name: "gallery-widget",
         selector: "#gallery",
         routes: ["/gallery"]
@@ -226,27 +226,27 @@ describe("moku-spa framework: SPA migration integration", () => {
       await app.start();
       await flush();
 
-      expect(app.components.getByName("header")?.mounted).toBe(true);
-      expect(app.components.getByName("gallery-widget")?.mounted).toBeFalsy();
+      expect(app.islands.getByName("header")?.mounted).toBe(true);
+      expect(app.islands.getByName("gallery-widget")?.mounted).toBeFalsy();
 
       app.router.navigate("/gallery");
       await flush();
 
-      expect(app.components.getByName("gallery-widget")?.mounted).toBe(true);
+      expect(app.islands.getByName("gallery-widget")?.mounted).toBe(true);
 
       await app.stop();
     });
 
-    it("components unmount on nav:start then remount on nav:end", async () => {
+    it("islands unmount on nav:start then remount on nav:end", async () => {
       const mountEvents: string[] = [];
 
       const mountTracker = createPlugin("mount-tracker", {
-        depends: [componentsPlugin],
+        depends: [islandsPlugin],
         hooks: _ctx => ({
-          "component:mount": ({ name }) => {
+          "island:mount": ({ name }) => {
             mountEvents.push(`mount:${name}`);
           },
-          "component:unmount": ({ name }) => {
+          "island:unmount": ({ name }) => {
             mountEvents.push(`unmount:${name}`);
           }
         })
@@ -254,7 +254,7 @@ describe("moku-spa framework: SPA migration integration", () => {
 
       const app = createApp({ plugins: [mountTracker] });
 
-      app.components.register({
+      app.islands.register({
         name: "sidebar",
         selector: "#sidebar",
         routes: ["*"]
@@ -277,10 +277,10 @@ describe("moku-spa framework: SPA migration integration", () => {
       await app.stop();
     });
 
-    it("route-specific component unmounts when navigating away", async () => {
+    it("route-specific island unmounts when navigating away", async () => {
       const app = await createTestApp();
 
-      app.components.register({
+      app.islands.register({
         name: "gallery-view",
         selector: "#gallery",
         routes: ["/gallery"]
@@ -291,11 +291,11 @@ describe("moku-spa framework: SPA migration integration", () => {
 
       app.router.navigate("/gallery");
       await flush();
-      expect(app.components.getByName("gallery-view")?.mounted).toBe(true);
+      expect(app.islands.getByName("gallery-view")?.mounted).toBe(true);
 
       app.router.navigate("/about");
       await flush();
-      expect(app.components.getByName("gallery-view")?.mounted).toBe(false);
+      expect(app.islands.getByName("gallery-view")?.mounted).toBe(false);
 
       await app.stop();
     });
@@ -349,12 +349,12 @@ describe("moku-spa framework: SPA migration integration", () => {
   describe("runtime: consumer island plugins", () => {
     it("consumer islands appear on app surface alongside framework plugins", async () => {
       const island = createPlugin("test-island", {
-        depends: [componentsPlugin],
+        depends: [islandsPlugin],
         api: _ctx => ({
           ping: () => "pong"
         }),
         onInit: ctx => {
-          ctx.require(componentsPlugin).register({
+          ctx.require(islandsPlugin).register({
             name: "test-island",
             selector: "[data-island='test']"
           });
@@ -365,14 +365,14 @@ describe("moku-spa framework: SPA migration integration", () => {
 
       expect(app.router).toBeDefined();
       expect(app.progress).toBeDefined();
-      expect(app.components).toBeDefined();
+      expect(app.islands).toBeDefined();
       expect(app.head).toBeDefined();
       expect(app["test-island"].ping()).toBe("pong");
     });
 
-    it("islands register with component manager and participate in lifecycle", async () => {
+    it("islands register with island manager and participate in lifecycle", async () => {
       const island = createPlugin("counter-island", {
-        depends: [componentsPlugin],
+        depends: [islandsPlugin],
         createState: () => ({ count: 0 }),
         api: ctx => ({
           increment: () => {
@@ -381,7 +381,7 @@ describe("moku-spa framework: SPA migration integration", () => {
           getCount: (): number => ctx.state.count
         }),
         onInit: ctx => {
-          ctx.require(componentsPlugin).register({
+          ctx.require(islandsPlugin).register({
             name: "counter-island",
             selector: "[data-island='counter']",
             routes: ["*"]
@@ -393,7 +393,7 @@ describe("moku-spa framework: SPA migration integration", () => {
       await app.start();
       await flush();
 
-      const instance = app.components.getByName("counter-island");
+      const instance = app.islands.getByName("counter-island");
       expect(instance?.mounted).toBe(true);
 
       app["counter-island"].increment();
@@ -404,12 +404,12 @@ describe("moku-spa framework: SPA migration integration", () => {
 
     it("route-specific island mounts only on matching routes", async () => {
       const galleryIsland = createPlugin("gallery-island", {
-        depends: [componentsPlugin],
+        depends: [islandsPlugin],
         api: _ctx => ({
           render: () => "gallery content"
         }),
         onInit: ctx => {
-          ctx.require(componentsPlugin).register({
+          ctx.require(islandsPlugin).register({
             name: "gallery-island",
             selector: "[data-island='gallery']",
             routes: ["/gallery"]
@@ -421,17 +421,17 @@ describe("moku-spa framework: SPA migration integration", () => {
       await app.start();
       await flush();
 
-      expect(app.components.getByName("gallery-island")?.mounted).toBeFalsy();
+      expect(app.islands.getByName("gallery-island")?.mounted).toBeFalsy();
 
       app.router.navigate("/gallery");
       await flush();
 
-      expect(app.components.getByName("gallery-island")?.mounted).toBe(true);
+      expect(app.islands.getByName("gallery-island")?.mounted).toBe(true);
 
       app.router.navigate("/other");
       await flush();
 
-      expect(app.components.getByName("gallery-island")?.mounted).toBe(false);
+      expect(app.islands.getByName("gallery-island")?.mounted).toBe(false);
 
       await app.stop();
     });
@@ -460,7 +460,7 @@ describe("moku-spa framework: SPA migration integration", () => {
 
       expect(app.has("router")).toBe(true);
       expect(app.has("progress")).toBe(true);
-      expect(app.has("components")).toBe(true);
+      expect(app.has("islands")).toBe(true);
       expect(app.has("head")).toBe(true);
       expect(app.has("nonexistent")).toBe(false);
     });
@@ -470,7 +470,7 @@ describe("moku-spa framework: SPA migration integration", () => {
 
       expect(typeof app.require(routerPlugin).navigate).toBe("function");
       expect(typeof app.require(progressPlugin).isActive).toBe("function");
-      expect(typeof app.require(componentsPlugin).register).toBe("function");
+      expect(typeof app.require(islandsPlugin).register).toBe("function");
       expect(typeof app.require(headPlugin).getTitle).toBe("function");
     });
   });
@@ -495,12 +495,12 @@ describe("moku-spa framework: SPA migration integration", () => {
       expectTypeOf(app.progress.getPercent).toEqualTypeOf<() => number>();
     });
 
-    it("app.components API methods are typed", async () => {
+    it("app.islands API methods are typed", async () => {
       const app = await createTestApp();
 
-      expectTypeOf(app.components.register).toBeFunction();
-      expectTypeOf(app.components.getMounted).toEqualTypeOf<() => string[]>();
-      expectTypeOf(app.components.getByName).toBeFunction();
+      expectTypeOf(app.islands.register).toBeFunction();
+      expectTypeOf(app.islands.getMounted).toEqualTypeOf<() => string[]>();
+      expectTypeOf(app.islands.getByName).toBeFunction();
     });
 
     it("app.head API methods are typed", async () => {
@@ -534,20 +534,20 @@ describe("moku-spa framework: SPA migration integration", () => {
       expect(plugin.name).toBe("nav-type-check");
     });
 
-    it("component:mount and component:unmount payloads typed", () => {
-      const plugin = createPlugin("component-type-check", {
-        depends: [componentsPlugin],
+    it("island:mount and island:unmount payloads typed", () => {
+      const plugin = createPlugin("island-type-check", {
+        depends: [islandsPlugin],
         hooks: _ctx => ({
-          "component:mount": payload => {
+          "island:mount": payload => {
             expectTypeOf(payload).toEqualTypeOf<{ name: string; selector: string }>();
           },
-          "component:unmount": payload => {
+          "island:unmount": payload => {
             expectTypeOf(payload).toEqualTypeOf<{ name: string; selector: string }>();
           }
         })
       });
 
-      expect(plugin.name).toBe("component-type-check");
+      expect(plugin.name).toBe("island-type-check");
     });
 
     it("global events typed without depends", () => {
@@ -593,7 +593,7 @@ describe("moku-spa framework: SPA migration integration", () => {
 
       expectTypeOf(app.router.navigate).toBeFunction();
       expectTypeOf(app.progress.isActive).toBeFunction();
-      expectTypeOf(app.components.register).toBeFunction();
+      expectTypeOf(app.islands.register).toBeFunction();
       expectTypeOf(app.head.getTitle).toBeFunction();
       expect(app.bonus.value()).toBe(42);
     });
@@ -653,7 +653,7 @@ describe("moku-spa framework: SPA migration integration", () => {
     it("each plugin instance has a literal name type", () => {
       expectTypeOf(routerPlugin.name).toEqualTypeOf<"router">();
       expectTypeOf(progressPlugin.name).toEqualTypeOf<"progress">();
-      expectTypeOf(componentsPlugin.name).toEqualTypeOf<"components">();
+      expectTypeOf(islandsPlugin.name).toEqualTypeOf<"islands">();
       expectTypeOf(headPlugin.name).toEqualTypeOf<"head">();
     });
   });
@@ -672,13 +672,13 @@ describe("moku-spa framework: SPA migration integration", () => {
       expectTypeOf(router.back).toBeFunction();
     });
 
-    it("app.require(componentsPlugin) returns typed API", async () => {
+    it("app.require(islandsPlugin) returns typed API", async () => {
       const app = await createTestApp();
-      const components = app.require(componentsPlugin);
+      const islands = app.require(islandsPlugin);
 
-      expectTypeOf(components.register).toBeFunction();
-      expectTypeOf(components.getMounted).toBeFunction();
-      expectTypeOf(components.getByName).toBeFunction();
+      expectTypeOf(islands.register).toBeFunction();
+      expectTypeOf(islands.getMounted).toBeFunction();
+      expectTypeOf(islands.getByName).toBeFunction();
     });
   });
 
@@ -925,7 +925,7 @@ describe("moku-spa framework: SPA migration integration", () => {
       // SPA
       expect(app.router).toBeDefined();
       expect(app.progress).toBeDefined();
-      expect(app.components).toBeDefined();
+      expect(app.islands).toBeDefined();
       expect(app.head).toBeDefined();
       // Build
       expect(app.content).toBeDefined();
