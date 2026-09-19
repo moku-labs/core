@@ -8,7 +8,7 @@
         "@arethetypeswrong/cli": "0.18.2",
         "@arethetypeswrong/core": "0.18.2",
         "@biomejs/biome": "2.4.2",
-        "@moku-labs/ci": "1.2.5",
+        "@moku-labs/ci": "1.2.6",
         "@types/bun": "1.3.9",
         "@vitest/coverage-istanbul": "4.0.18",
         "eslint": "9",
@@ -190,7 +190,7 @@
 
     "@loaderkit/resolve": ["@loaderkit/resolve@1.0.4", "", { "dependencies": { "@braidai/lang": "^1.0.0" } }, "sha512-rJzYKVcV4dxJv+vW6jlvagF8zvGxHJ2+HTr1e2qOejfmGhAApgJHl8Aog4mMszxceTRiKTTbnpgmTO1bEZHV/A=="],
 
-    "@moku-labs/ci": ["@moku-labs/ci@1.2.5", "", { "bin": { "moku-release": "dist/release.mjs" } }, "sha512-dmQM3vKsBCXPVsb1V44j5CWtLhJgOGgUdvZEO332u7bR11TxRJHjnhGHSV0wym/SmDpESGknF6iXRMoJpZZqnA=="],
+    "@moku-labs/ci": ["@moku-labs/ci@1.2.6", "", { "bin": { "moku-release": "dist/release.mjs" } }, "sha512-KIUvh3Sk+CvGM5v/r6pYNlJmbmpv5KxvNDzcMUjsfdUCcb8liSv+jAQ3JbZfBtQUKPMqXhAuOqf0BHe6aMHmGQ=="],
 
     "@napi-rs/wasm-runtime": ["@napi-rs/wasm-runtime@1.1.4", "", { "dependencies": { "@tybys/wasm-util": "^0.10.1" }, "peerDependencies": { "@emnapi/core": "^1.7.1", "@emnapi/runtime": "^1.7.1" } }, "sha512-3NQNNgA1YSlJb/kMH1ildASP9HW7/7kYnRI2szWJaofaS1hWmbGI4H+d3+22aGzXXN9IJ+n+GiFVcGipJP18ow=="],
 
