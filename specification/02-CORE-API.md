@@ -120,7 +120,7 @@ function createCore(
     plugins: PluginInstance[];
     pluginConfigs?: Record<string, unknown>;
     onReady?: (ctx: { config: Readonly<Config> }) => void;
-    onError?: (error: Error) => void;
+    onError?: (error: Error, core: Readonly<CoreApis>) => void;
   },
 ): {
   createApp: CreateAppFn<Config, Events, DefaultPlugins>;
@@ -134,7 +134,7 @@ function createCore(
 - **`options.plugins`** -- Default plugins that ship with the framework. Always loaded. Consumer cannot remove them.
 - **`options.pluginConfigs`** -- Default config overrides for framework plugins. Merged with consumer overrides.
 - **`options.onReady`** -- Optional callback fired after all plugins have completed init.
-- **`options.onError`** -- Optional error handler for observability.
+- **`options.onError`** -- Optional error handler for hook dispatch failures. The second argument `core` holds the core plugin APIs keyed by plugin name, for example `{ log, env }`. It is `{}` when the framework registers no core plugins. It carries no `emit`, no `require` and no regular plugin APIs: core APIs are built before the event bus exists, so they are safe at any moment a hook can fail.
 
 **Returns:** An object with two functions:
 

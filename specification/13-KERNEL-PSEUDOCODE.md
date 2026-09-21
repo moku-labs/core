@@ -151,7 +151,7 @@ function createCore(
     pluginConfigs?: Record<string, unknown>, // framework-level plugin config overrides
                                              // (also accepts core plugin config overrides — level 3 of 4)
     onReady?: (ctx: { config: Readonly<Config> }) => void,
-    onError?: (error: Error) => void,
+    onError?: (error: Error, core: Readonly<CoreApis>) => void,
   },
 ): {
   createApp: BoundCreateApp<Config, Events, DefaultPlugins, CoreApis>;
@@ -359,12 +359,14 @@ function createApp(consumerOptions?: {
   const hookMap = new Map<string, Array<(payload: any) => void | Promise<void>>>();
 
   // Combined onError: calls both framework and consumer handlers.
+  // Framework onError receives (error, coreApis): core plugin APIs only. They are
+  // built before the event bus and have no emit, so the handler cannot recurse.
   // Consumer onError receives (error, AppCallbackContext).
   // The framework call is guarded: a throwing framework handler must not
   // prevent the consumer handler from running.
   const combinedOnError = (err: Error) => {
     try {
-      if (options.onError) options.onError(err);
+      if (options.onError) options.onError(err, coreApis);
     } catch {
       // Errors thrown by the framework handler are discarded.
     }
