@@ -84,7 +84,7 @@ interface KernelParameters {
   readonly configOverrides: Record<string, unknown>;
   readonly consumerPluginConfigs: Record<string, unknown>;
   readonly onReady?: OnReadyCallback | undefined;
-  readonly onError?: ((error: Error) => void) | undefined;
+  readonly onError?: ((error: Error, core: Readonly<Record<string, unknown>>) => void) | undefined;
   readonly consumer?: {
     readonly onReady?: SyncConsumerCallback | undefined;
     readonly onError?: ConsumerErrorCallback | undefined;
@@ -757,7 +757,7 @@ function kernel(parameters: KernelParameters): DynamicObject {
     onError || consumer?.onError
       ? (error: Error): void => {
           try {
-            if (onError) onError(error);
+            if (onError) onError(error, coreApis);
           } catch {
             // Errors thrown by the framework handler are discarded.
           }
