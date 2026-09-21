@@ -424,20 +424,28 @@ function buildCallbackContext(runtime: KernelRuntime): DynamicObject {
 /**
  * Run onStop for all plugins in reverse order.
  *
+ * Each plugin gets the teardown tier: the global config plus its OWN resolved config and its
+ * OWN state, so it can free the resource it stored there. No `emit`, `require`, `has` or core
+ * APIs: by the time a plugin stops, the plugins after it are already stopped.
+ *
  * @param flatPlugins - The flattened plugin list.
  * @param globalConfig - The frozen global config object.
+ * @param buildPluginContext - Factory that builds context for a plugin; only `config` and `state` are taken from it.
  * @example
  * ```ts
- * await executeStop(plugins, globalConfig);
+ * await executeStop(plugins, globalConfig, contextFactory);
  * ```
  */
 async function executeStop(
   flatPlugins: AnyPluginInstance[],
-  globalConfig: Readonly<Record<string, unknown>>
+  globalConfig: Readonly<Record<string, unknown>>,
+  buildPluginContext: ContextFactory
 ): Promise<void> {
   for (const plugin of flatPlugins.toReversed()) {
     if (!plugin.spec.onStop) continue;
-    await plugin.spec.onStop({ global: globalConfig });
+
+    const { config, state } = buildPluginContext(plugin);
+    await plugin.spec.onStop({ global: globalConfig, config, state });
   }
 }
 
@@ -531,7 +539,7 @@ function buildApp(
       }
 
       // Regular plugins stop first (reverse order)
-      await executeStop(flatPlugins, runtime.globalConfig);
+      await executeStop(flatPlugins, runtime.globalConfig, buildPluginContext);
 
       // Core plugins stop second (reverse order)
       for (const plugin of corePluginData.plugins.toReversed()) {

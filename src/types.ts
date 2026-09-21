@@ -33,7 +33,7 @@
 // Types
 // -----------------------------------------------------------------------------
 //
-//   TeardownContext<Config>          Most minimal context tier. Global config only.
+//   TeardownContext<Config, C, S>    Teardown tier. Global config + own config and state.
 //                                   Used by onStop — during teardown only global config is safe.
 //   MinimalContext<Config, C>        Teardown context plus plugin config.
 //                                   Used by createState — before inter-plugin communication exists.
@@ -76,32 +76,39 @@ import type { EmitFn as EmitFunction_, IsLiteralString, UnionToIntersection } fr
 // =============================================================================
 // Section 1: Context Tiers
 // =============================================================================
-// Three context tiers, each providing progressively more access:
-//   TeardownContext (least) -> MinimalContext -> PluginContext (most)
+// Three context tiers:
+//   MinimalContext (createState) -> TeardownContext (onStop) -> PluginContext (everything else)
 //
-// - TeardownContext: global config only (onStop)
 // - MinimalContext: global + plugin config (createState)
-// - PluginContext: everything (api, onInit, onStart)
+// - TeardownContext: global + the plugin's OWN config and state, no communication (onStop)
+// - PluginContext: everything (api, onInit, onStart, hooks)
 // =============================================================================
 
 /**
- * Teardown context — the most minimal context tier.
+ * Teardown context — what a plugin owns, and nothing that reaches another plugin.
  * Used by: onStop
  *
- * During teardown, plugins may be partially or fully stopped. Only the frozen
- * global config is available.
+ * During teardown, other plugins may be partially or fully stopped, so the communication
+ * methods (`emit`, `require`, `has`) and the core plugin APIs are intentionally absent. The
+ * plugin's own resolved config and its own state are always safe to read: a plugin frees the
+ * resource it opened (a timer, a socket, a frame handle) from the state it stored it in. This
+ * mirrors core plugins, whose `onStop` has always received `{ config, state }`.
+ *
+ * `C` and `S` default to an empty record, so `TeardownContext<Config>` written before 1.6 still
+ * compiles.
  *
  * @example
  * ```ts
- * type StopCtx = TeardownContext<{ siteName: string }>;
- * // => { readonly global: Readonly<{ siteName: string }> }
+ * type StopCtx = TeardownContext<{ siteName: string }, { port: number }, { server?: Server }>;
  *
  * // Used in plugin spec:
- * onStop: (ctx: StopCtx) => { console.log(`Stopping ${ctx.global.siteName}`); }
+ * onStop: ({ state }) => { state.server?.close(); }
  * ```
  */
-type TeardownContext<Config> = {
+type TeardownContext<Config, C = Record<string, never>, S = Record<string, never>> = {
   readonly global: Readonly<Config>;
+  readonly config: Readonly<C>;
+  state: S;
 };
 
 /**
@@ -271,7 +278,7 @@ type PluginSpec<
   onStart?: (
     context: PluginContext<Config, Events & PluginEvents & DepsEvents<Deps>, C, S, CoreApis>
   ) => void | Promise<void>;
-  onStop?: (context: TeardownContext<Config>) => void | Promise<void>;
+  onStop?: (context: TeardownContext<Config, C, S>) => void | Promise<void>;
   hooks?: (
     context: PluginContext<Config, Events & PluginEvents & DepsEvents<Deps>, C, S, CoreApis>
   ) => {

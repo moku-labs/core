@@ -506,16 +506,20 @@ type CreatePluginSpec<
   ) => void | Promise<void>;
   /**
    * Called when the app stops. Runs in **reverse** plugin order, sequentially awaited.
-   * Use for teardown (close connections, flush buffers). Receives only global config.
+   * Use for teardown (close connections, flush buffers). Receives the global config plus the
+   * plugin's own resolved config and its own state. No `emit`, `require`, `has` or core APIs:
+   * other plugins may already be stopped.
    *
    * @example
    * ```ts
-   * onStop: async (ctx) => {
-   *   await db.disconnect();
+   * onStop: async ({ state }) => {
+   *   await state.db.disconnect();
    * }
    * ```
    */
-  onStop?: (context: TeardownContext<GlobalConfig>) => void | Promise<void>;
+  onStop?: (
+    context: TeardownContext<GlobalConfig, PluginConfig, PluginState>
+  ) => void | Promise<void>;
   /**
    * Event subscription factory. Receives full plugin context; returns a map of
    * event handlers. Same closure pattern as `api`. Handlers can access `ctx.state`,

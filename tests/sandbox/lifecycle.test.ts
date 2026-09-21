@@ -230,7 +230,7 @@ describe("lifecycle execution order", () => {
     expect(capturedCtx).not.toHaveProperty("state");
   });
 
-  it("onStop receives TeardownContext (global only)", async () => {
+  it("onStop receives TeardownContext (global, own config, own state)", async () => {
     let capturedCtx: Record<string, unknown> = {};
 
     const cc = createCoreConfig<{ siteName: string }, Record<string, never>>("test", {
@@ -238,20 +238,21 @@ describe("lifecycle execution order", () => {
     });
 
     const plugin = cc.createPlugin("probe", {
+      config: { retries: 3 },
+      createState: () => ({ open: true }),
       onStop: ctx => {
         capturedCtx = { ...ctx };
 
-        // Type-level: TeardownContext has only global
+        // Type-level: global, the plugin's own config and its own state
         expectTypeOf(ctx.global).toMatchTypeOf<{ siteName: string }>();
+        expectTypeOf(ctx.config).toMatchTypeOf<{ retries: number }>();
+        expectTypeOf(ctx.state).toMatchTypeOf<{ open: boolean }>();
 
-        // @ts-expect-error -- onStop ctx has no config
-        expect(ctx.config).toBeUndefined();
-
-        // @ts-expect-error -- onStop ctx has no state
-        expect(ctx.state).toBeUndefined();
-
-        // @ts-expect-error -- onStop ctx has no emit
+        // @ts-expect-error -- onStop ctx has no emit: other plugins may already be stopped
         expect(ctx.emit).toBeUndefined();
+
+        // @ts-expect-error -- onStop ctx has no require: other plugins may already be stopped
+        expect(ctx.require).toBeUndefined();
       }
     });
 
@@ -260,13 +261,15 @@ describe("lifecycle execution order", () => {
     await app.start();
     await app.stop();
 
-    // Runtime: TeardownContext has global
+    // Runtime: TeardownContext has global, config and state
     expect(capturedCtx).toHaveProperty("global");
+    expect(capturedCtx).toHaveProperty("config", { retries: 3 });
+    expect(capturedCtx).toHaveProperty("state", { open: true });
 
-    // Runtime: TeardownContext does NOT have config, state, emit
-    expect(capturedCtx).not.toHaveProperty("config");
-    expect(capturedCtx).not.toHaveProperty("state");
+    // Runtime: TeardownContext has NO communication methods
     expect(capturedCtx).not.toHaveProperty("emit");
+    expect(capturedCtx).not.toHaveProperty("require");
+    expect(capturedCtx).not.toHaveProperty("has");
   });
 });
 

@@ -295,7 +295,7 @@ describe("context tiers", () => {
     expect(contextKeys).toContain("has");
   });
 
-  it("onStop receives TeardownContext (global only)", async () => {
+  it("onStop receives TeardownContext (global, own config, own state; no communication)", async () => {
     let contextKeys: string[] = [];
     const cc = createTestCore();
 
@@ -311,9 +311,53 @@ describe("context tiers", () => {
     await app.stop();
 
     expect(contextKeys).toContain("global");
-    expect(contextKeys).not.toContain("config");
-    expect(contextKeys).not.toContain("state");
+    expect(contextKeys).toContain("config");
+    expect(contextKeys).toContain("state");
     expect(contextKeys).not.toContain("emit");
+    expect(contextKeys).not.toContain("require");
+    expect(contextKeys).not.toContain("has");
+  });
+
+  it("onStop sees the same state object the plugin mutated while running", async () => {
+    const released: number[] = [];
+    const cc = createTestCore();
+
+    const plugin = cc.createPlugin("timer", {
+      config: { label: "frame" },
+      createState: () => ({ handle: 0 }),
+      onStart: context => {
+        context.state.handle = 42;
+      },
+      onStop: ({ config, state }) => {
+        released.push(state.handle);
+        expect(config.label).toBe("frame");
+      }
+    });
+
+    const { createApp } = cc.createCore(cc, { plugins: [plugin] });
+    const app = createApp();
+    await app.start();
+    await app.stop();
+
+    expect(released).toEqual([42]);
+  });
+
+  it("onStop of a plugin without createState gets an empty state object", async () => {
+    let seen: unknown;
+    const cc = createTestCore();
+
+    const plugin = cc.createPlugin("bare", {
+      onStop: ({ state }) => {
+        seen = state;
+      }
+    });
+
+    const { createApp } = cc.createCore(cc, { plugins: [plugin] });
+    const app = createApp();
+    await app.start();
+    await app.stop();
+
+    expect(seen).toEqual({});
   });
 });
 
