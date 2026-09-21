@@ -1140,7 +1140,7 @@ Only create `types.ts` when types are shared across 2+ files. If only `index.ts`
 
 ### JSDoc
 
-All **public-facing types** (Config, API, Events, State, exported domain types) MUST have JSDoc with `@example` tags showing usage. Internal context types (`XxxCtx`) should NOT have JSDoc — they are wiring-only types consumed by domain factories. All **private/helper functions** (validators, processors, handler factories, internal closures like `generateId`) MUST also have JSDoc explaining why they exist and where they are called from.
+All **public-facing types** (Config, API, Events, exported domain types) MUST have JSDoc with an `@example`. **Private types** (State, internal records) MUST have JSDoc that says what they hold; they get no `@example`. Internal context types (`XxxCtx`) should NOT have JSDoc — they are wiring-only types consumed by domain factories. All **private/helper functions** (validators, processors, handler factories, internal closures like `generateId`) MUST also have JSDoc explaining why they exist and where they are called from.
 
 **JSDoc formatting rules:**
 - A blank ` *` line MUST separate the description paragraph from the first `@` tag.
@@ -1149,14 +1149,31 @@ All **public-facing types** (Config, API, Events, State, exported domain types) 
 - Inline field JSDoc on type members (`/** Field desc */`) does NOT require `{Type}`.
 - Descriptions MUST explain **why** the method/function exists, **where** it is used, and **what** it does — not just mechanical behavior.
 
-**API method JSDoc:** Every method returned from API factories (`create<Name>Api`) AND every method in exported `XxxApi` type interfaces MUST have a JSDoc comment with:
-- A description explaining **what** it does and **why** it exists
+**API method JSDoc — one place.** Every API method is documented exactly once: where the consumer's type comes from. Declaration emit decides this, not taste.
+
+| API shape | The contract goes on | Why |
+|---|---|---|
+| Exported `XxxApi` type, factory annotated `: XxxApi` | the member of the `XxxApi` type | The published `.d.ts` carries the type. JSDoc on the implementation never reaches it, so a consumer sees nothing on hover. Implementation members carry NO JSDoc. |
+| Inferred API — no `XxxApi` type (Nano, Micro, a factory with no return annotation) | the member of the returned object literal | The inferred type is built from the literal, and its JSDoc is emitted with it. It is the only place there is. |
+
+Never both: a second copy drifts from the first.
+
+The contract of a method is:
+- A description explaining **what** it does and **why** it exists. A behavior note ("a negative delay counts as zero") belongs here too.
 - `@param {Type}` for each parameter
 - `@returns {Type}` describing the return value
 - `@throws {Error}` for methods that throw (the `{Error}` type is required by linter)
-- `@example` for complex methods (multi-step usage, non-obvious behavior)
+- `@example` — a **scenario**: one comment line that says when a consumer calls the method, a call with literal arguments in `app.<plugin>.<method>(…)` form, the result as a trailing comment. 2–6 lines.
+- A public method that no consumer can call (only another plugin or the framework calls it) gets no example. It says `@remarks No example: <reason>.` Such a method is a candidate to leave the public API.
 
-**State type JSDoc:** State types MUST have JSDoc with an `@example` showing a realistic populated state. Each field MUST have an inline JSDoc comment explaining what it holds, how it gets populated, and its initial value.
+**Example rules (every `@example`, everywhere):**
+- An example MUST NOT repeat the signature with identifiers as arguments. `const api = createRouterApi(ctx);` and `shut(gate);` tell the reader nothing.
+- An example MUST be true. TypeScript does not check comments. Read the real signature and the test that asserts the result before writing the call and the result comment. Never invent a method, an option or a return value.
+- A private **pure** function MAY carry one line with literals and the result: `validateContent({ title: "", body: "Text" }); // [{ field: "title", message: "Title is required" }]`.
+- A private function that takes `ctx`, state or another mutable context, and every `create<Name>State` / `create<Name>Api` factory, gets NO `@example`. A required example there becomes a copy of the signature.
+- A type the consumer **implements** (a provider, a source) gets one type-level example of a realistic implementation; its members keep descriptions only.
+
+**State type JSDoc:** State types MUST have JSDoc that describes the state. Each field MUST have an inline JSDoc comment explaining what it holds, how it gets populated, and its initial value. State is private: no `@example`.
 
 **State factory JSDoc:** Every `create<Name>State` factory function MUST have a JSDoc comment explaining the initial values and how the state evolves during the plugin lifecycle.
 
@@ -1179,18 +1196,7 @@ export type RouterConfig = {
 };
 
 /**
- * Internal mutable state for the router plugin.
- *
- * @example
- * ```typescript
- * // After navigating: "/" → "/dashboard" → "/settings"
- * {
- *   currentPath: "/settings",
- *   history: ["/", "/dashboard"],
- *   guards: [authGuard],
- *   initialized: true
- * }
- * ```
+ * Internal mutable state for the router plugin. Private: described, no example.
  */
 export type RouterState = {
   /** The currently active route path. Set by `navigate()` and `back()`. Initialized to `config.basePath`. */
@@ -1208,7 +1214,7 @@ export type RouterCtx = { ... };
 ```
 
 ```typescript
-// types.ts — Api type interfaces document each method
+// types.ts — the Api type carries the contract of each method
 
 export type RouterApi = {
   /**
@@ -1218,6 +1224,12 @@ export type RouterApi = {
    *
    * @param {string} path - The target path to navigate to.
    * @returns {NavigationResult} The navigation result indicating whether the route change was blocked.
+   * @example
+   * ```typescript
+   * // The user picks "Dashboard" in the menu.
+   * const result = app.router.navigate("/dashboard");
+   * result.blocked; // false, unless a guard rejected the change
+   * ```
    */
   navigate: (path: string) => NavigationResult;
 
@@ -1226,38 +1238,49 @@ export type RouterApi = {
    * pointing without triggering any navigation or side effects.
    *
    * @returns {string} The current active path.
+   * @example
+   * ```typescript
+   * // Highlight the active menu entry.
+   * app.router.navigate("/settings");
+   * app.router.current(); // "/settings"
+   * ```
    */
   current: () => string;
 };
 ```
 
 ```typescript
-// api.ts — implementation methods mirror the Api type JSDoc
+// api.ts — the factory is documented, its members are not: the contract lives on RouterApi
 
-export const createRouterApi = (ctx: RouterCtx) => ({
+/**
+ * Build the router API over the plugin state.
+ *
+ * @param {RouterCtx} ctx - Plugin context with config, state and emit.
+ * @returns {RouterApi} The router API mounted at `app.router`.
+ */
+export const createRouterApi = (ctx: RouterCtx): RouterApi => ({
+  navigate: path => { ... },
+
+  current: () => ctx.state.currentPath,
+});
+```
+
+```typescript
+// index.ts of a Micro plugin — inferred API: the literal member is the only place for the contract
+
+api: ctx => ({
   /**
-   * Navigate to a path. Checks all registered guards before allowing
-   * the transition. If any guard rejects, the navigation is blocked
-   * and state remains unchanged. Emits `router:navigate` on success.
+   * Add the configured step to the counter.
    *
-   * @param {string} path - The target path to navigate to.
-   * @returns {NavigationResult} The navigation result indicating whether the route change was blocked.
    * @example
    * ```typescript
-   * const result = app.router.navigate("/dashboard");
-   * if (result.blocked) console.log("Blocked by a guard");
+   * // The player picks up a coin.
+   * app.counter.increment();
+   * app.counter.value(); // 1
    * ```
    */
-  navigate: (path: string): NavigationResult => { ... },
-
-  /**
-   * Get the current path. Used to read where the router is currently
-   * pointing without triggering any navigation or side effects.
-   *
-   * @returns {string} The current active path.
-   */
-  current: (): string => ctx.state.currentPath,
-});
+  increment: () => { ctx.state.count += ctx.config.step; },
+}),
 ```
 
 ```typescript
