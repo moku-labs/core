@@ -144,7 +144,7 @@ Field-by-field:
 - **`hooks?: (ctx: PluginContext) => { [event]?: (payload) => void | Promise<void> }`** — Event-subscription factory. Same closure shape as `api`; handlers access full `ctx`. Payload types are strictly inferred from the merged event map (global + own + dependency events). Handlers may be sync or async.
 - **`onInit?: (ctx: PluginContext) => void`** — Runs during `createApp`, forward order, synchronous. Use for setup depending on other plugins (`ctx.require`, `ctx.has`). For async work use `onStart`.
 - **`onStart?: (ctx: PluginContext) => void | Promise<void>`** — Runs during `app.start()`, forward order, sequentially awaited. Use for runtime startup (open connections, start listeners).
-- **`onStop?: (ctx: TeardownContext) => void | Promise<void>`** — Runs during `app.stop()`, **reverse** order, sequentially awaited. Receives only `{ global }` — no state/emit/require/has/core APIs, because other plugins may already be stopped. Use for teardown.
+- **`onStop?: (ctx: TeardownContext) => void | Promise<void>`** — Runs during `app.stop()`, **reverse** order, sequentially awaited. Receives `{ global, config, state }`: the global config plus the plugin's own resolved config and own state. No emit/require/has/core APIs, because other plugins may already be stopped. Use for teardown: free the resource you stored in `state`.
 - **`helpers?: { [key: string]: (...args: any[]) => any }`** — Static pure functions with no `ctx` and no lifecycle. Spread onto the returned instance via intersection (`PluginInstance<...> & Helpers`), so `plugin.helperName(...)` is callable *before* `createApp` — typically to produce typed config values fed into `pluginConfigs`. Helper names cannot collide with reserved instance keys: `"name"`, `"spec"`, `"_phantom"`.
 
 `PluginInstance` itself carries only phantom types:
@@ -182,9 +182,11 @@ type PluginContext<Config, Events, C, S, CoreApis = {}> = {
   has: HasFunction;
 } & { readonly [K in keyof CoreApis]: CoreApis[K] };   // core plugin APIs injected flat
 
-// onStop only — peers may already be stopped
-type TeardownContext<Config> = {
+// onStop only — peers may already be stopped, so: own data, no communication
+type TeardownContext<Config, C = Record<string, never>, S = Record<string, never>> = {
   readonly global: Readonly<Config>;
+  readonly config: Readonly<C>;   // this plugin's resolved config
+  state: S;                       // this plugin's state
 };
 ```
 

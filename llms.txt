@@ -85,12 +85,12 @@ createPlugin("name", {
   hooks:       (ctx) => ({ "event:name": (payload) => { /* sync or async */ } }),
   onInit:      (ctx) => { /* all plugins exist; sync only */ },
   onStart:     async (ctx) => { /* runtime startup */ },
-  onStop:      async (ctx) => { /* teardown; ctx = { global } only */ },
+  onStop:      async (ctx) => { /* teardown; ctx = { global, config, state }, no emit/require/has */ },
   helpers:     { make: (x: string) => ({ x }) }, // static, pre-createApp, no ctx
 });
 ```
 
-- `ctx` in `api`/`hooks`/`onInit`/`onStart` is the full `PluginContext`: `{ global, config, state, emit, require, has }` plus any injected core-plugin APIs. `createState` gets `{ global, config }`; `onStop` gets `{ global }`.
+- `ctx` in `api`/`hooks`/`onInit`/`onStart` is the full `PluginContext`: `{ global, config, state, emit, require, has }` plus any injected core-plugin APIs. `createState` gets `{ global, config }`; `onStop` gets `{ global, config, state }`: the plugin's own data, no communication.
 - `emit` is typed by the merged event map: global `Events` + own declared events + dependency events (`UnionToIntersection`). Only known names and exact payloads compile.
 - `require(plugin)` accepts plugin *instance* references only (not strings), returns a typed API or throws. `has(name)` is string-based and returns a boolean.
 - `helpers` are static pure functions spread onto the instance (`PluginInstance<...> & Helpers`), called before `createApp` to produce typed config values. Reserved keys: `name`, `spec`, `_phantom`.

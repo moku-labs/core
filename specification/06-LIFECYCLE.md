@@ -86,7 +86,7 @@ await app.stop();
 
 Reverse order ensures that plugins which depend on other plugins stop first. If Plugin B depends on Plugin A, B stops before A -- so B can still clean up using A's resources. Core plugins stop after all regular plugins, ensuring infrastructure services (logging, env, storage) remain available throughout regular plugin teardown.
 
-Regular plugins receive `TeardownContext` (`{ global }`) during stop. Core plugins receive `CorePluginContext` (`{ config, state }`) during stop -- they have no inter-plugin dependencies to worry about.
+Regular plugins receive `TeardownContext` (`{ global, config, state }`) during stop: the global config plus their own resolved config and their own state, and no communication methods. Core plugins receive `CorePluginContext` (`{ config, state }`) during stop -- they have no inter-plugin dependencies to worry about.
 
 ---
 

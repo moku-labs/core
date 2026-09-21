@@ -77,13 +77,26 @@ The `Events` parameter in PluginContext is the merged event map (`Events & Plugi
 ### TeardownContext
 
 ```typescript
-type TeardownContext<Config> = {
-  /** Global config. Frozen. Minimal context for safe teardown. */
+type TeardownContext<Config, C = Record<string, never>, S = Record<string, never>> = {
+  /** Global config. Frozen. */
   readonly global: Readonly<Config>;
+  /** This plugin's own resolved config. Frozen. */
+  readonly config: Readonly<C>;
+  /** This plugin's own state: the same object every other method received. */
+  state: S;
 };
 ```
 
-Used by: `onStop`. During teardown, plugins are being stopped in reverse order. Other plugins may already be stopped. The minimal context prevents reliance on other plugins' state or APIs during cleanup.
+Used by: `onStop`. During teardown, plugins are being stopped in reverse order. Other plugins may already be stopped, so the context has no `emit`, no `require`, no `has` and no core plugin APIs. What a plugin OWNS is always safe: its resolved config and its state. A plugin frees the resource it opened from the state it stored it in:
+
+```typescript
+onStart: ctx => { ctx.state.server = listen(ctx.config.port); },
+onStop:  ({ state }) => { state.server?.close(); },
+```
+
+This mirrors core plugins, whose `onStop` receives `{ config, state }`. `C` and `S` default to an empty record, so `TeardownContext<Config>` written before 1.6 still compiles.
+
+**Since 1.6.** Before 1.6 `onStop` received `{ global }` only, and a plugin had to keep its resources in module-scope state to reach them at stop.
 
 ---
 
@@ -127,7 +140,7 @@ Core APIs are always present -- regular plugins do not need to declare dependenc
 | `api` | PluginContext (+ core APIs) | Full context needed to build API methods |
 | `onInit` | PluginContext (+ core APIs) | Plugin fully initialized, can interact with deps |
 | `onStart` | PluginContext (+ core APIs) | App is starting, full context |
-| `onStop` | TeardownContext | Minimal context, teardown should not depend on other plugins' state |
+| `onStop` | TeardownContext | Own config and state only. Teardown must not depend on other plugins' state or APIs |
 
 **Core plugins:**
 
@@ -153,7 +166,7 @@ onInit:         { global, config, state, emit,                (full + core APIs)
                   require, has, log, env, ... }
 onStart:        { global, config, state, emit,                (full + core APIs)
                   require, has, log, env, ... }
-onStop:         { global }                                    (teardown)
+onStop:         { global, config, state }                     (teardown: own data, no communication)
 ```
 
 **Core plugins (all methods):**
@@ -184,9 +197,9 @@ This is a conscious design decision. The alternative -- providing the same full 
 
 By restricting context per phase, the kernel prevents an entire class of ordering bugs. The consumer never has to think about "is this plugin ready yet?" -- the type system tells them what's available.
 
-### onStop Minimal Context
+### onStop Teardown Context
 
-During teardown, plugins may be partially or fully stopped. Accessing other plugins' APIs during teardown is unreliable -- the plugin you depend on might have already been stopped (since teardown is in reverse order). The minimal context `{ global }` forces plugins to handle their own cleanup independently.
+During teardown, plugins may be partially or fully stopped. Accessing other plugins' APIs during teardown is unreliable -- the plugin you depend on might have already been stopped (since teardown is in reverse order). The teardown context `{ global, config, state }` carries no communication methods, which forces plugins to handle their own cleanup independently. The plugin's own `config` and `state` stay available, because nothing another plugin does during stop can invalidate them.
 
 ---
 
