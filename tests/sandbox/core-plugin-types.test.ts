@@ -428,6 +428,57 @@ describe("consumer callback context core API typing", () => {
 
     expect(app).toBeDefined();
   });
+
+  it("framework onError receives the core APIs typed", () => {
+    const cc = createCoreConfig("cb-fw-error", {
+      config: { siteName: "Test" },
+      plugins: [logPlugin]
+    });
+
+    const framework = cc.createCore(cc, {
+      plugins: [],
+      onError: (error, core) => {
+        expectTypeOf(error).toEqualTypeOf<Error>();
+        expectTypeOf(core.log.info).toEqualTypeOf<(msg: string) => string>();
+        // @ts-expect-error -- only core plugin APIs: no emit on the framework error argument
+        core.emit;
+        // @ts-expect-error -- unknown method on the log API
+        core.log.inf;
+      }
+    });
+
+    expect(framework).toBeDefined();
+  });
+
+  it("framework onError with one argument still compiles", () => {
+    const cc = createCoreConfig("cb-fw-error-one", {
+      config: { siteName: "Test" },
+      plugins: [logPlugin]
+    });
+
+    const framework = cc.createCore(cc, {
+      plugins: [],
+      onError: error => {
+        expectTypeOf(error).toEqualTypeOf<Error>();
+      }
+    });
+
+    expect(framework).toBeDefined();
+  });
+
+  it("framework onError has no core APIs without core plugins", () => {
+    const cc = createCoreConfig("cb-fw-error-bare", { config: { siteName: "Test" } });
+
+    const framework = cc.createCore(cc, {
+      plugins: [],
+      onError: (_error, core) => {
+        // @ts-expect-error -- no core plugins registered, so there is no log
+        core.log;
+      }
+    });
+
+    expect(framework).toBeDefined();
+  });
 });
 
 // ---------------------------------------------------------------------------
