@@ -48,6 +48,12 @@ export type MediaApi = {
    * @returns {MediaAsset} The created media asset with generated ID and URL.
    * @throws {Error} When the mime type is not in the allowlist.
    * @throws {Error} When the file size exceeds `maxUploadSize`.
+   * @example
+   * ```typescript
+   * // The editor attaches a cover image.
+   * const asset = app.cms.media.upload({ filename: "cover.png", mimeType: "image/png", size: 2048 });
+   * asset.url; // `/media/${asset.id}/cover.png`
+   * ```
    */
   upload: (input: UploadInput) => MediaAsset;
 
@@ -57,6 +63,12 @@ export type MediaApi = {
    *
    * @param {string} id - The media asset ID.
    * @returns {MediaAsset | undefined} The media asset, or undefined if not found.
+   * @example
+   * ```typescript
+   * // Show the attachment next to the post.
+   * app.cms.media.getAsset(asset.id)?.filename; // "cover.png"
+   * app.cms.media.getAsset("missing"); // undefined
+   * ```
    */
   getAsset: (id: string) => MediaAsset | undefined;
 
@@ -65,6 +77,11 @@ export type MediaApi = {
    * useful for media library views and admin panels.
    *
    * @returns {MediaAsset[]} An array of all stored media assets.
+   * @example
+   * ```typescript
+   * // The media library page, after one upload.
+   * app.cms.media.list().map(item => item.filename); // ["cover.png"]
+   * ```
    */
   list: () => MediaAsset[];
 
@@ -73,6 +90,12 @@ export type MediaApi = {
    *
    * @param {string} id - The media asset ID to delete.
    * @returns {boolean} True if the asset was found and deleted, false otherwise.
+   * @example
+   * ```typescript
+   * // The editor removes an attachment.
+   * app.cms.media.delete(asset.id); // true
+   * app.cms.media.delete(asset.id); // false: already gone
+   * ```
    */
   delete: (id: string) => boolean;
 };

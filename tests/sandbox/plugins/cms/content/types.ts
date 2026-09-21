@@ -61,6 +61,13 @@ export type ContentApi = {
    * @param {CreateContentInput} input - The content fields (title, body, optional locale).
    * @returns {ContentItem} The newly created content item with generated ID and timestamps.
    * @throws {Error} When validation fails (empty title or body, title > 200 chars).
+   * @example
+   * ```typescript
+   * // An editor saves a new post. It starts as a draft in the default locale.
+   * const post = app.cms.content.create({ title: "Hello", body: "World" });
+   * post.status; // "draft"
+   * post.locale; // "en"
+   * ```
    */
   create: (input: CreateContentInput) => ContentItem;
 
@@ -73,6 +80,12 @@ export type ContentApi = {
    * @param {UpdateContentInput} input - Partial fields to merge into the existing item.
    * @returns {ContentItem} The updated content item.
    * @throws {Error} When the content ID does not exist.
+   * @example
+   * ```typescript
+   * // The editor publishes the post. This emits `cms:publish` with the path "/hello".
+   * const published = app.cms.content.update(post.id, { status: "published" });
+   * published.status; // "published"
+   * ```
    */
   update: (id: string, input: UpdateContentInput) => ContentItem;
 
@@ -81,6 +94,12 @@ export type ContentApi = {
    *
    * @param {string} id - The content item ID to delete.
    * @returns {boolean} True if the item was found and deleted, false otherwise.
+   * @example
+   * ```typescript
+   * // The editor removes a post.
+   * app.cms.content.delete(post.id); // true
+   * app.cms.content.delete(post.id); // false: already gone
+   * ```
    */
   delete: (id: string) => boolean;
 
@@ -90,6 +109,12 @@ export type ContentApi = {
    *
    * @param {string} id - The content item ID to look up.
    * @returns {ContentItem | undefined} The content item, or undefined if not found.
+   * @example
+   * ```typescript
+   * // Open one post in the editor.
+   * app.cms.content.getById(post.id)?.title; // "Hello"
+   * app.cms.content.getById("missing"); // undefined
+   * ```
    */
   getById: (id: string) => ContentItem | undefined;
 
@@ -100,6 +125,12 @@ export type ContentApi = {
    *
    * @param {ContentQuery} query - Optional filters for status and/or locale.
    * @returns {ContentItem[]} An array of matching content items.
+   * @example
+   * ```typescript
+   * // The listing page shows published posts only.
+   * app.cms.content.query({ status: "published" }); // [] while every post is a draft
+   * app.cms.content.query(); // every item
+   * ```
    */
   query: (query?: ContentQuery) => ContentItem[];
 };

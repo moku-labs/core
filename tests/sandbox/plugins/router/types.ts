@@ -17,17 +17,6 @@ export type RouterConfig = {
 
 /**
  * Internal mutable state for the router plugin.
- *
- * @example
- * ```typescript
- * // After navigating: "/" → "/dashboard" → "/settings"
- * {
- *   currentPath: "/settings",
- *   history: ["/", "/dashboard"],
- *   guards: [authGuard],
- *   initialized: true
- * }
- * ```
  */
 export type RouterState = {
   /** The currently active route path. Set by `navigate()` and `back()`. Initialized to `config.basePath`. */
