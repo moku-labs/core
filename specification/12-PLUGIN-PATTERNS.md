@@ -317,7 +317,7 @@ CONTEXT RULES:
   createState: only { global, config }. NO require/emit.
   api, onInit, onStart: full PluginContext.
     HAS global, config, state, emit, require, has.
-  onStop: TeardownContext. Only { global }. Minimal for cleanup.
+  onStop: TeardownContext. { global, config, state }: own data only. NO require/emit/has.
 
 LIFECYCLE (3 phases):
   createApp: createState -> hooks -> api -> onInit (forward order) -> app returned

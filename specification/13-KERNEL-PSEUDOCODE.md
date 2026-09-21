@@ -88,7 +88,7 @@ function createPlugin(
     api?: (ctx: PluginContext<Config, Events & PluginEvents & DepsEvents, C, S>) => A,  // A inferred
     onInit?: (ctx: PluginContext<...>) => void,
     onStart?: (ctx: PluginContext<...>) => void | Promise<void>,
-    onStop?: (ctx: TeardownContext<Config>) => void | Promise<void>,
+    onStop?: (ctx: TeardownContext<Config, C, S>) => void | Promise<void>,   // { global, config, state }
     hooks?: (ctx: PluginContext<...>) => Partial<EventHandlers<Events & PluginEvents & DepsEvents>>,
     helpers?: Helpers,  // H extends Record<string, (...args) => any> = Record<never, never>
   },
@@ -596,7 +596,12 @@ async stop() {
   // Regular plugins stop first (reverse order)
   for (const plugin of [...allPlugins].reverse()) {
     if (plugin.spec.onStop) {
-      await plugin.spec.onStop({ global: globalConfig });
+      // Teardown tier: own config and state, no communication (peers may be stopped)
+      await plugin.spec.onStop({
+        global: globalConfig,
+        config: resolvedConfigs.get(plugin.name),
+        state: states.get(plugin.name),
+      });
     }
   }
 
@@ -682,7 +687,7 @@ Consumer main.ts:
     -> call consumer onStart
 
   await app.stop()
-    -> run regular plugin onStop (TeardownContext, REVERSE, sequential)
+    -> run regular plugin onStop (TeardownContext = { global, config, state }, REVERSE, sequential)
     -> run core plugin onStop (REVERSE, sequential, AFTER regular plugins)
     -> call consumer onStop
 ```

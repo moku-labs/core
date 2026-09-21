@@ -132,7 +132,7 @@ Context is restricted based on what is safe to access at each point:
 | `api` | PluginContext | `global`, `config`, `state`, `emit`, `require`, `has` |
 | `onInit` | PluginContext | `global`, `config`, `state`, `emit`, `require`, `has` |
 | `onStart` | PluginContext | `global`, `config`, `state`, `emit`, `require`, `has` |
-| `onStop` | TeardownContext | `global` |
+| `onStop` | TeardownContext | `global`, `config`, `state` (own data only; no `emit`, `require`, `has`) |
 
 `createState` does NOT have access to `require`, `has`, or `emit`. At that point, not all plugins have been created. Providing these methods would return incomplete data.
 

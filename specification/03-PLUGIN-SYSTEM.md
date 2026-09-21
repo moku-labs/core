@@ -31,7 +31,7 @@ The plugin spec is a plain object that describes a plugin's behavior. All fields
   onStart?: (ctx: PluginContext) => void | Promise<void>,
 
   /** Teardown. REVERSE order during app.stop(). */
-  onStop?: (ctx: { global: Readonly<Config> }) => void | Promise<void>,
+  onStop?: (ctx: { global: Readonly<Config>; config: Readonly<C>; state: S }) => void | Promise<void>,
 
   /** Event subscriptions. Receives PluginContext; payloads fully typed. */
   hooks?: (ctx: PluginContext) => {
@@ -275,7 +275,7 @@ Three lifecycle methods, each running at a specific phase:
 |---|---|---|---|
 | `onInit` | During `createApp` | Forward (A, B, C) | Full PluginContext |
 | `onStart` | During `app.start()` | Forward (A, B, C) | Full PluginContext |
-| `onStop` | During `app.stop()` | **Reverse** (C, B, A) | Minimal (global config only) |
+| `onStop` | During `app.stop()` | **Reverse** (C, B, A) | Teardown (global config, own config, own state) |
 
 All lifecycle methods support async: `void | Promise<void>`. Execution is sequential -- Plugin A's method completes (including await) before Plugin B's method begins.
 

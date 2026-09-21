@@ -172,7 +172,7 @@ Moku is designed for a world where LLMs write plugins and CI enforces quality. T
 - **Strict emit** — only known event names compile. Wrong payloads are type errors. No `any`, no escape hatch.
 - **Phantom types** — plugin APIs, configs, and events flow through the type system without runtime cost.
 - **Typed plugin configs** — `pluginConfigs` overrides are checked against each plugin's declared config shape. Wrong keys or value types don't compile. Overrides are optional — plugin defaults fill anything you omit.
-- **Context tiers** — `createState` can't call `emit` (other plugins don't exist yet). `onStop` can't access other plugins (they may already be stopped). The type system prevents temporal bugs.
+- **Context tiers** — `createState` can't call `emit` (other plugins don't exist yet). `onStop` gets its own config and state, but can't reach other plugins (they may already be stopped). The type system prevents temporal bugs.
 
 ### Runtime guarantees
 
