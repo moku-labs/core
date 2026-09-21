@@ -1164,7 +1164,7 @@ The contract of a method is:
 - `@returns {Type}` describing the return value
 - `@throws {Error}` for methods that throw (the `{Error}` type is required by linter)
 - `@example` — a **scenario**: one comment line that says when a consumer calls the method, a call with literal arguments in `app.<plugin>.<method>(…)` form, the result as a trailing comment. 2–6 lines.
-- A public method that no consumer can call (only another plugin or the framework calls it) gets no example. It says `@remarks No example: <reason>.` Such a method is a candidate to leave the public API.
+- **API means public.** A plugin API has no private or internal tier. A method that another plugin calls through `ctx.require` is public, and that is fine: its example is written from that plugin's point of view, e.g. the `seo` plugin of the sandbox demo reads the route it describes: `const currentPath = ctx.require(routerPlugin).current(); // "/about"`. A method for which no honest example can be written does not belong on the API: move it into a plain function when only the same plugin needs it, delete it when nobody calls it. There is no "no example" exemption.
 
 **Example rules (every `@example`, everywhere):**
 - An example MUST NOT repeat the signature with identifiers as arguments. `const api = createRouterApi(ctx);` and `shut(gate);` tell the reader nothing.
