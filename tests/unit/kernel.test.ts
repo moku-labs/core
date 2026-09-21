@@ -295,7 +295,7 @@ describe("context tiers", () => {
     expect(contextKeys).toContain("has");
   });
 
-  it("onStop receives TeardownContext (global only)", async () => {
+  it("onStop receives TeardownContext (global, own config, own state; no communication)", async () => {
     let contextKeys: string[] = [];
     const cc = createTestCore();
 
@@ -311,9 +311,80 @@ describe("context tiers", () => {
     await app.stop();
 
     expect(contextKeys).toContain("global");
-    expect(contextKeys).not.toContain("config");
-    expect(contextKeys).not.toContain("state");
+    expect(contextKeys).toContain("config");
+    expect(contextKeys).toContain("state");
     expect(contextKeys).not.toContain("emit");
+    expect(contextKeys).not.toContain("require");
+    expect(contextKeys).not.toContain("has");
+  });
+
+  it("onStop sees the same state object the plugin mutated while running", async () => {
+    const released: number[] = [];
+    const cc = createTestCore();
+
+    const plugin = cc.createPlugin("timer", {
+      config: { label: "frame" },
+      createState: () => ({ handle: 0 }),
+      onStart: context => {
+        context.state.handle = 42;
+      },
+      onStop: ({ config, state }) => {
+        released.push(state.handle);
+        expect(config.label).toBe("frame");
+      }
+    });
+
+    const { createApp } = cc.createCore(cc, { plugins: [plugin] });
+    const app = createApp();
+    await app.start();
+    await app.stop();
+
+    expect(released).toEqual([42]);
+  });
+
+  it("onStop of a plugin without createState gets an empty state object", async () => {
+    let seen: unknown;
+    const cc = createTestCore();
+
+    const plugin = cc.createPlugin("bare", {
+      onStop: ({ state }) => {
+        seen = state;
+      }
+    });
+
+    const { createApp } = cc.createCore(cc, { plugins: [plugin] });
+    const app = createApp();
+    await app.start();
+    await app.stop();
+
+    expect(seen).toEqual({});
+  });
+
+  it("onStop written for { global } only still type-checks and runs", async () => {
+    const seen: string[] = [];
+    const cc = createTestCore();
+
+    const destructured = cc.createPlugin("destructured", {
+      config: { retries: 3 },
+      createState: () => ({ handle: 0 }),
+      onStop: ({ global }) => {
+        seen.push(`destructured:${global.siteName}`);
+      }
+    });
+    const annotated = cc.createPlugin("annotated", {
+      config: { retries: 3 },
+      createState: () => ({ handle: 0 }),
+      onStop: (context: { readonly global: Readonly<{ siteName: string }> }) => {
+        seen.push(`annotated:${context.global.siteName}`);
+      }
+    });
+
+    const { createApp } = cc.createCore(cc, { plugins: [destructured, annotated] });
+    const app = createApp();
+    await app.start();
+    await app.stop();
+
+    expect(seen).toEqual(["annotated:Test", "destructured:Test"]);
   });
 });
 
