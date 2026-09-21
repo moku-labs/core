@@ -34,8 +34,8 @@
 // -----------------------------------------------------------------------------
 //
 //   TeardownContext<Config, C, S>    Teardown tier. Global config + own config and state.
-//                                   Used by onStop — during teardown only global config is safe.
-//   MinimalContext<Config, C>        Teardown context plus plugin config.
+//                                   Used by onStop — during teardown only the plugin's own data is safe.
+//   MinimalContext<Config, C>        Global config plus plugin config. No state yet.
 //                                   Used by createState — before inter-plugin communication exists.
 //   PluginContext<Config, E, C, S>   Full plugin context with emit, require, has.
 //                                   Used by api, onInit, onStart — everything is live.
@@ -112,7 +112,7 @@ type TeardownContext<Config, C = Record<string, never>, S = Record<string, never
 };
 
 /**
- * Minimal context — teardown context plus plugin config.
+ * Minimal context — global config plus plugin config. No state yet.
  * Used by: createState
  *
  * At this stage, not all plugins have been created yet. Communication methods

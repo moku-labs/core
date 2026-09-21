@@ -359,6 +359,33 @@ describe("context tiers", () => {
 
     expect(seen).toEqual({});
   });
+
+  it("onStop written for { global } only still type-checks and runs", async () => {
+    const seen: string[] = [];
+    const cc = createTestCore();
+
+    const destructured = cc.createPlugin("destructured", {
+      config: { retries: 3 },
+      createState: () => ({ handle: 0 }),
+      onStop: ({ global }) => {
+        seen.push(`destructured:${global.siteName}`);
+      }
+    });
+    const annotated = cc.createPlugin("annotated", {
+      config: { retries: 3 },
+      createState: () => ({ handle: 0 }),
+      onStop: (context: { readonly global: Readonly<{ siteName: string }> }) => {
+        seen.push(`annotated:${context.global.siteName}`);
+      }
+    });
+
+    const { createApp } = cc.createCore(cc, { plugins: [destructured, annotated] });
+    const app = createApp();
+    await app.start();
+    await app.stop();
+
+    expect(seen).toEqual(["annotated:Test", "destructured:Test"]);
+  });
 });
 
 // ---------------------------------------------------------------------------
