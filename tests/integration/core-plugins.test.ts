@@ -29,6 +29,22 @@ function createEnvPlugin() {
   });
 }
 
+/**
+ * Waits one macrotask. emit is fire-and-forget, so hook errors settle after it.
+ *
+ * @returns A promise that resolves on the next macrotask.
+ * @example
+ * ```ts
+ * app.emit("faulty:boom", {});
+ * await settle();
+ * ```
+ */
+function settle(): Promise<void> {
+  return new Promise(resolve => {
+    setTimeout(resolve, 0);
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Core plugin API injection on regular plugin context
 // ---------------------------------------------------------------------------
@@ -832,5 +848,149 @@ describe("core plugin without API", () => {
 
     expect(contextKeys).not.toContain("invisible");
     expect(app.has("invisible")).toBe(true); // registered but no API
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Framework onError receives the core plugin APIs
+// ---------------------------------------------------------------------------
+
+describe("framework onError receives core plugin APIs", () => {
+  it("a failing hook is reported through the log core plugin", async () => {
+    const cc = createCoreConfig("test", {
+      config: { siteName: "Test" },
+      plugins: [createLogPlugin(), createEnvPlugin()]
+    });
+
+    const faulty = cc.createPlugin("faulty", {
+      events: register => ({
+        "faulty:boom": register<{ reason: string }>("Fails on purpose")
+      }),
+      hooks: _ctx => ({
+        "faulty:boom": () => {
+          throw new Error("hook failed");
+        }
+      }),
+      api: ctx => ({
+        boom: () => ctx.emit("faulty:boom", { reason: "test" })
+      })
+    });
+
+    let coreKeys: string[] = [];
+    const { createApp } = cc.createCore(cc, {
+      plugins: [faulty],
+      onError: (error, core) => {
+        coreKeys = Object.keys(core);
+        core.log.info(`hook error: ${error.message}`);
+      }
+    });
+    const app = createApp();
+
+    app.faulty.boom();
+    await settle();
+
+    // Only the core plugin APIs: no emit, no require, no regular plugin APIs
+    expect(coreKeys).toEqual(["log", "env"]);
+    expect(app.log.getEntries()).toEqual(["[info] hook error: hook failed"]);
+  });
+
+  it("core APIs are usable when a hook fails during onInit", async () => {
+    const cc = createCoreConfig("test", {
+      config: { siteName: "Test" },
+      plugins: [createLogPlugin()]
+    });
+
+    const faulty = cc.createPlugin("faulty", {
+      events: register => ({
+        "faulty:boom": register<{ reason: string }>("Fails on purpose")
+      }),
+      hooks: _ctx => ({
+        "faulty:boom": () => {
+          throw new Error("failed during init");
+        }
+      }),
+      onInit: ctx => {
+        ctx.emit("faulty:boom", { reason: "init" });
+      }
+    });
+
+    const { createApp } = cc.createCore(cc, {
+      plugins: [faulty],
+      onError: (error, { log }) => {
+        log.info(error.message);
+      }
+    });
+    const app = createApp();
+    await settle();
+
+    expect(app.log.getEntries()).toEqual(["[info] failed during init"]);
+  });
+
+  it("core APIs are usable when a hook fails after stop()", async () => {
+    const cc = createCoreConfig("test", {
+      config: { siteName: "Test" },
+      plugins: [createLogPlugin()]
+    });
+
+    const faulty = cc.createPlugin("faulty", {
+      events: register => ({
+        "faulty:boom": register<{ reason: string }>("Fails on purpose")
+      }),
+      hooks: _ctx => ({
+        "faulty:boom": () => {
+          throw new Error("failed after stop");
+        }
+      }),
+      api: ctx => ({
+        boom: () => ctx.emit("faulty:boom", { reason: "stopped" })
+      })
+    });
+
+    const { createApp } = cc.createCore(cc, {
+      plugins: [faulty],
+      onError: (error, { log }) => {
+        log.info(error.message);
+      }
+    });
+    const app = createApp();
+
+    await app.start();
+    await app.stop();
+    app.faulty.boom();
+    await settle();
+
+    expect(app.log.getEntries()).toEqual(["[info] failed after stop"]);
+  });
+
+  it("without core plugins the second argument is an empty object", async () => {
+    const cc = createCoreConfig("test", { config: { siteName: "Test" } });
+
+    const faulty = cc.createPlugin("faulty", {
+      events: register => ({
+        "faulty:boom": register<{ reason: string }>("Fails on purpose")
+      }),
+      hooks: _ctx => ({
+        "faulty:boom": () => {
+          throw new Error("hook failed");
+        }
+      }),
+      api: ctx => ({
+        boom: () => ctx.emit("faulty:boom", { reason: "test" })
+      })
+    });
+
+    let received: unknown;
+    const { createApp } = cc.createCore(cc, {
+      plugins: [faulty],
+      onError: (_error, core) => {
+        received = core;
+      }
+    });
+    const app = createApp();
+
+    app.faulty.boom();
+    await settle();
+
+    expect(received).toEqual({});
   });
 });
