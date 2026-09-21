@@ -64,14 +64,14 @@ interface CoreConfigResult<Config, Events, CorePlugins = readonly []> {
 // BoundCreateCoreFunction
 <const Plugins extends readonly AnyPluginInstance[]>(
   coreConfig: { readonly createPlugin: BoundCreatePluginFunction<Config, Events, CoreApisFromTuple<CorePlugins>> },
-  options: CreateCoreOptions<Config> & { readonly plugins: [...Plugins] }
+  options: CreateCoreOptions<Config, CoreApisFromTuple<CorePlugins>> & { readonly plugins: [...Plugins] }
 ) => CreateCoreResult<Config, Events, Plugins, CorePlugins>;
 
-interface CreateCoreOptions<Config> {
+interface CreateCoreOptions<Config, CoreApis extends Record<string, unknown> = {}> {
   readonly plugins: AnyPluginInstance[];
   readonly pluginConfigs?: Record<string, unknown>;
   readonly onReady?: (context: { config: Readonly<Config> }) => void;
-  readonly onError?: (error: Error) => void;
+  readonly onError?: (error: Error, core: Readonly<CoreApis>) => void;
 }
 ```
 
@@ -79,7 +79,7 @@ interface CreateCoreOptions<Config> {
 - `options.plugins`: framework default plugins. Always loaded; the consumer cannot remove them, only configure them.
 - `options.pluginConfigs`: framework-level plugin config overrides keyed by plugin name (3rd merge level).
 - `onReady` (framework): runs after all `onInit`, receives only `{ config }`.
-- `onError`: error handler for hook dispatch failures. Lifecycle errors (`start()`/`stop()`) are not routed here — they propagate to the caller.
+- `onError`: error handler for hook dispatch failures. The second argument holds the core plugin APIs only (for example `{ log, env }`, or `{}` without core plugins). Lifecycle errors (`start()`/`stop()`) are not routed here — they propagate to the caller.
 
 Returns `CreateCoreResult` exposing `createApp` (generic over consumer `ExtraPlugins`) and a re-exported `createPlugin`.
 
@@ -202,7 +202,7 @@ type TeardownContext<Config, C = Record<string, never>, S = Record<string, never
 
 Phase-gating rules: `require`/`has`/`emit`/`state` and core APIs are **absent** in `createState` (prevents ordering bugs and emit-before-hooks). `onStop` sees only `global` (peers may already be torn down). The type system enforces every restriction — temporal bugs are compile errors.
 
-Consumer callbacks (`onReady`/`onError`/`onStart`/`onStop` passed to `createApp`) receive an `AppCallbackContext` — `{ config, emit, require, has }` plus all mounted plugin APIs by name, but **no** `state`. The framework-level `onReady` (passed to `createCore`) receives only `{ config }`.
+Consumer callbacks (`onReady`/`onError`/`onStart`/`onStop` passed to `createApp`) receive an `AppCallbackContext` — `{ config, emit, require, has }` plus all mounted plugin APIs by name, but **no** `state`. The framework-level `onReady` (passed to `createCore`) receives only `{ config }`. The framework-level `onError` receives `(error, core)` with the core plugin APIs only.
 
 ## 5. Lifecycle — order and async model
 
