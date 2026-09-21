@@ -42,15 +42,22 @@ import { checkCorePluginConflicts, validatePlugins } from "./utilities";
  * createCore(coreConfig, { plugins: [routerPlugin], onReady: (ctx) => console.log(ctx.config) });
  * ```
  */
-interface CreateCoreOptions<Config> {
+interface CreateCoreOptions<
+  Config,
+  // biome-ignore lint/complexity/noBannedTypes: {} is the identity element for intersection; no core APIs by default
+  CoreApis extends Record<string, unknown> = {}
+> {
   /** Framework default plugins. */
   readonly plugins: readonly AnyPluginInstance[];
   /** Framework-level plugin config overrides keyed by plugin name. */
   readonly pluginConfigs?: Record<string, unknown>;
   /** Called after all plugins are initialized. */
   readonly onReady?: (context: { config: Readonly<Config> }) => void;
-  /** Error handler for hook dispatch failures. Lifecycle errors from start()/stop() propagate to the caller instead. */
-  readonly onError?: (error: Error) => void;
+  /**
+   * Error handler for hook dispatch failures. Lifecycle errors from start()/stop() propagate to the caller instead.
+   * The second argument carries the core plugin APIs only: they are ready before any hook can fire.
+   */
+  readonly onError?: (error: Error, core: Readonly<CoreApis>) => void;
 }
 
 /**
@@ -134,7 +141,9 @@ type BoundCreateCoreFunction<
       CoreApisFromTuple<CorePlugins>
     >;
   },
-  options: CreateCoreOptions<Config> & { readonly plugins: readonly [...Plugins] }
+  options: CreateCoreOptions<Config, CoreApisFromTuple<CorePlugins>> & {
+    readonly plugins: readonly [...Plugins];
+  }
 ) => CreateCoreResult<Config, Events, Plugins, CorePlugins>;
 
 // =============================================================================
