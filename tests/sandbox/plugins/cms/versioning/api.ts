@@ -1,6 +1,14 @@
 import type { CmsCtx, ContentItem, Version } from "../types";
 import type { Diff, VersioningApi } from "./types";
 
+/**
+ * Build the versioning API of the CMS plugin, mounted at `app.cms.versioning`. The contract of each
+ * method lives on the members of `VersioningApi`: the factory is annotated with that type, so JSDoc on
+ * the members below would never reach the published declarations.
+ *
+ * @param {CmsCtx} ctx - The CMS plugin context with config, state and emit.
+ * @returns {VersioningApi} The versioning API.
+ */
 export const createVersioningApi = (ctx: CmsCtx): VersioningApi => {
   /**
    * Generate a sequential version ID using the shared `nextId` counter from
@@ -16,20 +24,6 @@ export const createVersioningApi = (ctx: CmsCtx): VersioningApi => {
   };
 
   return {
-    /**
-     * Create a versioned snapshot of a content item. The snapshot is a
-     * shallow copy — subsequent edits to the content do not affect the
-     * stored version. Used to create save points before making changes.
-     *
-     * @param {string} contentId - The ID of the content item to snapshot.
-     * @param {string} message - A human-readable description of the version (e.g. "Initial draft").
-     * @returns {Version} The created version record with snapshot data.
-     * @throws {Error} When the content ID does not exist.
-     * @example
-     * ```typescript
-     * const version = app.cms.versioning.commit(item.id, "Before redesign");
-     * ```
-     */
     commit: (contentId: string, message: string): Version => {
       const content = ctx.state.content.get(contentId);
       if (!content) {
@@ -50,18 +44,6 @@ export const createVersioningApi = (ctx: CmsCtx): VersioningApi => {
       return version;
     },
 
-    /**
-     * Revert a content item to a previously committed version. Replaces the
-     * current content state with a copy of the version's snapshot.
-     *
-     * @param {string} contentId - The ID of the content item to revert.
-     * @param {string} versionId - The ID of the version to restore.
-     * @returns {boolean} True if the version was found and content was reverted, false otherwise.
-     * @example
-     * ```typescript
-     * const success = app.cms.versioning.revert(item.id, version.id);
-     * ```
-     */
     revert: (contentId: string, versionId: string): boolean => {
       const version = ctx.state.versions.find(v => v.id === versionId && v.contentId === contentId);
       if (!version) return false;
@@ -70,20 +52,6 @@ export const createVersioningApi = (ctx: CmsCtx): VersioningApi => {
       return true;
     },
 
-    /**
-     * Compare a content item's current state with a committed version.
-     * Checks title, body, locale, and status fields for differences.
-     * Useful for showing change summaries before reverting.
-     *
-     * @param {string} contentId - The ID of the content item to compare.
-     * @param {string} versionId - The ID of the version to compare against.
-     * @returns {Diff[]} An array of field-level diffs. Empty if no differences or if content/version not found.
-     * @example
-     * ```typescript
-     * const diffs = app.cms.versioning.diff(item.id, version.id);
-     * diffs.forEach(d => console.log(`${d.field}: ${d.before} → ${d.after}`));
-     * ```
-     */
     diff: (contentId: string, versionId: string): Diff[] => {
       const current = ctx.state.content.get(contentId);
       const version = ctx.state.versions.find(v => v.id === versionId && v.contentId === contentId);
@@ -106,14 +74,6 @@ export const createVersioningApi = (ctx: CmsCtx): VersioningApi => {
       return diffs;
     },
 
-    /**
-     * Get the version history for a content item. Returns all committed
-     * versions in chronological order. Useful for version list UIs and
-     * audit trails.
-     *
-     * @param {string} contentId - The ID of the content item.
-     * @returns {Version[]} An array of version records for the given content.
-     */
     history: (contentId: string): Version[] => {
       return ctx.state.versions.filter(v => v.contentId === contentId);
     }

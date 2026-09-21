@@ -95,17 +95,6 @@ export type CmsCtx = PluginCtx<CmsConfig, CmsState, CmsEvents>;
 /**
  * Internal mutable state for the CMS plugin. Shared across all CMS modules
  * (content, media, versioning) via the `CmsCtx` context.
- *
- * @example
- * ```typescript
- * // After creating one content item and uploading one media asset
- * {
- *   content: Map { "content-1" => { id: "content-1", title: "Hello", ... } },
- *   media: Map { "media-2" => { id: "media-2", filename: "photo.jpg", ... } },
- *   versions: [{ id: "version-3", contentId: "content-1", message: "Initial", ... }],
- *   nextId: 4
- * }
- * ```
  */
 export type CmsState = {
   /** All content items keyed by ID. Created by `content.create()`, updated by `content.update()`. */

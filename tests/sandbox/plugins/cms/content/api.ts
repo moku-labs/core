@@ -2,6 +2,14 @@ import type { CmsCtx, ContentItem } from "../types";
 import type { ContentApi, ContentQuery, CreateContentInput, UpdateContentInput } from "./types";
 import { validateContent } from "./validator";
 
+/**
+ * Build the content API of the CMS plugin, mounted at `app.cms.content`. The contract of each
+ * method lives on the members of `ContentApi`: the factory is annotated with that type, so JSDoc on
+ * the members below would never reach the published declarations.
+ *
+ * @param {CmsCtx} ctx - The CMS plugin context with config, state and emit.
+ * @returns {ContentApi} The content API.
+ */
 export const createContentApi = (ctx: CmsCtx): ContentApi => {
   /**
    * Generate a sequential content ID using the shared `nextId` counter from
@@ -17,20 +25,6 @@ export const createContentApi = (ctx: CmsCtx): ContentApi => {
   };
 
   return {
-    /**
-     * Create a new content item. Validates the input fields, assigns an
-     * auto-generated ID and the configured default locale, then stores
-     * the item in state. Emits `cms:draft` on success.
-     *
-     * @param {CreateContentInput} input - The content fields (title, body, optional locale).
-     * @returns {ContentItem} The newly created content item with generated ID and timestamps.
-     * @throws {Error} When validation fails (empty title or body, title > 200 chars).
-     * @example
-     * ```typescript
-     * const post = app.cms.content.create({ title: "Hello", body: "World" });
-     * console.log(post.id); // "content-1"
-     * ```
-     */
     create: (input: CreateContentInput): ContentItem => {
       const errors = validateContent(input);
       if (errors.length > 0) {
@@ -55,20 +49,6 @@ export const createContentApi = (ctx: CmsCtx): ContentApi => {
       return item;
     },
 
-    /**
-     * Update an existing content item with partial fields. When the status
-     * changes to "published", emits `cms:publish` with a URL-safe path
-     * derived from the title.
-     *
-     * @param {string} id - The content item ID to update.
-     * @param {UpdateContentInput} input - Partial fields to merge into the existing item.
-     * @returns {ContentItem} The updated content item.
-     * @throws {Error} When the content ID does not exist.
-     * @example
-     * ```typescript
-     * app.cms.content.update(item.id, { status: "published" });
-     * ```
-     */
     update: (id: string, input: UpdateContentInput): ContentItem => {
       const item = ctx.state.content.get(id);
       if (!item) {
@@ -98,40 +78,14 @@ export const createContentApi = (ctx: CmsCtx): ContentApi => {
       return updated;
     },
 
-    /**
-     * Delete a content item by ID. Removes it from the state store.
-     *
-     * @param {string} id - The content item ID to delete.
-     * @returns {boolean} True if the item was found and deleted, false otherwise.
-     */
     delete: (id: string): boolean => {
       return ctx.state.content.delete(id);
     },
 
-    /**
-     * Retrieve a content item by its ID. Used to look up a single item
-     * without filtering the full collection.
-     *
-     * @param {string} id - The content item ID to look up.
-     * @returns {ContentItem | undefined} The content item, or undefined if not found.
-     */
     getById: (id: string): ContentItem | undefined => {
       return ctx.state.content.get(id);
     },
 
-    /**
-     * Query content items with optional filters. Returns all items when
-     * called without arguments. Supports filtering by publication status
-     * and/or locale for listing pages and admin views.
-     *
-     * @param {ContentQuery} query - Optional filters for status and/or locale.
-     * @returns {ContentItem[]} An array of matching content items.
-     * @example
-     * ```typescript
-     * const published = app.cms.content.query({ status: "published" });
-     * const french = app.cms.content.query({ locale: "fr" });
-     * ```
-     */
     query: (query?: ContentQuery): ContentItem[] => {
       let items = [...ctx.state.content.values()];
 

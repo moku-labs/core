@@ -33,19 +33,6 @@ export type TrackedEvent = {
 
 /**
  * Internal mutable state for the analytics plugin.
- *
- * @example
- * ```typescript
- * // After tracking two events and identifying a user
- * {
- *   events: [
- *     { event: "page_view", properties: { page: "/" }, timestamp: 1709312400000 },
- *     { event: "click", properties: { button: "signup" }, timestamp: 1709312401000 }
- *   ],
- *   userId: "user-42",
- *   initialized: true
- * }
- * ```
  */
 export type AnalyticsState = {
   /** Accumulated tracked events for this session. Appended by `track()` when not filtered by sample rate. */

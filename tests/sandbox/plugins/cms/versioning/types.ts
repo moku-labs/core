@@ -36,6 +36,12 @@ export type VersioningApi = {
    * @param {string} message - A human-readable description of the version (e.g. "Initial draft").
    * @returns {Version} The created version record with snapshot data.
    * @throws {Error} When the content ID does not exist.
+   * @example
+   * ```typescript
+   * // Save a restore point before a risky edit.
+   * const version = app.cms.versioning.commit(post.id, "Before redesign");
+   * version.snapshot.title; // "Hello"
+   * ```
    */
   commit: (contentId: string, message: string) => Version;
 
@@ -46,6 +52,12 @@ export type VersioningApi = {
    * @param {string} contentId - The ID of the content item to revert.
    * @param {string} versionId - The ID of the version to restore.
    * @returns {boolean} True if the version was found and content was reverted, false otherwise.
+   * @example
+   * ```typescript
+   * // The redesign went wrong: restore the saved version.
+   * app.cms.versioning.revert(post.id, version.id); // true
+   * app.cms.versioning.revert(post.id, "version-999"); // false: no such version
+   * ```
    */
   revert: (contentId: string, versionId: string) => boolean;
 
@@ -57,6 +69,12 @@ export type VersioningApi = {
    * @param {string} contentId - The ID of the content item to compare.
    * @param {string} versionId - The ID of the version to compare against.
    * @returns {Diff[]} An array of field-level diffs. Empty if no differences or if content/version not found.
+   * @example
+   * ```typescript
+   * // Show the editor what changed since the restore point.
+   * app.cms.content.update(post.id, { title: "Hello again" });
+   * app.cms.versioning.diff(post.id, version.id); // [{ field: "title", before: "Hello", after: "Hello again" }]
+   * ```
    */
   diff: (contentId: string, versionId: string) => Diff[];
 
@@ -67,6 +85,11 @@ export type VersioningApi = {
    *
    * @param {string} contentId - The ID of the content item.
    * @returns {Version[]} An array of version records for the given content.
+   * @example
+   * ```typescript
+   * // The audit trail of one post.
+   * app.cms.versioning.history(post.id).map(item => item.message); // ["Before redesign"]
+   * ```
    */
   history: (contentId: string) => Version[];
 };
