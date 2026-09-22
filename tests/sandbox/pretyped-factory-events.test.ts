@@ -4,8 +4,9 @@
 // moku-labs/core#26. `events: r => ...` without a parameter annotation is
 // context-sensitive, so TypeScript defers it to the second inference pass and
 // checks a pre-typed `api` factory in the first pass, where PluginEventMap is
-// still the default (empty). Annotating the register parameter moves `events`
-// into the first pass and the own events reach the factory context.
+// still the default (empty). Two fixes: annotate the register parameter so
+// `events` joins the first pass, or wrap the factory in an arrow so `api`
+// joins the second pass.
 // =============================================================================
 
 import { describe, expect, expectTypeOf, it } from "vitest";
@@ -46,6 +47,28 @@ describe("pre-typed api factory with own events and a dependency that declares e
 
     expectTypeOf<ExtractEvents<typeof probe>>().toEqualTypeOf<ProbeEvents>();
     expect(probe.name).toBe("probe");
+  });
+
+  it("compiles when the factory is wrapped in an arrow", () => {
+    const probe = createPlugin("probe-wrapped", {
+      depends: [modelPlugin],
+      events: register => register.map<ProbeEvents>({ "probe:fired": "Probe fired" }),
+      api: ctx => createProbeApi(ctx)
+    });
+
+    expectTypeOf<ExtractEvents<typeof probe>>().toEqualTypeOf<ProbeEvents>();
+    expect(probe.name).toBe("probe-wrapped");
+  });
+
+  it("wrapped factory still rejects an undeclared event", () => {
+    const probe = createPlugin("probe-wrapped-wrong", {
+      depends: [modelPlugin],
+      events: register => register.map<ProbeEvents>({ "probe:fired": "Probe fired" }),
+      // @ts-expect-error -- "probe:nope" is not declared in events
+      api: ctx => createWrongApi(ctx)
+    });
+
+    expect(probe.name).toBe("probe-wrapped-wrong");
   });
 
   it("still rejects a factory typed against an undeclared event", () => {
