@@ -376,6 +376,7 @@ The pattern is the same everywhere: `(register) => ({ 'event:name': register<Pay
 | 5 | Dependency events use `UnionToIntersection` | `ExtractEvents<Deps[number]>` distributes as a union. `UnionToIntersection` merges event maps so all dependency events are available. |
 | 6 | Description is optional (`register<T>()` works) | Not all contexts need descriptions. The pattern still works for pure type inference without metadata. |
 | 7 | `register.map<EventMap>()` for bulk registration | Standard+ plugins with separate `XxxEvents` types should not repeat each event name and payload in `register<Events["name"]>()` calls. `register.map` accepts the full type map as a generic. |
+| 8 | Annotate `register` when `api` is a pre-typed factory | Unannotated `register => ...` is context-sensitive, so TypeScript defers it and checks `api` first with an empty own-event map. `events: (register: RegisterFunction) => ...` moves the callback into the first pass and own events reach the factory context. |
 
 ---
 
