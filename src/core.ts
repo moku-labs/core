@@ -109,7 +109,8 @@ interface CreateCoreResult<
       Events,
       Plugins[number] | ExtraPlugins[number],
       [...ExtraPlugins],
-      CoreApisFromTuple<CorePlugins>
+      CoreApisFromTuple<CorePlugins>,
+      CorePlugins[number]
     >
   ) => App<Config, Events, Plugins[number] | ExtraPlugins[number], CoreApisFromTuple<CorePlugins>>;
   /** Re-exported createPlugin for consumer convenience. */

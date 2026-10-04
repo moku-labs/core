@@ -71,6 +71,7 @@
 // =============================================================================
 
 // Type-only import -- must NOT become a value import (see file header).
+import type { AnyCorePluginInstance, ExtractCoreConfig, ExtractCoreName } from "./core-plugin";
 import type { EmitFn as EmitFunction_, IsLiteralString, UnionToIntersection } from "./utilities";
 
 // =============================================================================
@@ -539,7 +540,7 @@ type AppCallbackContext<
  * Options for createApp (Step 3). Structured namespaces replace flat key discrimination:
  * - `plugins`: extra consumer plugins
  * - `config`: global config overrides (shallow-merged with framework defaults)
- * - `pluginConfigs`: per-plugin config overrides keyed by plugin name
+ * - `pluginConfigs`: per-plugin config overrides keyed by plugin name (regular and core plugins)
  * - `onReady/onError/onStart/onStop`: consumer lifecycle callbacks
  *
  * @example
@@ -559,7 +560,8 @@ type CreateAppOptions<
   // biome-ignore lint/suspicious/noExplicitAny: Required for generic constraint assignability
   ExtraPlugins extends readonly PluginInstance<string, any, any, any, any>[],
   // biome-ignore lint/complexity/noBannedTypes: {} is the identity element for intersection; no core APIs by default
-  CoreApis extends Record<string, unknown> = {}
+  CoreApis extends Record<string, unknown> = {},
+  CorePlugin extends AnyCorePluginInstance = never
 > = {
   plugins?: ExtraPlugins;
   config?: { [K in keyof Config]?: Config[K] };
@@ -569,6 +571,12 @@ type CreateAppOptions<
       : IsLiteralString<ExtractName<K>> extends true
         ? ExtractName<K>
         : never]?: Partial<ExtractConfig<K>>;
+  } & {
+    [K in CorePlugin as ExtractCoreConfig<K> extends Record<string, never>
+      ? never
+      : IsLiteralString<ExtractCoreName<K>> extends true
+        ? ExtractCoreName<K>
+        : never]?: Partial<ExtractCoreConfig<K>>;
   };
   onReady?: (context: AppCallbackContext<Config, Events, P, CoreApis>) => void;
   onError?: (error: Error, context: AppCallbackContext<Config, Events, P, CoreApis>) => void;
