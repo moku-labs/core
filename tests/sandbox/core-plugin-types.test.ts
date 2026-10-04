@@ -603,3 +603,80 @@ describe("multiple core plugins API namespace isolation", () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// createApp pluginConfigs: core plugin keys (issue #28)
+// ---------------------------------------------------------------------------
+
+describe("createApp pluginConfigs accepts core plugin keys", () => {
+  const limits = createCorePlugin("limits", {
+    config: { lanes: {} as Record<string, { concurrency: number }> },
+    api: ctx => ({ lane: (name: string) => ctx.config.lanes[name] })
+  });
+
+  const cc = createCoreConfig("core-plugin-configs", {
+    config: { siteName: "Test" },
+    plugins: [limits]
+  });
+
+  const router = cc.createPlugin("router", { config: { basePath: "/" } });
+
+  it("inline core plugin config compiles and is applied", () => {
+    const { createApp } = cc.createCore(cc, { plugins: [router] });
+
+    const app = createApp({
+      pluginConfigs: { limits: { lanes: { claude: { concurrency: 1 } } } }
+    });
+
+    expect(app.limits.lane("claude")?.concurrency).toBe(1);
+  });
+
+  it("core and regular plugin configs mix in one object", () => {
+    const { createApp } = cc.createCore(cc, { plugins: [router] });
+
+    const pluginConfigs = {
+      limits: { lanes: { claude: { concurrency: 2 } } },
+      router: { basePath: "/blog" }
+    };
+    const app = createApp({ pluginConfigs });
+
+    expect(app.limits.lane("claude")?.concurrency).toBe(2);
+  });
+
+  it("variable with only core plugin keys compiles", () => {
+    const { createApp } = cc.createCore(cc, { plugins: [router] });
+
+    const pluginConfigs = { limits: { lanes: { claude: { concurrency: 3 } } } };
+    const app = createApp({ pluginConfigs });
+
+    expect(app.limits.lane("claude")?.concurrency).toBe(3);
+  });
+
+  it("wrong field inside a core plugin config is a type error", () => {
+    const { createApp } = cc.createCore(cc, { plugins: [router] });
+
+    // @ts-expect-error -- 'lane' is not a field of the limits config
+    expect(createApp({ pluginConfigs: { limits: { lane: {} } } })).toBeDefined();
+
+    expect(
+      // @ts-expect-error -- concurrency must be a number
+      createApp({ pluginConfigs: { limits: { lanes: { claude: { concurrency: "1" } } } } })
+    ).toBeDefined();
+  });
+
+  it("unknown plugin key is still a type error", () => {
+    const { createApp } = cc.createCore(cc, { plugins: [router] });
+
+    // @ts-expect-error -- 'nonExistent' is neither a core nor a regular plugin
+    expect(createApp({ pluginConfigs: { nonExistent: {} } })).toBeDefined();
+  });
+
+  it("core plugin key is checked when no regular plugin has config", () => {
+    const { createApp } = cc.createCore(cc, { plugins: [] });
+
+    expect(createApp({ pluginConfigs: { limits: { lanes: {} } } })).toBeDefined();
+
+    // @ts-expect-error -- 'lane' is not a field of the limits config
+    expect(createApp({ pluginConfigs: { limits: { lane: {} } } })).toBeDefined();
+  });
+});
