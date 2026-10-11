@@ -1,0 +1,48 @@
+name: Dependabot automerge
+
+# Turns on auto-merge for a Dependabot PR. The branch ruleset stays the gate: the merge
+# waits for ci / lint, ci / types, ci / test and ci / build. Needs the repo setting
+# allow_auto_merge, which `moku-release setup` turns on. After the merge it dispatches
+# publish.yml, so a Dependabot merge releases a patch like any other merge.
+on: pull_request
+
+# One waiter per PR: a rebase of the PR starts a new run and ends the old one.
+concurrency:
+  group: dependabot-automerge-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write # dispatch publish.yml after the merge
+
+jobs:
+  automerge:
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    env:
+      PR_URL: ${{ github.event.pull_request.html_url }}
+      REPO: ${{ github.repository }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Merge once required checks pass
+        run: gh pr merge --auto --squash "$PR_URL"
+      - name: Release the merge as a patch
+        # A merge made by GITHUB_TOKEN starts no push run, so the auto-release of publish.yml
+        # never sees it. workflow_dispatch is the one event GITHUB_TOKEN may start: wait for
+        # the merge, then dispatch the same patch a push would have cut.
+        run: |
+          set -euo pipefail
+          for _ in $(seq 1 90); do
+            state="$(gh pr view "$PR_URL" --json state --jq .state)"
+            case "$state" in
+              MERGED)
+                gh workflow run publish.yml --repo "$REPO" --ref main -f release_type=patch
+                exit 0 ;;
+              CLOSED)
+                echo "closed without a merge, nothing to release"
+                exit 0 ;;
+            esac
+            sleep 20
+          done
+          echo "::warning::not merged after 30 minutes, no release was dispatched"
