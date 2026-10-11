@@ -12,7 +12,7 @@
     "@arethetypeswrong/cli": "0.18.2",
     "@arethetypeswrong/core": "0.18.2",
     "@biomejs/biome": "2.4.2",
-    "@moku-labs/ci": "1.5.2",
+    "@moku-labs/ci": "1.5.7",
     "@types/bun": "1.4.2",
     "@vitest/coverage-istanbul": "4.0.18",
     "eslint": "9",
