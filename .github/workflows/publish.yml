@@ -3,6 +3,11 @@ name: Release
 # Thin caller. The FILENAME is a contract: npm Trusted Publishing is registered against
 # "publish.yml" for this repo — renaming it breaks tokenless publishing.
 on:
+  # Auto-release: every merge to main ships a PATCH. A person dispatches minor, or major for
+  # a milestone. A PR merged by GITHUB_TOKEN starts no push run: dependabot-automerge.yml
+  # dispatches the patch for its own merges.
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       release_type:
