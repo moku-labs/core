@@ -1,0 +1,21 @@
+# Dependabot for a moku-family repo. Only @moku-labs/* is watched, grouped into one PR a day.
+# A package also gets examples/package/dependabot-automerge.yml, so the PR merges itself
+# once the required ci / … checks pass. An app merges it by hand: that merge runs the deploy.
+version: 2
+updates:
+  - package-ecosystem: "bun"
+    directory: "/"
+    schedule:
+      interval: "daily"
+    allow:
+      - dependency-name: "@moku-labs/*"
+    # Dependabot holds every new version back for 3 days by default. The family's own
+    # packages are trusted the moment they are released, so they skip that wait.
+    cooldown:
+      default-days: 3
+      exclude:
+        - "@moku-labs/*"
+    groups:
+      moku:
+        patterns:
+          - "@moku-labs/*"
