@@ -3,7 +3,8 @@ name: Dependabot automerge
 # Turns on auto-merge for a Dependabot PR. The branch ruleset stays the gate: the merge
 # waits for ci / lint, ci / types, ci / test and ci / build. Needs the repo setting
 # allow_auto_merge, which `moku-release setup` turns on. After the merge it dispatches
-# publish.yml, so a Dependabot merge releases a patch like any other merge.
+# publish.yml, so a Dependabot merge releases a patch like any other merge. A bump of
+# devDependencies alone releases nothing: the published package did not change.
 on: pull_request
 
 # One waiter per PR: a rebase of the PR starts a new run and ends the old one.
@@ -23,6 +24,8 @@ jobs:
     env:
       PR_URL: ${{ github.event.pull_request.html_url }}
       REPO: ${{ github.repository }}
+      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: Merge once required checks pass
@@ -33,6 +36,17 @@ jobs:
         # the merge, then dispatch the same patch a push would have cut.
         run: |
           set -euo pipefail
+          # A devDependency is not part of the published package. Releasing its bump would
+          # make every package that pins this one release too, and two packages that pin
+          # each other would release each other forever.
+          published() {
+            gh api "repos/$REPO/contents/package.json?ref=$1" --jq .content | base64 -d \
+              | jq -S '{dependencies, peerDependencies, optionalDependencies}'
+          }
+          if [ "$(published "$BASE_SHA")" = "$(published "$HEAD_SHA")" ]; then
+            echo "only devDependencies moved: the published package is the same, no release"
+            exit 0
+          fi
           for _ in $(seq 1 90); do
             state="$(gh pr view "$PR_URL" --json state --jq .state)"
             case "$state" in
